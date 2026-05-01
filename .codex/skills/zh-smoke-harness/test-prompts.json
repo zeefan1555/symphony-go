@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "跑一轮 zh-smoke harness，创建固定中文冒烟 issue，处理完后记录 token 和耗时。",
+    "expected": "先做 preflight，再运行 make zh-smoke-round，最后汇报 issue、状态、token、耗时和记录位置。"
+  },
+  {
+    "id": 2,
+    "prompt": "根据最近两轮中文冒烟结果，帮我找一个最小优化点并重新跑一轮。",
+    "expected": "读取 results.tsv 和实验记录，只选择一个优化变量，改代码后验证、重启、再跑 round，并比较指标。"
+  },
+  {
+    "id": 3,
+    "prompt": "不要跑 live issue，只评估当前 zh-smoke harness 设计还有哪些风险。",
+    "expected": "执行 dry-run/preflight，说明真实 merge、Linear 写操作、脏工作区、指标噪声等风险，不创建 issue。"
+  }
+]

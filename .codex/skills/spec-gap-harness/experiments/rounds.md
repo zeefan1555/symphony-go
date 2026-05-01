@@ -1,0 +1,205 @@
+# Spec Gap Harness Rounds
+
+本文件记录每轮 `SPEC.md` 差距驱动优化。每轮只选择一个通用框架 gap 修复，并用代码、
+日志、测试或 smoke 结果证明更接近 Spec。
+
+## Round ZEE-26: 持久化 Human Log 可读性验证
+
+- **Spec 范围**：`SPEC.md:1249-1274`、`SPEC.md:1296-1302`、`SPEC.md:2086-2087`
+- **Scenario**：`observability.human_log_persistence`
+- **Replace**：`dimension`，用 SPEC observability 证据替代单纯 token/耗时指标判断。
+- **本轮证据**：
+  - `make zh-smoke-round CHANGE_NOTE="Spec gap 验证：检查持久化 human log 可读性"` 跑出 `ZEE-26`。
+  - `go/.symphony/logs/run-20260501-212134.jsonl`：435 行，保留 debug 级 `codex_event`、`issue_id`、`issue_identifier`、`session_id` 等机器分析字段。
+  - `go/.symphony/logs/run-20260501-212134.human.log`：12 行，只保留 `INFO` 关键时间线；没有 `codex_event`、`item/agentMessage/delta`、`\u003e` 噪音。
+  - `go/internal/logging/jsonl.go:30-39` 定义结构化字段；`go/internal/logging/jsonl.go:115-139` 同时写 JSONL、human file 和 console sink；`go/cmd/symphony-go/main.go:117-122` 为每轮创建同名 human log。
+- **Gap table**：
+  - `conforms`：持久化 human log 与 JSONL 分层满足 operator-visible observability，且 human log 使用稳定 `key=value`。
+  - `partial`：`SPEC.md:1273-1274` 要求 sink 失败时尽量继续运行并通过剩余 sink 告警；当前 human log 文件打开失败会让 `logging.New` 返回错误，随后 CLI fatal。
+- **验证结果**：ZEE-26 `success=true`、`final_state=Done`、`changed_files=SMOKE.md`、`ai_review_result=passed`。
+- **下一轮候选**：把 optional human sink 改成 best-effort：JSONL 主 sink 可用时，即使 human sink 打不开也继续运行，并通过 stderr/JSONL 记录 warning。
+
+## Round ZEE-28: Human Log 交互细节与 Workpad 评论摘要
+
+- **Spec 范围**：`SPEC.md:1249-1264`、`SPEC.md:2030-2036`
+- **Scenario**：`observability.humanized_event_summaries`
+- **Replace**：`dimension`，用“人类能直接复盘 Workpad 评论和 Codex turn”替代只看状态流转成功。
+- **本轮证据**：
+  - `427e53a`：把 `codex_event` 的关键 raw event 转成人类摘要，JSONL 原始事件不变。
+  - `621e904`：给 `workpad_updated` 增加 `sections`、`comment_preview`、`task_progress`、`framework_progress`、`next_step`。
+  - `go/internal/logging/jsonl.go:115-145`：先写原始 JSONL，再把 selected Codex event 投影为 human/console event。
+  - `go/internal/logging/jsonl.go:182-295`：覆盖 session/turn lifecycle、agent message/final、command、file change、diff、plan update 等关键 Codex event class。
+  - `go/internal/orchestrator/orchestrator.go:1264-1328`：Workpad 更新日志解析评论 sections、摘要和 checklist 进度。
+  - `go/.symphony/logs/run-20260501-213900.human.log`：包含 `comment_preview`、`sections`、`codex_message`、`codex_command`、`codex_file_change`、`codex_final`。
+- **Gap table**：
+  - `conforms`：符合 `SPEC.md:1260-1264` 的稳定 `key=value`、动作 outcome、避免大 raw payload；humanized summaries 覆盖关键 wrapper/agent event class，且不改变 JSONL 或 orchestrator 行为。
+  - `conforms`：Linear Workpad 写入不再只是 `bytes/lines/phase`，可看到评论结构、评论摘要、任务计划打勾进度和框架推进状态。
+  - `partial`：同一 turn 内重复 `turn/diff/updated` 仍会产生多条相同 `codex_diff` 摘要；可读性已显著好于 raw JSON，但下一轮可做轻量去重。
+- **验证结果**：
+  - `go test -ldflags='-linkmode=external' ./internal/logging -count=1 -v`
+  - `go test -ldflags='-linkmode=external' ./internal/orchestrator -count=1 -run 'TestWorkpadLogSummary|TestRunAgentAIReviewAutoMergesWhenEnabled' -v`
+  - `go test -ldflags='-linkmode=external' ./...`
+  - `make build`
+  - `git diff --check`
+  - `make zh-smoke-round CHANGE_NOTE="human log 增加 Workpad 评论摘要"` 跑出 `ZEE-28`，`success=true`、`final_state=Done`、`changed_files=SMOKE.md`、`ai_review_result=passed`。
+- **下一轮候选**：对重复 `codex_diff` 摘要做同 turn 轻量去重，或继续处理上一轮遗留的 optional human sink best-effort。
+
+## Round ZEE-31: Issue Lifecycle Narrative
+
+- **Spec 范围**：`SPEC.md:1249-1274`、`SPEC.md:2027-2036`、`SPEC.md:2086-2087`
+- **Scenario**：`observability.issue_lifecycle_narrative`
+- **Replace**：`dimension`，用“人能一眼复盘一个 issue 的全流程”替代单纯对齐 SPEC 的最低 logging 要求。
+- **方向判断**：
+  - `SPEC.md` 是下限：它要求结构化字段、稳定 `key=value`、operator-visible observability 和 humanized summaries 不影响正确性。
+  - 当前可以比 SPEC 更好：human log 不只证明“有日志”，还应按 issue 讲清楚 hook、Linear Workpad、Codex 执行动作、AI Review、本地 merge 和最终 Done。
+- **本轮证据**：
+  - `3759009`：为 workspace hook 增加 `started/completed/failed/timed_out` 结构化事件，并带 `hook`、`command`、`workspace_path`、`duration_ms`、`output`。
+  - `475cbf6`：把 AI commentary、计划、上下文读取等内部细节降为 `DEBUG`，保留真实执行命令、状态流转和 Workpad 为 `INFO`。
+  - `a3e9ee3`：human log 隐藏成功 `workspace_cleaned` 噪声，原始 JSONL 仍持久化该事件。
+  - `go/.symphony/logs/run-20260501-215731.human.log`：ZEE-31 开头包含 ZEE-30 `before_remove` 和 ZEE-31 `after_create` hook 命令、耗时、输出；随后包含 `workpad_updated`、Codex 命令、AI Review、local merge、Done。
+  - `go/.symphony/logs/run-20260501-215731.human.log`：`codex_message` 和 context read 命令为 `DEBUG`，业务动作与流程推进为 `INFO`；没有 `workspace_cleaned` 行。
+  - `go/internal/workspace/workspace.go:28-40` 定义 hook 事件和 observer；`go/internal/workspace/workspace.go:275-340` 在 hook 执行前后发事件。
+  - `go/internal/orchestrator/orchestrator.go:531-563` 将 hook 事件转换成 issue-aware 日志；`go/internal/orchestrator/orchestrator.go:799-810` 给 create/before_run/after_run hook 注入 issue context。
+  - `go/internal/logging/jsonl.go:182-245` 投影 Codex raw event；`go/internal/logging/jsonl.go:253-291` 将 AI message/context read 分到 `DEBUG`，将真实命令保留为 operator 可读事件；`go/internal/logging/jsonl.go:411-427` 识别 memory/skill/context reads。
+  - `go/internal/logging/jsonl.go:182-185` human log 跳过成功 cleanup；`go/internal/logging/jsonl_test.go:286-315` 证明 human log 不显示成功 cleanup，但 JSONL 保留。
+- **Gap table**：
+  - `conforms`：满足 SPEC 的 issue/session context、stable `key=value`、action outcome 和 humanized event summaries。
+  - `exceeds`：human log 已形成 issue 生命周期叙事：hook -> workpad -> codex turn -> validation/commit -> review -> merge -> done，能直接用于排障和复盘。
+  - `partial`：human log 仍是扁平时间线；跨 issue 的 startup cleanup hook 会出现在下一轮开头，虽然现在不再有成功 cleanup 噪声，但后续可按 issue 分段或增加 section header。
+- **验证结果**：
+  - `go test -ldflags='-linkmode=external' ./internal/logging -count=1 -v`
+  - `go test -ldflags='-linkmode=external' ./internal/workspace -count=1 -v`
+  - `go test -ldflags='-linkmode=external' ./internal/orchestrator -count=1 -run 'TestRunAgentLogsWorkspaceHookEvents|TestRunAgentRunsBeforeAndAfterHooksAroundRunner|TestWorkpadLogSummary' -v`
+  - `go test -ldflags='-linkmode=external' ./...`
+  - `make build`
+  - `git diff --check`
+  - `make zh-smoke-round CHANGE_NOTE="human log 隐藏成功 cleanup 噪声"` 跑出 `ZEE-31`，`success=true`、`final_state=Done`、`changed_files=SMOKE.md`、`ai_review_result=passed`。
+- **下一轮候选**：不要只继续补字段；优先做 issue 分段/生命周期视图，让 human log 在视觉上更像“一个 issue 的处理流水账”，同时保留 JSONL 作为机器分析底座。
+
+## Round ZEE-32: Issue Start Boundary
+
+- **Spec 范围**：`SPEC.md:1260-1264`、`SPEC.md:2027-2036`
+- **Scenario**：`observability.issue_start_boundary`
+- **Replace**：`dimension`，用“当前 issue 的 human log 开头必须对应当前 issue 生命周期”替代“所有 hook 都平铺展示”。
+- **问题判断**：
+  - 一个 issue 的人工流水账应该从当前 issue 的 `after_create` 开始。
+  - ZEE-31 暴露的问题是：启动时 `StartupCleanup()` 会先清理上一轮 terminal issue，触发上一轮的 `before_remove` hook；这属于启动前清理，不属于当前 issue 的生命周期。
+- **本轮修复**：
+  - `cf96f79`：给 startup cleanup 触发的 hook 增加 `source=startup_cleanup`。
+  - human log 隐藏成功的 startup cleanup hook started/completed；失败 hook 仍然按 `workspace_hook_failed` 可见。
+  - 原始 JSONL 不过滤，仍保留 `before_remove` hook 和 `workspace_cleaned` 证据。
+- **本轮证据**：
+  - `go/internal/orchestrator/orchestrator.go:251-255`：`StartupCleanup()` 使用 `workspace.WithHookSource(ctx, "startup_cleanup")`。
+  - `go/internal/orchestrator/orchestrator.go:531-563`：hook 日志带 `source` 字段。
+  - `go/internal/workspace/workspace.go:28-40`、`go/internal/workspace/workspace.go:58-64`、`go/internal/workspace/workspace.go:340-349`：hook event 支持 source context。
+  - `go/internal/logging/jsonl.go:182-204`：human log 跳过成功 startup cleanup hook，但不跳过失败 hook。
+  - `go/.symphony/logs/run-20260501-221046.human.log`：第一行是 `ZEE-32 Todo -> In Progress`，第二/三行是 `ZEE-32 after_create` started/completed，没有上一轮 `before_remove`。
+  - `go/.symphony/logs/run-20260501-221046.jsonl`：第 1-2 行仍保留 `ZEE-31 before_remove`，并带 `source=startup_cleanup`。
+- **Gap table**：
+  - `conforms`：当前 issue human log 不再被上一轮 cleanup hook 抢占开头，符合人工复盘的 issue 生命周期模型。
+  - `conforms`：JSONL 仍保留 startup cleanup 的完整机器证据，debug/replay 能力没有丢。
+  - `partial`：human log 仍然缺少显式 section header；目前靠 issue 字段和事件顺序阅读，后续可以继续做视觉分段。
+- **验证结果**：
+  - `go test -ldflags='-linkmode=external' ./internal/logging -count=1 -v`
+  - `go test -ldflags='-linkmode=external' ./internal/workspace -count=1 -v`
+  - `go test -ldflags='-linkmode=external' ./internal/orchestrator -count=1 -run 'TestStartupCleanupRemovesTerminalWorkspaces|TestRunAgentLogsWorkspaceHookEvents' -v`
+  - `go test -ldflags='-linkmode=external' ./internal/orchestrator -count=1 -v`
+  - `go test -ldflags='-linkmode=external' ./...`
+  - `make build`
+  - `git diff --check`
+  - `make zh-smoke-round CHANGE_NOTE="human log 从 after_create 开始"` 跑出 `ZEE-32`，`success=true`、`final_state=Done`、`changed_files=SMOKE.md`、`ai_review_result=passed`。
+- **下一轮候选**：如果继续做人类可读性，优先加 issue section header 或 summary footer，而不是再扩大过滤规则。
+
+## Round ZEE-33: Issue Section Headers
+
+- **Round goal**：替代 `dimension`，旧信号 `flat current-issue human log`，新 SPEC 信号 `human-readable status surface uses stable key=value issue boundaries without changing orchestrator behavior`。
+- **Iteration**：2 patch。
+- **Spec 范围**：`SPEC.md:1260-1264`、`SPEC.md:2027-2036`。
+- **Workflow / Issue**：`WORKFLOW.zh-smoke.md`，本轮无 workflow diff；真实隔离 issue `ZEE-33`，从 `Todo` 跑到 `Done`。
+- **本轮运行**：先确认无旧 `symphony-go` poller；`make zh-smoke-round CHANGE_NOTE="human log 增加 issue 分段"` 生成 `go/.symphony/logs/run-20260501-222142.jsonl` 和 `go/.symphony/logs/run-20260501-222142.human.log`。
+- **Commit**：`before=c89288e629d531b4b796039e1f8f6969e66757da`，`after=f17f76b5a9ba31551aba539e951725ae26e0b079`，`fix(logging): add issue section headers to human log`。
+- **Gap table**：
+  - `conforms`：`go/.symphony/logs/run-20260501-222142.human.log:1` 是 `event=issue_section issue=ZEE-33 msg="Issue ZEE-33"`，第 2 行才进入 `state_changed`。
+  - `conforms`：`rg -n 'issue_section' go/.symphony/logs/run-20260501-222142.jsonl` 无匹配，说明 section header 只存在于 human/console 展示层，不污染 JSONL。
+  - `conforms`：`go/internal/logging/jsonl.go:17-29` 只记录每个 sink 的 last issue；`go/internal/logging/jsonl.go:136-160` 写 display line 前按 issue 插入 header；`go/internal/logging/jsonl.go:172-184` 构造 display-only `issue_section`。
+- **已修复内容**：只改 `go/internal/logging/jsonl.go` 和 `go/internal/logging/jsonl_test.go`；新增 `TestHumanLogWritesIssueSectionHeaders`，证明每个 issue 只写一条 section header，且 JSONL 不包含 `issue_section`。
+- **验证结果**：
+  - `go test -ldflags='-linkmode=external' ./internal/logging -count=1 -run TestHumanLogWritesIssueSectionHeaders -v`：先失败，缺少 header；实现后通过。
+  - `go test -ldflags='-linkmode=external' ./internal/logging -count=1 -v`：通过。
+  - `go test -ldflags='-linkmode=external' ./...`：第一次 `TestSnapshotTracksCodexEventTokens` 等待 runner event 超时；单独复跑该 case 通过；第二次全量通过。
+  - `make build`：通过。
+  - `git diff --check`：通过。
+  - `make zh-smoke-round CHANGE_NOTE="human log 增加 issue 分段"`：`ZEE-33 success=true`、`final_state=Done`、`changed_files=SMOKE.md`、`ai_review_result=passed`。
+- **Darwin 判定**：keep。该改动让 human log 明确出现 issue 分段，同时保留 JSONL 原始事件合同。
+- **Coverage ledger 更新**：`13 observability` 保持 `partial`，证据更新到 `ZEE-33`；`17-18 real_integration` 保持 `partial`，证据更新到真实 Linear smoke `ZEE-33`。
+- **下一轮候选**：`observability.sink_failure`，把 optional human sink 改成 best-effort，并验证 sink 失败时 JSONL/console 仍能给 operator warning。
+
+## Round 2026-05-01: workflow_config.dynamic_reload_last_known_good - baseline
+
+- **Round goal**：替代 `scenario`，旧信号 `untested workflow_config coverage`，新 SPEC 信号 `dynamic reload keeps last known good on invalid reload and reapplies valid config without restart`。
+- **Iteration**：1 baseline。
+- **Spec 范围**：`SPEC.md:524-540`、`SPEC.md:1931-1943`。
+- **Workflow / Issue**：`WORKFLOW.md`，本轮无 workflow diff；使用 synthetic tests 和 config-only startup check，不创建真实 Linear issue。
+- **本轮运行**：不启动常驻 poller，不改 workflow 文件；读取 reloader/orchestrator 实现并跑 focused tests。
+- **Commit**：`before=f17f76b5a9ba31551aba539e951725ae26e0b079`，`after=none`，本轮 baseline 未改代码。
+- **Gap table**：
+  - `conforms`：`go/internal/workflow/reloader.go:73-106` 只有在 `CommitCandidate()` 后才替换 `current`，无效 reload 返回 error 且不替换 last known good。
+  - `conforms`：`go/internal/orchestrator/orchestrator.go:472-499` reload 失败会 `workflow_reload_failed` 并保留现有 runtime；依赖重建成功后才 commit candidate、替换 tracker/workspace/runner 和 polling interval。
+  - `conforms`：`go/internal/workflow/reloader_test.go:13-81` 覆盖 invalid edit 保留 last good 和 valid edit apply；`go/internal/orchestrator/orchestrator_test.go:1579-1806` 覆盖 reload error 可见、dependency rebuild、factory failure 不半应用、下次无文件触碰仍可重试。
+- **已修复内容**：无。该子场景 baseline 已符合 SPEC。
+- **验证结果**：
+  - `go test -ldflags='-linkmode=external' ./internal/workflow -count=1 -run 'TestReloaderKeepsLastGoodWorkflowAfterInvalidEdit|TestReloaderAppliesValidEdit' -v`：通过。
+  - `go test -ldflags='-linkmode=external' ./internal/orchestrator -count=1 -run 'TestPollKeepsReloadErrorVisibleAfterTrackerSuccess|TestRefreshWorkflowRebuildsDependenciesFromFactories|TestRefreshWorkflowFactoryFailureDoesNotHalfApply|TestRefreshWorkflowRetriesFactoryFailureWithoutFileTouch' -v`：通过。
+  - `LINEAR_API_KEY="${LINEAR_API_KEY:-lin_fake_for_config_check}" ./bin/symphony-go run --workflow ./WORKFLOW.md --once --no-tui --issue DOES-NOT-EXIST`：通过。
+- **Darwin 判定**：keep baseline，无需 patch。
+- **Coverage ledger 更新**：`5-6 workflow_config` 从 `untested` 变 `partial`。
+- **下一轮候选**：切到 `workspace_safety`，优先验证 workspace key/root containment/hook cwd；如果必须继续 workflow_config，则只补一个 live file-change smoke 证明真实日志中出现 `workflow_reload_failed` / `workflow_reloaded`。
+
+## Round 2026-05-01: workspace_safety.root_and_hook_boundaries - baseline
+
+- **Round goal**：替代 `scenario`，旧信号 `untested workspace_safety coverage`，新 SPEC 信号 `workspace path stays inside root, sanitized workspace key, hooks run with workspace cwd, agent launch uses workspace cwd`。
+- **Iteration**：1 baseline。
+- **Spec 范围**：`SPEC.md:814-905`、`SPEC.md:1619-1623`、`SPEC.md:1952-1965`。
+- **Workflow / Issue**：`WORKFLOW.md`，本轮无 workflow diff；使用 synthetic unit tests，不创建真实 Linear issue。
+- **本轮运行**：不启动常驻 poller；读取 workspace manager、orchestrator runAgent、Codex runner 实现，并跑 focused tests。
+- **Commit**：`before=f17f76b5a9ba31551aba539e951725ae26e0b079`，`after=none`，本轮 baseline 未改代码。
+- **Gap table**：
+  - `conforms`：`go/internal/workspace/workspace.go:72-88` 归一化 root 并用 `SafeIdentifier` 派生 per-issue workspace path；`go/internal/workspace/workspace.go:273-281` 只保留 `[A-Za-z0-9._-]`，其余字符替换为 `_`。
+  - `conforms`：`go/internal/workspace/workspace.go:91-142` 同时做 lexical root containment 和 symlink-aware containment；`go/internal/workspace/workspace.go:190-239` 创建/复用 workspace 前后校验路径；`go/internal/workspace/workspace.go:242-270` cleanup 避免跟随逃逸 symlink。
+  - `conforms`：`go/internal/workspace/workspace.go:170-187`、`go/internal/workspace/workspace.go:284-335` 在 hook 执行前校验 path，并用 `cmd.Dir = cwd` 运行 hook。
+  - `conforms`：`go/internal/orchestrator/orchestrator.go:803-817` 在 agent 运行前先 `Ensure` + `BeforeRun`；`go/internal/orchestrator/orchestrator.go:843-889` 把同一个 `workspacePath` 传给 Codex runner；`go/internal/codex/runner.go:156-190` app-server 进程 `cmd.Dir = workspacePath`，thread/turn start 也携带 cwd；`go/internal/codex/runner.go:199-220` 默认 turn sandbox writable root 包含 workspace path。
+- **已修复内容**：无。该子场景 baseline 已符合 SPEC。
+- **验证结果**：
+  - `go test -ldflags='-linkmode=external' ./internal/workspace -count=1 -run 'TestPathForIssueStaysInsideRoot|TestPathForIssueSanitizesDotDotIdentifierInsideRoot|TestBeforeRunAndAfterRunHookSemantics|TestValidateWorkspacePathRejectsEscape|TestEnsureReplacesSymlinkWorkspaceEscapingRoot|TestValidateAndBeforeRunRejectSymlinkWorkspaceEscapingRoot|TestRemoveSymlinkWorkspaceRemovesOnlyLink' -v`：通过。
+  - `go test -ldflags='-linkmode=external' ./internal/orchestrator -count=1 -run 'TestRunAgentRunsBeforeAndAfterHooksAroundRunner|TestRunAgentLogsWorkspaceHookEvents' -v`：通过。
+  - `go test -ldflags='-linkmode=external' ./internal/codex -count=1 -run TestRunnerSendsChinesePromptAndGitWritableRoots -v`：通过。
+- **Darwin 判定**：keep baseline，无需 patch。
+- **Coverage ledger 更新**：`9 workspace_safety` 从 `untested` 变 `covered`。
+- **下一轮候选**：切到 `agent_runner`，优先验证 continuation/session/cwd 行为；或切到 `tracker_selection` 验证 Todo blocker 和 active/terminal selection。
+
+## Round ZEE-35: workspace_safety.real_issue_hook_cwd - real scenario
+
+- **Round goal**：替代 `scenario`，旧信号 `synthetic workspace_safety evidence`，新 SPEC 信号 `real Linear issue and real workflow prove hooks and agent launch use the per-issue workspace cwd`。
+- **Iteration**：2 real scenario。
+- **Spec 范围**：`SPEC.md:872-877`、`SPEC.md:890-895`、`SPEC.md:1952-1965`。
+- **Workflow / Issue**：新增本地场景 workflow `go/WORKFLOW.workspace-safety.md`；真实 Linear issue `ZEE-34` 首轮用于暴露 workflow 构造错误，真实 Linear issue `ZEE-35` 用修正后的 workflow 验证成功。
+- **本轮运行**：
+  - `make run-once WORKFLOW=./WORKFLOW.workspace-safety.md ISSUE=ZEE-34 MERGE_TARGET=zh-smoke-harness-loop`：失败，`after_create` 里 bootstrap worktree 后没有 `cd "$workspace"`，导致 marker 文件写入旧 cwd 失败。
+  - 修正 workflow：`symphony_after_create.sh` 后显式 `cd "$workspace"` 再写 `.symphony-safety/after_create.cwd`。
+  - `make run-once WORKFLOW=./WORKFLOW.workspace-safety.md ISSUE=ZEE-35 MERGE_TARGET=zh-smoke-harness-loop`：成功进入 `Human Review`。
+- **Commit**：`before=f17f76b5a9ba31551aba539e951725ae26e0b079`，`after=none`，本轮没有代码提交；agent 在 issue worktree 中创建本地提交 `7a58ac0 ZEE-35: workspace safety proof`。
+- **Gap table**：
+  - `missing`：`ZEE-34` 证明初版场景 workflow 有构造错误，hook bootstrap 后继续用旧 cwd 写 marker，真实运行失败。这不是 Go 实现 gap，但说明真实场景比代码阅读更有效。
+  - `conforms`：`go/.symphony/logs/run-20260501-224057.human.log:3-6` 证明 `after_create`、`before_run` hook 的 `workspace_path` 是 `/Users/bytedance/symphony/go/.worktrees-safety/ZEE-35`。
+  - `conforms`：`go/.symphony/logs/run-20260501-224057.human.log:12-14` 证明 agent 执行 `pwd -P`、读取 `after_create.cwd`、读取 `before_run.cwd`，三个输出完全一致。
+  - `conforms`：`go/.symphony/logs/run-20260501-224057.human.log:23-25` 证明两条 cwd equality test 通过，`WORKSPACE_SAFETY_PROOF.md` 命中 `workspace safety proof: passed`。
+  - `conforms`：`go/.worktrees-safety/ZEE-35/WORKSPACE_SAFETY_PROOF.md` 记录 `pwd -P output`、`after_create.cwd content`、`before_run.cwd content` 三者都等于 `/Users/bytedance/symphony/go/.worktrees-safety/ZEE-35`。
+- **已修复内容**：只修场景 workflow，不改 Go 代码。
+- **验证结果**：
+  - `ZEE-35` 状态：`In Progress -> Human Review`。
+  - 本地 issue worktree 提交：`7a58ac0 ZEE-35: workspace safety proof`。
+  - proof 文件：`go/.worktrees-safety/ZEE-35/WORKSPACE_SAFETY_PROOF.md`。
+  - run log：`go/.symphony/logs/run-20260501-224057.jsonl` 和 `go/.symphony/logs/run-20260501-224057.human.log`。
+- **Darwin 判定**：keep evidence。真实场景确认 workspace_safety 核心行为符合 SPEC；不需要代码 patch。
+- **Coverage ledger 更新**：`9 workspace_safety` 继续 `covered`，证据从单测升级到真实 issue `ZEE-35`。
+- **下一轮候选**：切到 `agent_runner`，用同样方式构造真实 issue/workflow 验证 continuation/session/cwd 行为。
