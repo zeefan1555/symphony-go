@@ -40,7 +40,7 @@ description:
 - You are in the issue worktree, for example:
 
   ```bash
-  /path/to/repo/elixir/.worktrees/ZEE-8
+  /Users/bytedance/symphony-go/.worktrees/ZEE-8
   ```
 
 - The issue worktree is clean:
@@ -141,7 +141,7 @@ Use this in the workpad when merge cannot proceed:
 ## Notes For Symphony Local Smoke
 
 - The sandbox-root fix for git worktree metadata lives in
-  `SymphonyElixir.Codex.AppServer.session_policies/2`. A running Symphony
+  the Codex app-server sandbox policy in this repository. A running Symphony
   service must be restarted to use that code.
 - A successful merge in a throwaway clone is only a proof that the branch is
   mergeable. It is not completion of the local workflow.

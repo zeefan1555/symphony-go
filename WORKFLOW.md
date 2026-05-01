@@ -73,12 +73,22 @@ No description provided.
 1. 这是无人值守的 orchestration session。不要要求人类执行后续动作。
 2. 只有遇到真实 blocker 时才可以提前停止，例如缺少必要 auth、权限、secret 或工具。若被阻塞，必须记录到 workpad，并按 workflow 移动 issue 状态。
 3. 最终回复只报告已完成动作和 blocker，不要写“给用户的下一步”。
+4. 所有写给外部系统的可见内容默认使用中文，包括 Linear workpad、GitHub PR 标题、PR 正文、PR 根评论、review inline 回复和 Codex review 回复。命令、路径、错误原文、代码标识符和第三方模板字段可以保留原文。
 
 只在提供的 repository worktree 内工作，不要触碰其他路径。
 
-## 前置条件：Linear MCP 或 `linear_graphql` 工具可用
+## 前置条件：使用 `linear_graphql`，不要使用 Linear MCP/app 工具
 
-Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，也可以通过注入的 `linear_graphql` 工具。如果两者都不可用，停止并要求配置 Linear。
+Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交互审批的 Linear MCP/app 工具。所有 Linear 读写默认优先使用注入的 `linear_graphql` 工具；如果 `linear_graphql` 不可用，可以使用 `.codex/skills/linear-cli/SKILL.md` 中的 `linear` CLI。两者都不可用时，停止并记录 blocker，不要 fallback 到 MCP/app 工具。
+
+具体规则：
+
+- 读取 issue、team states、comments：使用 `linear_graphql` query。
+- 更新 issue 状态：使用 `linear_graphql` 的 `issueUpdate` mutation。
+- 创建或更新 `## Codex Workpad`：使用 `linear_graphql` 的 `commentCreate` / `commentUpdate` mutation。
+- 关联 GitHub PR：优先使用 `linear_graphql` 的 `attachmentLinkGitHubPR` mutation。
+- 如果改用 `linear` CLI，先读取 `.codex/skills/linear-cli/SKILL.md`，并使用 `linear issue view/update/comment/link` 命令完成同等操作。
+- 不调用 Linear MCP/app 工具，例如 `linear_save_comment`、`linear_save_issue`、`linear_get_issue` 等；这些工具会触发交互式审批，导致无人值守 run 失败。
 
 ## 默认姿态
 
@@ -89,6 +99,8 @@ Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，
 - 保持 ticket metadata 最新，包括状态、checklist、acceptance criteria 和链接。
 - 使用一个持久的 Linear comment 作为进度事实源。
 - 所有进度和交接信息都写入同一个 workpad comment；不要额外发布“done”或 summary comment。
+- GitHub PR 标题和正文必须使用中文，正文至少包含 `摘要`、`验证` 和关联 Linear issue。
+- 所有 GitHub 评论必须使用中文，并用 `[codex]` 前缀标识 agent 回复；引用 reviewer 原文或命令输出时可以保留原文。
 - 如果 ticket 正文或评论里有 `Validation`、`Test Plan` 或 `Testing`，必须把它们同步到 workpad 的验收和验证项，并在完成前逐项执行。
 - 执行中发现有价值但超出范围的改进时，创建单独 Linear issue，不要扩大当前 scope。follow-up issue 必须有清晰标题、描述、验收标准，放入 `Backlog`，归属同一 project，关联当前 issue；如果依赖当前 issue，使用 `blockedBy`。
 - 只有达到对应质量门槛后才移动状态。
@@ -98,6 +110,7 @@ Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，
 ## 相关技能
 
 - `linear`：操作 Linear。
+- `linear-cli`：当 `linear_graphql` 不可用或 CLI 更适合时，用 `linear` CLI 操作 Linear；不要调用 Linear MCP/app 工具。
 - `commit`：在实现过程中创建干净、逻辑清晰的 commit。
 - `push`：保持远端分支最新，并创建或更新 PR。
 - `pull`：交接前把分支同步到最新 `origin/main`。
@@ -131,7 +144,7 @@ Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，
    - 如果当前分支 PR 已 `CLOSED` 或 `MERGED`，本轮不要复用旧分支工作。
    - 从 `origin/main` 创建新分支，并作为新 attempt 重启执行流程。
 5. 对 `Todo` ticket，启动顺序必须严格如下：
-   - `update_issue(..., state: "In Progress")`
+   - 通过 `linear_graphql` 的 `issueUpdate` mutation 将状态更新为 `In Progress`
    - 查找或创建 `## Codex Workpad` bootstrap comment
    - 然后才开始分析、计划和实现
 6. 如果状态和 issue 内容不一致，添加一条短 comment 说明，然后走最稳妥的流程。
@@ -178,7 +191,7 @@ Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，
    - review summaries/states：`gh pr view --json reviews`
 3. 每条 actionable reviewer comment，无论来自人还是 bot，包括 inline review comment，都视为 blocking，直到满足以下之一：
    - 已通过代码、测试或文档改动解决
-   - 已在该 thread 上发布明确且有理由的 pushback 回复
+   - 已在该 thread 上发布明确且有理由的中文 pushback 回复
 4. 更新 workpad plan/checklist，列出每个 feedback item 及其解决状态。
 5. feedback-driven change 后重新运行验证并 push 更新。
 6. 循环执行，直到没有 outstanding actionable comments。
@@ -218,6 +231,7 @@ Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，
 7. 每次 `git push` 前，先运行当前 scope 要求的验证并确认通过；如果失败，修复并重跑直到绿色，然后 commit 并 push。
 8. 把 PR URL 关联到 issue。优先使用 attachment；如果 attachment 不可用，再写入 workpad。
    - 确保 GitHub PR 有 `symphony` label。
+   - PR 标题和正文必须是中文；如果仓库没有 PR 模板，按 `.codex/skills/push/SKILL.md` 的中文 fallback 结构生成。
 9. 把最新 `origin/main` merge 到当前分支，解决冲突并重跑检查。
 10. 更新 workpad comment 的最终 checklist 和 validation notes。
     - 勾选已完成的 plan、acceptance、validation 项。
@@ -268,6 +282,7 @@ Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，
 - PR feedback sweep 完成，且没有 actionable comments。
 - PR checks 绿色，分支已 push，PR 已关联到 issue。
 - 必要 PR metadata 已存在，例如 `symphony` label。
+- PR 标题、PR 正文和所有新增 GitHub 评论均为中文。
 - 如果触及 app，runtime validation/media 要求已完成。
 
 ## Guardrails
@@ -277,7 +292,7 @@ Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，
 - 如果 issue 状态是 `Backlog`，不要修改它；等待人类移动到 `Todo`。
 - 不要编辑 issue body/description 来记录计划或进度。
 - 每个 issue 只使用一个持久 workpad comment：`## Codex Workpad`。
-- 如果 session 内无法编辑 comment，使用 update script。只有 MCP editing 和 script-based editing 都不可用时，才报告 blocked。
+- 如果 session 内无法通过 `linear_graphql` 编辑 comment，先记录 blocker；不要调用 Linear MCP/app 工具兜底。
 - 临时 proof edit 只允许用于本地验证，commit 前必须恢复。
 - 如果发现超出范围的改进，创建单独 Backlog issue，不要扩大当前 scope；该 issue 要有清晰标题、描述、验收标准、同 project 归属、与当前 issue 的 `related` 链接，并在依赖当前 issue 时设置 `blockedBy`。
 - 未达到 `Human Review` 完成门槛前，不要移动到 `Human Review`。

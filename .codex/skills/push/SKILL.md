@@ -7,6 +7,8 @@ description:
 
 # Push
 
+This skill is scoped to `/Users/bytedance/symphony-go`.
+
 ## Prerequisites
 
 - `gh` CLI is installed and available in `PATH`.
@@ -17,6 +19,7 @@ description:
 - Push current branch changes to `origin` safely.
 - Create a PR if none exists for the branch, otherwise update the existing PR.
 - Keep branch history clean when remote has moved.
+- Create or update GitHub PR titles, PR bodies, and GitHub comments in Chinese.
 
 ## Related Skills
 
@@ -26,7 +29,9 @@ description:
 ## Steps
 
 1. Identify current branch and confirm remote state.
-2. Run local validation (`make -C elixir all`) before pushing.
+2. Run local validation before pushing:
+   - `git diff --check`
+   - `make build`
 3. Push branch to `origin` with upstream tracking if needed, using whatever
    remote URL is already configured.
 4. If push is not clean/rejected:
@@ -41,18 +46,20 @@ description:
    - If no PR exists, create one.
    - If a PR exists and is open, update it.
    - If branch is tied to a closed/merged PR, create a new branch + PR.
-   - Write a proper PR title that clearly describes the change outcome
+   - Write a Chinese PR title that clearly describes the change outcome.
    - For branch updates, explicitly reconsider whether current PR title still
      matches the latest scope; update it if it no longer does.
-6. Write/update PR body explicitly using `.github/pull_request_template.md`:
-   - Fill every section with concrete content for this change.
-   - Replace all placeholder comments (`<!-- ... -->`).
-   - Keep bullets/checkboxes where template expects them.
+6. Write/update the PR body in Chinese:
+   - If `.github/pull_request_template.md` exists, fill every section with
+     concrete content and replace all placeholder comments (`<!-- ... -->`).
+   - If no template exists, use the fallback sections `## 摘要`,
+     `## 验证`, and `Linear`.
    - If PR already exists, refresh body content so it reflects the total PR
      scope (all intended work on the branch), not just the newest commits,
      including newly added work, removed work, or changed approach.
    - Do not reuse stale description text from earlier iterations.
-7. Validate PR body with `mix pr_body.check` and fix all reported issues.
+7. Ensure the PR has the `symphony` label. If the repository lacks that label,
+   create it once with a clear description.
 8. Reply with the PR URL from `gh pr view`.
 
 ## Commands
@@ -61,8 +68,9 @@ description:
 # Identify branch
 branch=$(git branch --show-current)
 
-# Minimal validation gate
-make -C elixir all
+# Minimal validation gate for this Go repo
+git diff --check
+make build
 
 # Initial push: respect the current origin remote.
 git push -u origin HEAD
@@ -84,8 +92,8 @@ if [ "$pr_state" = "MERGED" ] || [ "$pr_state" = "CLOSED" ]; then
   exit 1
 fi
 
-# Write a clear, human-friendly title that summarizes the shipped change.
-pr_title="<clear PR title written for this change>"
+# Write a clear Chinese title that summarizes the shipped change.
+pr_title="<中文 PR 标题>"
 if [ -z "$pr_state" ]; then
   gh pr create --title "$pr_title"
 else
@@ -93,16 +101,17 @@ else
   gh pr edit --title "$pr_title"
 fi
 
-# Write/edit PR body to match .github/pull_request_template.md before validation.
+# Write/edit PR body in Chinese before validation.
 # Example workflow:
-# 1) open the template and draft body content for this PR
+# 1) use .github/pull_request_template.md if present; otherwise use
+#    sections: 摘要, 验证, Linear
 # 2) gh pr edit --body-file /tmp/pr_body.md
 # 3) for branch updates, re-check that title/body still match current diff
 
-tmp_pr_body=$(mktemp)
-gh pr view --json body -q .body > "$tmp_pr_body"
-(cd elixir && mix pr_body.check --file "$tmp_pr_body")
-rm -f "$tmp_pr_body"
+# Ensure required repo metadata exists.
+gh label list --limit 100 | awk '{print $1}' | grep -qx symphony \
+  || gh label create symphony --color 5319E7 --description "Symphony workflow"
+gh pr edit --add-label symphony
 
 # Show PR URL for the reply
 gh pr view --json url -q .url
