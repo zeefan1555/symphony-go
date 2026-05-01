@@ -37,8 +37,8 @@ agent:
     allow_manual_ai_review: true
     on_ai_fail: rework
   merge_policy:
-    mode: local # local | pr
-    skill: local-merge # local-merge | land
+    mode: pr # local | pr
+    skill: land # local-merge | land
 codex:
   command: codex --config shell_environment_policy.inherit=all --config 'model="gpt-5.5"' --config model_reasoning_effort=xhigh app-server
   approval_policy: never
