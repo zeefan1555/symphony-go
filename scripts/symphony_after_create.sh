@@ -3,10 +3,10 @@ set -euo pipefail
 
 workspace="${1:-$(pwd -P)}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-repo_root="$(cd "$script_dir/../.." && pwd -P)"
+repo_root="$(cd "$script_dir/.." && pwd -P)"
 issue="$(basename "$workspace")"
 branch="symphony-go/$issue"
-remote_url="${SYMPHONY_REMOTE_URL:-git@github.com:zeefan1555/symphony.git}"
+remote_url="${SYMPHONY_REMOTE_URL:-git@github.com:zeefan1555/symphony-go.git}"
 
 cd "$repo_root"
 rm -rf "$workspace"

@@ -1,12 +1,11 @@
 ---
 tracker:
   kind: linear
-  api_key: lin_api_anKemYvMitkjBS2cPmSQHtaAW40DEuvZBeI6EuJn
+  api_key: $LINEAR_API_KEY
   project_slug: "symphony-test-c2a66ab0f2e7"
   active_states:
     - Todo
     - In Progress
-    - Human Review
     - Merging
     - Rework
   terminal_states:
@@ -37,9 +36,6 @@ codex:
   thread_sandbox: workspace-write
   turn_sandbox_policy:
     type: workspaceWrite
-    writableRoots:
-      - /Users/bytedance/symphony/go/.worktrees
-      - /Users/bytedance/symphony/.git
     readOnlyAccess:
       type: fullAccess
     networkAccess: true
@@ -47,17 +43,18 @@ codex:
     excludeSlashTmp: false
 ---
 
-You are working on a Linear ticket `{{ issue.identifier }}`.
+你正在处理 Linear ticket `{{ issue.identifier }}`。
 
 {% if attempt %}
-Continuation context:
+续跑上下文：
 
-- This is retry attempt #{{ attempt }} because the ticket is still active.
-- Resume from the current worktree. Do not redo completed changes.
-- If a local commit already exists, check whether only validation or review handoff remains.
+- 这是第 #{{ attempt }} 次重试，因为 ticket 仍处于 active 状态。
+- 从当前 workspace 状态继续，不要从头重做。
+- 除非新的代码改动需要，否则不要重复已经完成的排查或验证。
+- 只要 issue 仍处于 active 状态，不要提前结束；唯一例外是真正缺少必要权限、密钥或工具。
 {% endif %}
 
-Issue context:
+Issue 上下文：
 Identifier: {{ issue.identifier }}
 Title: {{ issue.title }}
 Current status: {{ issue.state }}
@@ -71,148 +68,256 @@ Description:
 No description provided.
 {% endif %}
 
-## Goal
+## 总体要求
 
-This is a local smoke workflow. Do not create a PR and do not push.
+1. 这是无人值守的 orchestration session。不要要求人类执行后续动作。
+2. 只有遇到真实 blocker 时才可以提前停止，例如缺少必要 auth、权限、secret 或工具。若被阻塞，必须记录到 workpad，并按 workflow 移动 issue 状态。
+3. 最终回复只报告已完成动作和 blocker，不要写“给用户的下一步”。
 
-The agent should:
+只在提供的 repository worktree 内工作，不要触碰其他路径。
 
-1. Make the smallest required change in the issue worktree.
-2. Run local validation that directly proves the change.
-3. Create one local git commit.
+## 前置条件：Linear MCP 或 `linear_graphql` 工具可用
 
-The Go orchestrator, not the Codex agent, will update the single `## Codex Workpad` Linear comment and move the issue to `Human Review` after it detects a local commit.
+Agent 必须能和 Linear 通信，可以通过已配置的 Linear MCP server，也可以通过注入的 `linear_graphql` 工具。如果两者都不可用，停止并要求配置 Linear。
 
-After manual approval, the human will move the issue to `Merging`. In `Merging`, follow `.codex/skills/local-merge/SKILL.md` and merge the issue branch into the outer repository branch `feat_zff`, validate, then move the issue to `Done`.
+## 默认姿态
 
-## Rules
+- 先确认 ticket 当前状态，再进入对应流程。
+- 每个任务开始时，先打开并更新 tracking workpad comment，再做新的实现工作。
+- 编码前花足够精力做计划和验证设计。
+- 先复现：修改代码前必须确认当前行为或问题信号，让修复目标明确。
+- 保持 ticket metadata 最新，包括状态、checklist、acceptance criteria 和链接。
+- 使用一个持久的 Linear comment 作为进度事实源。
+- 所有进度和交接信息都写入同一个 workpad comment；不要额外发布“done”或 summary comment。
+- 如果 ticket 正文或评论里有 `Validation`、`Test Plan` 或 `Testing`，必须把它们同步到 workpad 的验收和验证项，并在完成前逐项执行。
+- 执行中发现有价值但超出范围的改进时，创建单独 Linear issue，不要扩大当前 scope。follow-up issue 必须有清晰标题、描述、验收标准，放入 `Backlog`，归属同一 project，关联当前 issue；如果依赖当前 issue，使用 `blockedBy`。
+- 只有达到对应质量门槛后才移动状态。
+- 除非缺少必要输入、secret 或权限，否则自主端到端执行。
+- blocked-access escape hatch 只能用于真实外部 blocker，并且必须先用完文档中的 fallback。
 
-- Keep all Linear workpad notes, status notes, final handoff text, and agent-facing progress text in Chinese when the issue is a Chinese smoke test.
-- Work only inside the provided repository and worktree.
-- Prefer the smallest useful change. Do not refactor, format unrelated files, or expand scope.
-- If the issue description includes validation commands, run them. Otherwise run the smallest relevant checks.
-- Do not use the GitHub PR flow. Do not run `git push` or `gh pr create`.
-- Do not stop early unless blocked by missing required auth, permissions, or tools.
-- Do not call Linear MCP, Linear apps, or any MCP write tool. Interactive MCP approval is not available in unattended runs.
-- Do not update Linear comments or issue status yourself. The Go orchestrator writes the Workpad comment in Chinese and moves state through Linear GraphQL after your local commit is present.
+## 相关技能
 
-## State Routing
+- `linear`：操作 Linear。
+- `commit`：在实现过程中创建干净、逻辑清晰的 commit。
+- `push`：保持远端分支最新，并创建或更新 PR。
+- `pull`：交接前把分支同步到最新 `origin/main`。
+- `land`：ticket 进入 `Merging` 时，打开并遵循 `.codex/skills/land/SKILL.md`，按 land loop 合并 PR。
 
-- `Backlog`: do not modify the issue.
-- `Todo`: move to `In Progress`, then implement locally.
-- `In Progress`: implement, validate, and commit locally. The Go orchestrator updates the workpad and moves the issue to `Human Review`.
-- `Human Review`: do not edit files. Wait for manual review.
-- `Rework`: address review feedback in the same worktree, validate, create a new local commit, then move back to `Human Review`.
-- `Merging`: use the `local-merge` skill to merge the issue branch into outer repository branch `feat_zff`, validate, update workpad, then move to `Done`.
-- `Done`: terminal state. Do nothing.
+## 状态映射
 
-## In Progress Flow
+- `Backlog`：不属于本 workflow 范围；不要修改。
+- `Todo`：排队状态；开始主动工作前立即转到 `In Progress`。
+  - 特例：如果已经挂了 PR，把它当作反馈或 rework loop，先完整扫 PR feedback，处理或明确 pushback，重新验证，再回到 `Human Review`。
+- `In Progress`：正在实现。
+- `Human Review`：PR 已挂载并验证，等待人工批准。
+- `Merging`：人工已批准；执行 `land` skill flow，不要直接调用 `gh pr merge`。
+- `Rework`：reviewer 要求修改；需要重新计划和实现。
+- `Done`：终态；无需继续操作。
 
-1. Fetch the issue and read its current state.
-2. If the issue is `Todo`, move it to `In Progress`.
-3. Read the existing `## Codex Workpad` context if present, but do not edit Linear comments.
-4. Use this environment stamp for local reasoning only:
+## Step 0：确认当前 ticket 状态并路由
 
-   ```text
-   <hostname>:<abs-worktree-path>@<short-sha>
-   ```
+1. 用明确 ticket ID 拉取 issue。
+2. 读取当前状态。
+3. 按状态进入对应流程：
+   - `Backlog`：不要修改 issue 内容或状态，停止并等待人类移动到 `Todo`。
+   - `Todo`：立即移动到 `In Progress`，然后确保 bootstrap workpad comment 存在，不存在则创建，随后进入执行流程。
+     - 如果 PR 已存在，先读取所有 open PR comments，判断哪些需要修改、哪些需要明确 pushback。
+   - `In Progress`：从当前 scratchpad comment 继续执行。
+   - `Human Review`：等待并轮询人工决策或 review 更新。
+   - `Merging`：进入后打开并遵循 `.codex/skills/land/SKILL.md`；不要直接调用 `gh pr merge`。
+   - `Rework`：进入 rework 流程。
+   - `Done`：什么都不做并退出。
+4. 检查当前分支是否已有 PR，以及 PR 是否已关闭。
+   - 如果当前分支 PR 已 `CLOSED` 或 `MERGED`，本轮不要复用旧分支工作。
+   - 从 `origin/main` 创建新分支，并作为新 attempt 重启执行流程。
+5. 对 `Todo` ticket，启动顺序必须严格如下：
+   - `update_issue(..., state: "In Progress")`
+   - 查找或创建 `## Codex Workpad` bootstrap comment
+   - 然后才开始分析、计划和实现
+6. 如果状态和 issue 内容不一致，添加一条短 comment 说明，然后走最稳妥的流程。
 
-5. Reproduce or confirm the target signal before editing. For documentation smoke tasks, use `rg` to show the target text is currently absent.
-6. Make the smallest required change.
-7. Run validation:
-   - Run all validation commands from the issue description when present.
-   - Always run `git diff --check`.
-   - For documentation smoke tasks, run an `rg` command proving the target text is present.
-8. Check the change scope:
+## Step 1：开始或继续执行（Todo 或 In Progress）
 
-   ```bash
-   git diff --name-only
-   git status --short
-   ```
+1. 查找或创建单一持久 scratchpad comment：
+   - 搜索现有 comments 中的 marker header：`## Codex Workpad`。
+   - 搜索时忽略 resolved comments；只有 active/unresolved comment 可以作为 live workpad 复用。
+   - 如果找到，复用该 comment；不要创建新的 workpad comment。
+   - 如果找不到，创建一个 workpad comment，后续所有更新都写入它。
+   - 持久保存 workpad comment ID，只向该 ID 写进度更新。
+2. 如果从 `Todo` 进入，不要延迟状态切换；进入本步骤前 issue 应已是 `In Progress`。
+3. 新改动前先 reconcile workpad：
+   - 勾选已经完成的事项。
+   - 扩展或修正 plan，让它覆盖当前 scope。
+   - 确保 `Acceptance Criteria` 和 `Validation` 当前仍准确。
+4. 在 workpad comment 中写入或更新分层计划。
+5. 在 workpad 顶部加入紧凑环境戳，格式为：
+   - `<host>:<abs-workdir>@<short-sha>`
+   - 示例：`devbox-01:<repo-root>/.worktrees/MT-32@7bdde33bc`
+   - 不要包含 Linear issue 字段已经能推导出的 metadata，例如 issue ID、status、branch、PR link。
+6. 在同一个 comment 中加入明确的 acceptance criteria 和 TODO checklist。
+   - 如果改动影响用户可见行为，加入 UI walkthrough 验收项，描述端到端验证路径。
+   - 如果改动触及 app 文件或 app 行为，在 `Acceptance Criteria` 中加入 app-specific flow checks，例如启动路径、变更后的交互路径和预期结果。
+   - 如果 ticket 正文或评论包含 `Validation`、`Test Plan` 或 `Testing`，把这些要求复制到 workpad 的 `Acceptance Criteria` 和 `Validation`，作为必选 checkbox，不要降级为可选。
+7. 对计划做 principal-style self-review，并在 comment 中修正计划。
+8. 实现前捕获具体复现信号，并记录到 workpad 的 `Notes`：可以是命令输出、截图或确定性的 UI 行为。
+9. 代码修改前运行 `pull` skill，同步最新 `origin/main`，并把结果记录到 workpad 的 `Notes`。
+   - 记录 `pull skill evidence`，包含：
+     - merge source(s)
+     - 结果：`clean` 或 `conflicts resolved`
+     - 同步后的 `HEAD` short SHA
+10. compact context，然后进入执行。
 
-9. Create a local commit. Include the issue identifier in the commit message, for example:
+## PR feedback sweep 协议（必须执行）
 
-   ```text
-   ZEE-8: update README smoke marker
-   ```
+当 ticket 已挂载 PR 时，进入 `Human Review` 前必须执行：
 
-10. Stop after the local commit exists. The Go orchestrator will:
-    - Update the Workpad comment.
-    - Record changed files and the commit hash.
-    - Record orchestration validation status.
-    - Move the issue to `Human Review`.
-11. Final message must report completed actions and blockers only.
+1. 从 issue links 或 attachments 中识别 PR number。
+2. 收集所有反馈渠道：
+   - 顶层 PR comments：`gh pr view --comments`
+   - inline review comments：`gh api repos/<owner>/<repo>/pulls/<pr>/comments`
+   - review summaries/states：`gh pr view --json reviews`
+3. 每条 actionable reviewer comment，无论来自人还是 bot，包括 inline review comment，都视为 blocking，直到满足以下之一：
+   - 已通过代码、测试或文档改动解决
+   - 已在该 thread 上发布明确且有理由的 pushback 回复
+4. 更新 workpad plan/checklist，列出每个 feedback item 及其解决状态。
+5. feedback-driven change 后重新运行验证并 push 更新。
+6. 循环执行，直到没有 outstanding actionable comments。
 
-## Human Review Flow
+## Blocked-access escape hatch（必须遵守）
 
-- `Human Review` means a local commit is ready for manual review.
-- Do not edit files in this state.
-- If changes are requested, the human will move the issue to `Rework`.
-- If approved, the human will move the issue to `Merging`.
+仅当缺少必要工具、auth 或权限，且本 session 无法解决时使用。
 
-## Rework Flow
+- GitHub 默认不是 valid blocker。必须先尝试 fallback 策略，例如 alternate remote/auth mode，然后继续 publish/review flow。
+- GitHub access/auth 问题不能直接移动到 `Human Review`，除非所有 fallback 都已尝试并记录在 workpad。
+- 如果缺少非 GitHub 的必要工具，或缺少非 GitHub 的必要 auth，移动 ticket 到 `Human Review`，并在 workpad 写入短 blocker brief，包含：
+  - 缺少什么
+  - 为什么阻塞必要 acceptance 或 validation
+  - 需要人类执行的精确解锁动作
+- brief 要简洁、可执行；不要额外发布 top-level comment。
 
-1. Read the issue comments and review request.
-2. Make the smallest required change in the same worktree.
-3. Re-run relevant validation.
-4. Create a new local commit.
-5. Update the same workpad with the new commit and validation result.
-6. Move the issue back to `Human Review`.
+## Step 2：执行阶段（Todo -> In Progress -> Human Review）
 
-## Merging Flow
+1. 确认当前 repo 状态：branch、`git status`、`HEAD`，并确认 kickoff `pull` sync 结果已记录到 workpad。
+2. 如果当前 issue 仍是 `Todo`，移动到 `In Progress`；否则保持当前状态。
+3. 加载现有 workpad comment，把它作为 active execution checklist。
+   - 现实变化时可以主动编辑它，例如 scope、风险、验证方式或新发现任务。
+4. 按分层 TODO 实现，并保持 comment 最新：
+   - 勾选已完成事项。
+   - 在合适位置添加新发现事项。
+   - scope 变化时保持 parent/child 结构完整。
+   - 每个有意义里程碑后立即更新 workpad，例如复现完成、代码改动完成、验证运行、review feedback 已处理。
+   - 不要让已完成工作在计划里保持未勾选。
+   - 如果 ticket 从 `Todo` 开始且已经有 PR，kickoff 后立刻执行完整 PR feedback sweep，再做新 feature work。
+5. 运行当前 scope 必需的验证和测试。
+   - 强制门禁：执行 ticket 提供的所有 `Validation`、`Test Plan` 或 `Testing` 要求；未满足即视为未完成。
+   - 优先使用能直接证明改动行为的 targeted proof。
+   - 可以使用临时本地 proof edit 来验证假设，例如临时调整 build input 或本地 hardcode 某个 UI account/response path，但必须在 commit/push 前全部恢复。
+   - 把临时 proof 步骤和结果记录到 workpad 的 `Validation` 或 `Notes`，让 reviewer 可复核。
+   - 如果触及 app，运行 `launch-app` 验证，并在 handoff 前通过 `github-pr-media` 捕获或上传媒体。
+6. 重新检查全部 acceptance criteria，补齐 gap。
+7. 每次 `git push` 前，先运行当前 scope 要求的验证并确认通过；如果失败，修复并重跑直到绿色，然后 commit 并 push。
+8. 把 PR URL 关联到 issue。优先使用 attachment；如果 attachment 不可用，再写入 workpad。
+   - 确保 GitHub PR 有 `symphony` label。
+9. 把最新 `origin/main` merge 到当前分支，解决冲突并重跑检查。
+10. 更新 workpad comment 的最终 checklist 和 validation notes。
+    - 勾选已完成的 plan、acceptance、validation 项。
+    - 在同一个 workpad comment 中加入最终 handoff notes，包括 commit 和 validation summary。
+    - 不要把 PR URL 写进 workpad；PR 关联应放在 issue attachment/link 字段。
+    - 如果执行中有任何不清楚的地方，在底部添加简短 `### Confusions` section。
+    - 不要额外发布 completion summary comment。
+11. 移动到 `Human Review` 前，轮询 PR feedback 和 checks：
+    - 读取 PR `Manual QA Plan` comment（如有），据此强化 UI/runtime test coverage。
+    - 执行完整 PR feedback sweep。
+    - 确认最新改动后的 PR checks 全部通过。
+    - 确认 ticket 提供的所有 validation/test-plan 项都在 workpad 中明确标记完成。
+    - 持续 check-address-verify，直到没有 outstanding comments 且 checks 完全通过。
+    - 状态切换前重新打开并刷新 workpad，让 `Plan`、`Acceptance Criteria`、`Validation` 与已完成工作完全一致。
+12. 只有此时才移动 issue 到 `Human Review`。
+    - 例外：如果按 blocked-access escape hatch 被非 GitHub 工具或 auth 阻塞，可以带 blocker brief 和明确解锁动作移动到 `Human Review`。
+13. 如果 `Todo` ticket 在 kickoff 时已挂 PR：
+    - 确保所有已有 PR feedback 都已审阅并解决，包括 inline review comments；解决方式可以是代码修改，也可以是明确且有理由的 pushback。
+    - 确保分支已 push 所需更新。
+    - 然后移动到 `Human Review`。
 
-1. Open and follow `.codex/skills/local-merge/SKILL.md`.
-2. Confirm the current worktree branch is the issue branch, such as `symphony/{{ issue.identifier }}`.
-3. Confirm the issue worktree is clean:
+## Step 3：Human Review 与 merge 处理
 
-   ```bash
-   git status --short
-   ```
+1. 当 issue 处于 `Human Review`，不要编码，也不要修改 ticket 内容。
+2. 按需轮询更新，包括人类和 bot 的 GitHub PR review comments。
+3. 如果 review feedback 要求改动，移动 issue 到 `Rework` 并执行 rework 流程。
+4. 如果批准，人类会把 issue 移动到 `Merging`。
+5. 当 issue 处于 `Merging`，打开并遵循 `.codex/skills/land/SKILL.md`，循环运行 `land` skill 直到 PR 合并。不要直接调用 `gh pr merge`。
+6. merge 完成后，移动 issue 到 `Done`。
 
-4. Locate the outer repository checkout and confirm branch `feat_zff` exists.
-5. Switch the outer repository checkout to `feat_zff` only when its working tree is clean or contains only changes you created for this task.
-6. Merge the issue branch into local `feat_zff`:
+## Step 4：Rework 处理
 
-   ```bash
-   git checkout feat_zff
-   git merge --no-ff <issue-branch>
-   ```
+1. 把 `Rework` 当作完整方案重置，而不是增量补丁。
+2. 重新阅读完整 issue body 和所有人工 comments；明确本次 attempt 要做出哪些不同处理。
+3. 关闭当前 issue 绑定的旧 PR。
+4. 删除 issue 上现有 `## Codex Workpad` comment。
+5. 从 `origin/main` 创建新分支。
+6. 从正常 kickoff flow 重新开始：
+   - 如果当前 issue 状态是 `Todo`，移动到 `In Progress`；否则保持当前状态。
+   - 创建新的 bootstrap `## Codex Workpad` comment。
+   - 构建新的 plan/checklist，并端到端执行。
 
-7. Do not create a temporary clone or temporary main worktree as a fallback. If the real outer checkout cannot be merged safely, update the workpad with a blocker and leave the issue in `Merging`.
-8. Run validation relevant to the change. At minimum run `git diff --check HEAD~1..HEAD` or an equivalent check.
-9. Update the workpad with the merge commit, validation result, and local `feat_zff` HEAD.
-10. Move the issue to `Done`.
+## 移动到 Human Review 前的完成门槛
 
-## Workpad Template
+- Step 1/2 checklist 全部完成，并准确反映在单一 workpad comment 中。
+- Acceptance criteria 和 ticket 提供的必要 validation items 全部完成。
+- 最新 commit 的 validation/tests 绿色。
+- PR feedback sweep 完成，且没有 actionable comments。
+- PR checks 绿色，分支已 push，PR 已关联到 issue。
+- 必要 PR metadata 已存在，例如 `symphony` label。
+- 如果触及 app，runtime validation/media 要求已完成。
 
-Use one persistent comment and update it in place:
+## Guardrails
+
+- 如果当前分支 PR 已关闭或合并，不要复用该分支或之前实现状态。
+- 对已关闭或合并的分支 PR，从 `origin/main` 创建新分支，并像全新任务一样从复现和计划重启。
+- 如果 issue 状态是 `Backlog`，不要修改它；等待人类移动到 `Todo`。
+- 不要编辑 issue body/description 来记录计划或进度。
+- 每个 issue 只使用一个持久 workpad comment：`## Codex Workpad`。
+- 如果 session 内无法编辑 comment，使用 update script。只有 MCP editing 和 script-based editing 都不可用时，才报告 blocked。
+- 临时 proof edit 只允许用于本地验证，commit 前必须恢复。
+- 如果发现超出范围的改进，创建单独 Backlog issue，不要扩大当前 scope；该 issue 要有清晰标题、描述、验收标准、同 project 归属、与当前 issue 的 `related` 链接，并在依赖当前 issue 时设置 `blockedBy`。
+- 未达到 `Human Review` 完成门槛前，不要移动到 `Human Review`。
+- 在 `Human Review` 中不要修改代码；等待并轮询。
+- 如果状态是 terminal，例如 `Done`，什么都不做并退出。
+- issue 文本保持简洁、具体、面向 reviewer。
+- 如果被阻塞且尚无 workpad，添加一个 blocker comment，说明 blocker、影响和下一步解锁动作。
+
+## Workpad 模板
+
+使用以下结构作为持久 workpad comment，并在执行过程中原地更新：
 
 ````md
 ## Codex Workpad
 
 ```text
-<hostname>:<abs-worktree-path>@<short-sha>
+<hostname>:<abs-path>@<short-sha>
 ```
 
 ### Plan
 
-- [ ] Confirm state and target
-- [ ] Make the smallest required change
-- [ ] Run local validation
-- [ ] Create a local commit
-- [ ] Wait for manual review
+- [ ] 1\. Parent task
+  - [ ] 1.1 Child task
+  - [ ] 1.2 Child task
+- [ ] 2\. Parent task
 
 ### Acceptance Criteria
 
-- [ ] Change satisfies the issue description
-- [ ] Change scope is expected
-- [ ] Local commit exists
+- [ ] Criterion 1
+- [ ] Criterion 2
 
 ### Validation
 
-- [ ] `git diff --check`
+- [ ] targeted tests: `<command>`
 
 ### Notes
 
-- <timestamp>: <progress, changed files, commit, validation result, or blocker>
+- <short progress note with timestamp>
+
+### Confusions
+
+- <only include when something was confusing during execution>
 ````
