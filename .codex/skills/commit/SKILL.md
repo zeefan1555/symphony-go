@@ -8,12 +8,16 @@ description:
 
 # Commit
 
+This skill is scoped to `/Users/bytedance/symphony-go`.
+
 ## Goals
 
 - Produce a commit that reflects the actual code changes and the session
   context.
 - Follow common git conventions (type prefix, short subject, wrapped body).
 - Include both summary and rationale in the body.
+- Prefer Chinese for the commit subject and body after the conventional type,
+  while keeping commands, paths, and code identifiers literal.
 
 ## Inputs
 
@@ -33,12 +37,12 @@ description:
 5. If staging is incomplete or includes unrelated files, fix the index or ask
    for confirmation.
 6. Choose a conventional type and optional scope that match the change (e.g.,
-   `feat(scope): ...`, `fix(scope): ...`, `refactor(scope): ...`).
-7. Write a subject line in imperative mood, <= 72 characters, no trailing
+   `feat(scope): ...`, `fix(scope): ...`, `docs(scope): ...`).
+7. Write a Chinese subject line where practical, <= 72 characters, no trailing
    period.
 8. Write a body that includes:
-   - Summary of key changes (what changed).
-   - Rationale and trade-offs (why it changed).
+   - `摘要`: key changes.
+   - `原因`: rationale and trade-offs.
    - Tests or validation run (or explicit note if not run).
 9. Append a `Co-authored-by` trailer for Codex using `Codex <codex@openai.com>`
    unless the user explicitly requests a different identity.
@@ -58,15 +62,15 @@ description:
 Type and scope are examples only; adjust to fit the repo and changes.
 
 ```
-<type>(<scope>): <short summary>
+<type>(<scope>): <中文短摘要>
 
-Summary:
-- <what changed>
-- <what changed>
+摘要:
+- <改了什么>
+- <改了什么>
 
-Rationale:
-- <why>
-- <why>
+原因:
+- <为什么改>
+- <取舍>
 
 Tests:
 - <command or "not run (reason)">

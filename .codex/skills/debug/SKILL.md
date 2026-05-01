@@ -17,7 +17,7 @@ description:
 ## Log Sources
 
 - Primary runtime log: `log/symphony.log`
-  - Default comes from `SymphonyElixir.LogFile` (`log/symphony.log`).
+  - Default local runtime log for this repository.
   - Includes orchestrator, agent runner, and Codex app-server lifecycle logs.
 - Rotated runtime logs: `log/symphony.log*`
   - Check these when the relevant run is older.
@@ -28,8 +28,8 @@ description:
 - `issue_id`: Linear UUID (stable internal ID)
 - `session_id`: Codex thread-turn pair (`<thread_id>-<turn_id>`)
 
-`elixir/docs/logging.md` requires these fields for issue/session lifecycle logs. Use
-them as your join keys during debugging.
+The structured logging contract requires these fields for issue/session
+lifecycle logs. Use them as your join keys during debugging.
 
 ## Quick Triage (Stuck Run)
 
@@ -114,5 +114,5 @@ concurrent runs.
 
 - Prefer `rg` over `grep` for speed on large logs.
 - Check rotated logs (`log/symphony.log*`) before concluding data is missing.
-- If required context fields are missing in new log statements, align with
-  `elixir/docs/logging.md` conventions.
+- If required context fields are missing in new log statements, align with the
+  logging conventions in this repository before adding new fields.
