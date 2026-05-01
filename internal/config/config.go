@@ -82,7 +82,7 @@ func applyDefaults(cfg *types.Config) {
 	if cfg.Agent.MaxRetryBackoffMS == 0 {
 		cfg.Agent.MaxRetryBackoffMS = 300000
 	}
-	applyMergePolicyDefaults(&cfg.Agent.MergePolicy)
+	applyStateSkillDefaults(&cfg.Agent)
 	if cfg.Codex.Command == "" {
 		cfg.Codex.Command = "codex app-server"
 	}
@@ -187,26 +187,24 @@ func validate(cfg types.Config) error {
 	if err := validateReviewPolicy(cfg.Agent.ReviewPolicy); err != nil {
 		return err
 	}
-	if err := validateMergePolicy(cfg.Agent.MergePolicy); err != nil {
+	if err := validateStateSkills(cfg.Agent); err != nil {
 		return err
 	}
 	return nil
 }
 
-func applyMergePolicyDefaults(policy *types.MergePolicyConfig) {
-	policy.Mode = strings.ToLower(strings.TrimSpace(policy.Mode))
-	policy.Skill = strings.TrimSpace(policy.Skill)
-	if policy.Mode == "" {
-		policy.Mode = "local"
+func applyStateSkillDefaults(agent *types.AgentConfig) {
+	if agent.StateSkills == nil {
+		agent.StateSkills = map[string]string{}
 	}
-	if policy.Skill == "" {
-		switch policy.Mode {
-		case "pr":
-			policy.Skill = "land"
-		default:
-			policy.Skill = "local-merge"
-		}
+	if strings.TrimSpace(agent.StateSkills["Merging"]) != "" {
+		return
 	}
+	if legacy := strings.TrimSpace(agent.MergePolicy.Skill); legacy != "" {
+		agent.StateSkills["Merging"] = legacy
+		return
+	}
+	agent.StateSkills["Merging"] = ".codex/skills/local-merge/SKILL.md"
 }
 
 func validateReviewPolicy(policy types.ReviewPolicyConfig) error {
@@ -221,20 +219,36 @@ func validateReviewPolicy(policy types.ReviewPolicyConfig) error {
 	return nil
 }
 
-func validateMergePolicy(policy types.MergePolicyConfig) error {
-	mode := strings.ToLower(strings.TrimSpace(policy.Mode))
-	if mode != "" && mode != "local" && mode != "pr" {
-		return &Error{Code: ErrInvalidMergePolicy, Message: "agent.merge_policy.mode must be one of local, pr"}
+func validateStateSkills(agent types.AgentConfig) error {
+	for state, skillPath := range agent.StateSkills {
+		if err := validateSkillPath("agent.state_skills."+state, skillPath, false); err != nil {
+			return err
+		}
 	}
-	skill := strings.TrimSpace(policy.Skill)
-	if skill != "" && skill != "local-merge" && skill != "land" {
-		return &Error{Code: ErrInvalidMergePolicy, Message: "agent.merge_policy.skill must be one of local-merge, land"}
+	if err := validateSkillPath("agent.merge_policy.skill", agent.MergePolicy.Skill, true); err != nil {
+		return err
 	}
-	if mode == "local" && skill == "land" {
-		return &Error{Code: ErrInvalidMergePolicy, Message: "agent.merge_policy.mode local must use local-merge skill"}
+	return nil
+}
+
+func validateSkillPath(field, value string, allowEmpty bool) error {
+	raw := value
+	path := strings.TrimSpace(value)
+	if path == "" {
+		if allowEmpty {
+			return nil
+		}
+		return &Error{Code: ErrInvalidMergePolicy, Message: field + " must be a repo-root relative SKILL.md path"}
 	}
-	if mode == "pr" && skill == "local-merge" {
-		return &Error{Code: ErrInvalidMergePolicy, Message: "agent.merge_policy.mode pr must use land skill"}
+	if strings.ContainsAny(raw, "\x00\r\n") || filepath.IsAbs(path) {
+		return &Error{Code: ErrInvalidMergePolicy, Message: field + " must be a repo-root relative SKILL.md path"}
+	}
+	clean := filepath.Clean(path)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return &Error{Code: ErrInvalidMergePolicy, Message: field + " must stay under the repo root"}
+	}
+	if !strings.ContainsAny(path, `/\`) || filepath.Base(clean) != "SKILL.md" {
+		return &Error{Code: ErrInvalidMergePolicy, Message: field + " must be a repo-root relative SKILL.md path"}
 	}
 	return nil
 }

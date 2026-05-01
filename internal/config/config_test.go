@@ -192,7 +192,7 @@ func TestResolveRejectsInvalidReviewPolicy(t *testing.T) {
 	}
 }
 
-func TestResolveDefaultsMergePolicyToLocalSkill(t *testing.T) {
+func TestResolveDefaultsMergingSkillToLocalMergePath(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(types.Config{
 		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
@@ -200,52 +200,71 @@ func TestResolveDefaultsMergePolicyToLocalSkill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.Agent.MergePolicy.Mode != "local" {
-		t.Fatalf("merge policy mode = %q, want local", resolved.Agent.MergePolicy.Mode)
-	}
-	if resolved.Agent.MergePolicy.Skill != "local-merge" {
-		t.Fatalf("merge policy skill = %q, want local-merge", resolved.Agent.MergePolicy.Skill)
+	if got, want := resolved.Agent.StateSkills["Merging"], ".codex/skills/local-merge/SKILL.md"; got != want {
+		t.Fatalf("Merging skill = %q, want %q", got, want)
 	}
 }
 
-func TestResolveDefaultsMergePolicySkillFromMode(t *testing.T) {
+func TestResolveAllowsStateSkillPath(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(types.Config{
 		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
 		Agent: types.AgentConfig{
-			MergePolicy: types.MergePolicyConfig{Mode: "pr"},
+			StateSkills: map[string]string{
+				"Merging": ".codex/skills/pr/SKILL.md",
+			},
 		},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.Agent.MergePolicy.Skill != "land" {
-		t.Fatalf("merge policy skill = %q, want land", resolved.Agent.MergePolicy.Skill)
+	if got, want := resolved.Agent.StateSkills["Merging"], ".codex/skills/pr/SKILL.md"; got != want {
+		t.Fatalf("Merging skill = %q, want %q", got, want)
 	}
 }
 
-func TestResolveRejectsInvalidMergePolicy(t *testing.T) {
+func TestResolveAllowsLegacyMergePolicySkillPath(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	resolved, err := Resolve(types.Config{
+		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Agent: types.AgentConfig{
+			MergePolicy: types.MergePolicyConfig{Skill: ".codex/skills/pr/SKILL.md"},
+		},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := resolved.Agent.StateSkills["Merging"], ".codex/skills/pr/SKILL.md"; got != want {
+		t.Fatalf("Merging skill = %q, want %q", got, want)
+	}
+}
+
+func TestResolveRejectsInvalidStateSkillPath(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	for _, tc := range []struct {
-		name   string
-		policy types.MergePolicyConfig
+		name  string
+		skill string
 	}{
 		{
-			name:   "mode",
-			policy: types.MergePolicyConfig{Mode: "direct"},
+			name:  "name-only",
+			skill: "pr",
 		},
 		{
-			name:   "skill",
-			policy: types.MergePolicyConfig{Mode: "local", Skill: "unknown"},
+			name:  "newline",
+			skill: ".codex/skills/pr/SKILL.md\n",
+		},
+		{
+			name:  "parent",
+			skill: "../outside/SKILL.md",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Resolve(types.Config{
 				Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
-				Agent:   types.AgentConfig{MergePolicy: tc.policy},
+				Agent:   types.AgentConfig{StateSkills: map[string]string{"Merging": tc.skill}},
 			}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 			if err == nil {
-				t.Fatal("expected invalid merge policy error")
+				t.Fatal("expected invalid skill path error")
 			}
 			if Code(err) != ErrInvalidMergePolicy {
 				t.Fatalf("code = %q", Code(err))

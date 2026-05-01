@@ -1453,7 +1453,7 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	for _, want := range []string{
 		"- [x] 准备 ZEE-AI-MERGE 的本地 worktree",
 		"- [ ] 运行 Codex agent 完成 issue 任务",
-		"- [ ] 执行 merge policy 对应 skill",
+		"- [ ] 执行 Merging skill",
 		"- [ ] 定位并只修改 `README.md`",
 		"- [ ] 写入 smoke marker",
 		"- [ ] 运行 `git diff --check`",
@@ -1468,7 +1468,7 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 		"- [x] 检测本地提交和变更文件",
 		"- [x] 写入交接记录并流转到 Review",
 		"- [x] 完成 AI Review 或等待人工 review",
-		"- [x] 执行 merge policy 对应 skill",
+		"- [x] 执行 Merging skill",
 		"- [x] 流转到 Done",
 		"- [x] 定位并只修改 `README.md`",
 		"- [x] 写入 smoke marker",
@@ -1483,7 +1483,7 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	}
 }
 
-func TestMergeIssueUsesLandSkillForPRPolicy(t *testing.T) {
+func TestMergingStateUsesConfiguredPRSkillPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1495,12 +1495,12 @@ func TestMergeIssueUsesLandSkillForPRPolicy(t *testing.T) {
 		State:      "Merging",
 	}
 	tracker := &recordingTracker{issue: issue}
-	runner := &recordingRunner{result: codex.SessionResult{SessionID: "land-session"}}
+	runner := &recordingRunner{result: codex.SessionResult{SessionID: "pr-session"}}
 	o := New(Options{
 		Workflow: &types.Workflow{
 			Config: types.Config{
 				Agent: types.AgentConfig{
-					MergePolicy: types.MergePolicyConfig{Mode: "pr"},
+					StateSkills: map[string]string{"Merging": ".codex/skills/pr/SKILL.md"},
 				},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
@@ -1522,11 +1522,11 @@ func TestMergeIssueUsesLandSkillForPRPolicy(t *testing.T) {
 	if len(runner.requests) != 1 {
 		t.Fatalf("merge runner calls = %d, want 1", len(runner.requests))
 	}
-	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, ".codex/skills/land/SKILL.md") {
-		t.Fatalf("merge prompt missing land skill:\n%s", prompt)
+	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, filepath.Join(repoRoot, ".codex/skills/pr/SKILL.md")) {
+		t.Fatalf("merge prompt missing pr skill:\n%s", prompt)
 	}
-	if !strings.Contains(tracker.workpad, "land") {
-		t.Fatalf("workpad missing land skill:\n%s", tracker.workpad)
+	if !strings.Contains(tracker.workpad, "pr") {
+		t.Fatalf("workpad missing pr skill:\n%s", tracker.workpad)
 	}
 }
 

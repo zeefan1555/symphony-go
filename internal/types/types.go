@@ -72,6 +72,7 @@ type AgentConfig struct {
 	MaxRetryBackoffMS          int                `yaml:"max_retry_backoff_ms"`
 	MaxConcurrentAgentsByState map[string]int     `yaml:"max_concurrent_agents_by_state"`
 	ReviewPolicy               ReviewPolicyConfig `yaml:"review_policy"`
+	StateSkills                map[string]string  `yaml:"state_skills"`
 	MergePolicy                MergePolicyConfig  `yaml:"merge_policy"`
 	AIReview                   AIReviewConfig     `yaml:"ai_review"`
 }
