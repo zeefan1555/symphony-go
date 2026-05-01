@@ -6,6 +6,8 @@ tracker:
   active_states:
     - Todo
     - In Progress
+    - AI Review
+    - Human Review
     - Merging
     - Rework
   terminal_states:
@@ -30,6 +32,10 @@ hooks:
 agent:
   max_concurrent_agents: 10
   max_turns: 20
+  review_policy:
+    mode: human
+    allow_manual_ai_review: true
+    on_ai_fail: rework
 codex:
   command: codex --config shell_environment_policy.inherit=all --config 'model="gpt-5.5"' --config model_reasoning_effort=xhigh app-server
   approval_policy: never
@@ -116,13 +122,26 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - `pull`：交接前把分支同步到最新 `origin/main`。
 - `land`：ticket 进入 `Merging` 时，打开并遵循 `.codex/skills/land/SKILL.md`，按 land loop 合并 PR。
 
+## Review 路由原则
+
+- `agent.review_policy.mode` 是 review 路由的唯一语义开关，不要用多个布尔值组合推断流程。
+- `mode: human`：默认路径是 `In Progress -> Human Review`。实现、验证、commit、push 和 PR 挂载完成后，等待人工审核。
+- `mode: ai`：默认路径是 `In Progress -> AI Review -> Human Review`。AI Review 通过后仍等待人工决定是否合并。
+- `mode: auto`：默认路径是 `In Progress -> AI Review -> Merging -> Done`。AI Review 通过后自动进入 land flow。
+- `Human Review` 是等待态。daemon 可以轮询并记录等待，但不得在该状态继续写代码、改 PR 或自行合并。
+- 当 `allow_manual_ai_review: true` 时，人工可以把 issue 从 `Human Review` 手动切到 `AI Review`，让 daemon 额外跑一次机器复核。
+- `AI Review` 通过后按 `mode` 决定下一站：`human` / `ai` 回到 `Human Review`，`auto` 进入 `Merging`。
+- `AI Review` 不通过时，按 `on_ai_fail` 处理：`rework` 进入 `Rework`，`hold` 停留在 `AI Review` 并把 blocker 写入 workpad。
+- 人工批准合并时，只需要把 issue 切到 `Merging`；后续由 `land` flow 自动处理。
+
 ## 状态映射
 
 - `Backlog`：不属于本 workflow 范围；不要修改。
 - `Todo`：排队状态；开始主动工作前立即转到 `In Progress`。
   - 特例：如果已经挂了 PR，把它当作反馈或 rework loop，先完整扫 PR feedback，处理或明确 pushback，重新验证，再回到 `Human Review`。
 - `In Progress`：正在实现。
-- `Human Review`：PR 已挂载并验证，等待人工批准。
+- `AI Review`：由 `review_policy.mode` 自动触发，或由人工从 `Human Review` 手动触发；复核通过后按 review policy 路由，复核失败时按 `on_ai_fail` 处理。
+- `Human Review`：PR 已挂载并验证，等待人工批准；这是默认 review 终点。
 - `Merging`：人工已批准；执行 `land` skill flow，不要直接调用 `gh pr merge`。
 - `Rework`：reviewer 要求修改；需要重新计划和实现。
 - `Done`：终态；无需继续操作。
@@ -136,7 +155,8 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - `Todo`：立即移动到 `In Progress`，然后确保 bootstrap workpad comment 存在，不存在则创建，随后进入执行流程。
      - 如果 PR 已存在，先读取所有 open PR comments，判断哪些需要修改、哪些需要明确 pushback。
    - `In Progress`：从当前 scratchpad comment 继续执行。
-   - `Human Review`：等待并轮询人工决策或 review 更新。
+   - `AI Review`：执行 AI Review；通过后回到 `Human Review`，失败时进入 `Rework` 或记录 blocker。
+   - `Human Review`：等待并轮询人工决策或 review 更新；不要自行改代码或合并。
    - `Merging`：进入后打开并遵循 `.codex/skills/land/SKILL.md`；不要直接调用 `gh pr merge`。
    - `Rework`：进入 rework 流程。
    - `Done`：什么都不做并退出。

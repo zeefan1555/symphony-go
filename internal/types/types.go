@@ -67,13 +67,22 @@ type HooksConfig struct {
 }
 
 type AgentConfig struct {
-	MaxConcurrentAgents        int            `yaml:"max_concurrent_agents"`
-	MaxTurns                   int            `yaml:"max_turns"`
-	MaxRetryBackoffMS          int            `yaml:"max_retry_backoff_ms"`
-	MaxConcurrentAgentsByState map[string]int `yaml:"max_concurrent_agents_by_state"`
-	AIReview                   AIReviewConfig `yaml:"ai_review"`
+	MaxConcurrentAgents        int                `yaml:"max_concurrent_agents"`
+	MaxTurns                   int                `yaml:"max_turns"`
+	MaxRetryBackoffMS          int                `yaml:"max_retry_backoff_ms"`
+	MaxConcurrentAgentsByState map[string]int     `yaml:"max_concurrent_agents_by_state"`
+	ReviewPolicy               ReviewPolicyConfig `yaml:"review_policy"`
+	AIReview                   AIReviewConfig     `yaml:"ai_review"`
 }
 
+type ReviewPolicyConfig struct {
+	Mode                 string   `yaml:"mode"`
+	AllowManualAIReview  bool     `yaml:"allow_manual_ai_review"`
+	OnAIFail             string   `yaml:"on_ai_fail"`
+	ExpectedChangedFiles []string `yaml:"expected_changed_files"`
+}
+
+// AIReviewConfig is kept for legacy workflow files. Prefer ReviewPolicyConfig.
 type AIReviewConfig struct {
 	Enabled              bool     `yaml:"enabled"`
 	AutoMerge            bool     `yaml:"auto_merge"`

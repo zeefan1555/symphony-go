@@ -383,6 +383,7 @@ func (o *Orchestrator) eligibilityStateLocked(ignoreClaimIssueID string) eligibi
 		}
 		claimed[id] = value
 	}
+	policy := effectiveReviewPolicy(o.opts.Workflow.Config.Agent)
 	return eligibilityState{
 		activeStates:   o.opts.Workflow.Config.Tracker.ActiveStates,
 		terminalStates: o.opts.Workflow.Config.Tracker.TerminalStates,
@@ -390,7 +391,7 @@ func (o *Orchestrator) eligibilityStateLocked(ignoreClaimIssueID string) eligibi
 		running:        running,
 		maxConcurrent:  maxConcurrentAgents(o.opts),
 		perState:       o.opts.Workflow.Config.Agent.MaxConcurrentAgentsByState,
-		aiReview:       o.opts.Workflow.Config.Agent.AIReview.Enabled,
+		aiReview:       policy.allowsAIReviewState(),
 	}
 }
 
@@ -924,11 +925,12 @@ func (o *Orchestrator) handoffAfterTurn(ctx context.Context, rt runtimeSnapshot,
 	if err := o.upsertWorkpad(ctx, rt, issue, "handoff", workpad); err != nil {
 		return "", false, err
 	}
-	if review := rt.workflow.Config.Agent.AIReview; review.Enabled {
+	policy := effectiveReviewPolicy(rt.workflow.Config.Agent)
+	if policy.runsAIReviewAfterCommit() {
 		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "AI Review"); err != nil {
 			return "", false, err
 		}
-		outcome := o.aiReviewAfterCommit(ctx, rt, issue, workspacePath, baseHead, head, changedFiles, status)
+		outcome := o.aiReviewAfterCommit(ctx, policy, issue, workspacePath, baseHead, head, changedFiles, status)
 		if err := o.upsertWorkpad(ctx, rt, issue, "ai_review", aiReviewWorkpad(issue, workspacePath, baseHead, head, outcome)); err != nil {
 			return "", false, err
 		}
@@ -936,14 +938,15 @@ func (o *Orchestrator) handoffAfterTurn(ctx context.Context, rt runtimeSnapshot,
 			"commit":        head,
 			"changed_files": outcome.ChangedFiles,
 		})
-		if outcome.Passed && review.AutoMerge {
-			if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Merging"); err != nil {
+		if outcome.Passed {
+			nextState := policy.stateAfterPassedAIReview()
+			if err := rt.tracker.UpdateIssueState(ctx, issue.ID, nextState); err != nil {
 				return "", false, err
 			}
 			o.logIssue(issue, "ai_review_completed", "AI Review passed", map[string]any{"commit": head})
-			o.logIssue(issue, "state_changed", "AI Review -> Merging", map[string]any{"commit": head})
-			return "Merging", true, nil
-		} else if !outcome.Passed && review.ReworkOnFailure {
+			o.logIssue(issue, "state_changed", "AI Review -> "+nextState, map[string]any{"commit": head})
+			return nextState, true, nil
+		} else if policy.reworkOnAIFail() {
 			if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Rework"); err != nil {
 				return "", false, err
 			}
@@ -966,7 +969,8 @@ func (o *Orchestrator) handoffAfterTurn(ctx context.Context, rt runtimeSnapshot,
 }
 
 func (o *Orchestrator) reviewIssueState(ctx context.Context, rt runtimeSnapshot, issue types.Issue) error {
-	if !rt.workflow.Config.Agent.AIReview.Enabled {
+	policy := effectiveReviewPolicy(rt.workflow.Config.Agent)
+	if !policy.allowsAIReviewState() {
 		o.logIssue(issue, "waiting_for_ai_review", "AI Review is disabled in workflow config", nil)
 		return errNoRetryNeeded
 	}
@@ -984,21 +988,24 @@ func (o *Orchestrator) reviewIssueState(ctx context.Context, rt runtimeSnapshot,
 	}
 	changedFiles, _ := gitOutput(ctx, workspacePath, "show", "--name-only", "--format=", "--no-renames", "HEAD")
 	status, _ := gitOutput(ctx, workspacePath, "status", "--short")
-	outcome := o.aiReviewAfterCommit(ctx, rt, issue, workspacePath, strings.TrimSpace(baseHead), strings.TrimSpace(head), changedFiles, status)
+	outcome := o.aiReviewAfterCommit(ctx, policy, issue, workspacePath, strings.TrimSpace(baseHead), strings.TrimSpace(head), changedFiles, status)
 	if err := o.upsertWorkpad(ctx, rt, issue, "ai_review", aiReviewWorkpad(issue, workspacePath, strings.TrimSpace(baseHead), strings.TrimSpace(head), outcome)); err != nil {
 		return err
 	}
-	review := rt.workflow.Config.Agent.AIReview
-	if outcome.Passed && review.AutoMerge {
-		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Merging"); err != nil {
+	if outcome.Passed {
+		nextState := policy.stateAfterPassedAIReview()
+		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, nextState); err != nil {
 			return err
 		}
 		o.logIssue(issue, "ai_review_completed", "AI Review passed", map[string]any{"commit": strings.TrimSpace(head)})
-		o.logIssue(issue, "state_changed", "AI Review -> Merging", map[string]any{"commit": strings.TrimSpace(head)})
-		issue.State = "Merging"
-		return o.mergeIssue(ctx, rt, issue)
+		o.logIssue(issue, "state_changed", "AI Review -> "+nextState, map[string]any{"commit": strings.TrimSpace(head)})
+		if nextState == "Merging" {
+			issue.State = "Merging"
+			return o.mergeIssue(ctx, rt, issue)
+		}
+		return errNoRetryNeeded
 	}
-	if !outcome.Passed && review.ReworkOnFailure {
+	if policy.reworkOnAIFail() {
 		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Rework"); err != nil {
 			return err
 		}
@@ -1008,6 +1015,86 @@ func (o *Orchestrator) reviewIssueState(ctx context.Context, rt runtimeSnapshot,
 	}
 	o.logIssue(issue, "ai_review_completed", outcome.Summary, map[string]any{"commit": strings.TrimSpace(head), "reasons": outcome.Reasons})
 	return errNoRetryNeeded
+}
+
+const (
+	reviewPolicyHuman = "human"
+	reviewPolicyAI    = "ai"
+	reviewPolicyAuto  = "auto"
+	aiFailRework      = "rework"
+	aiFailHold        = "hold"
+)
+
+type reviewPolicy struct {
+	mode                 string
+	allowManualAIReview  bool
+	onAIFail             string
+	expectedChangedFiles []string
+}
+
+func effectiveReviewPolicy(agent types.AgentConfig) reviewPolicy {
+	cfg := agent.ReviewPolicy
+	mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
+	if mode == "" {
+		return legacyReviewPolicy(agent.AIReview)
+	}
+	if mode != reviewPolicyAI && mode != reviewPolicyAuto {
+		mode = reviewPolicyHuman
+	}
+	onFail := strings.ToLower(strings.TrimSpace(cfg.OnAIFail))
+	if onFail == "" {
+		onFail = aiFailRework
+	}
+	if onFail != aiFailRework {
+		onFail = aiFailHold
+	}
+	expected := cfg.ExpectedChangedFiles
+	if len(expected) == 0 {
+		expected = agent.AIReview.ExpectedChangedFiles
+	}
+	return reviewPolicy{
+		mode:                 mode,
+		allowManualAIReview:  cfg.AllowManualAIReview,
+		onAIFail:             onFail,
+		expectedChangedFiles: expected,
+	}
+}
+
+func legacyReviewPolicy(review types.AIReviewConfig) reviewPolicy {
+	policy := reviewPolicy{
+		mode:     reviewPolicyHuman,
+		onAIFail: aiFailRework,
+	}
+	if review.Enabled {
+		policy.mode = reviewPolicyAI
+		if review.AutoMerge {
+			policy.mode = reviewPolicyAuto
+		}
+		if !review.ReworkOnFailure {
+			policy.onAIFail = aiFailHold
+		}
+		policy.expectedChangedFiles = review.ExpectedChangedFiles
+	}
+	return policy
+}
+
+func (p reviewPolicy) allowsAIReviewState() bool {
+	return p.mode == reviewPolicyAI || p.mode == reviewPolicyAuto || p.allowManualAIReview
+}
+
+func (p reviewPolicy) runsAIReviewAfterCommit() bool {
+	return p.mode == reviewPolicyAI || p.mode == reviewPolicyAuto
+}
+
+func (p reviewPolicy) stateAfterPassedAIReview() string {
+	if p.mode == reviewPolicyAuto {
+		return "Merging"
+	}
+	return "Human Review"
+}
+
+func (p reviewPolicy) reworkOnAIFail() bool {
+	return p.onAIFail == aiFailRework
 }
 
 func (o *Orchestrator) mergeIssue(ctx context.Context, rt runtimeSnapshot, issue types.Issue) error {
@@ -1064,7 +1151,7 @@ type aiReviewOutcome struct {
 	ChangedFiles []string
 }
 
-func (o *Orchestrator) aiReviewAfterCommit(ctx context.Context, rt runtimeSnapshot, issue types.Issue, workspacePath, baseHead, head, changedFiles, status string) aiReviewOutcome {
+func (o *Orchestrator) aiReviewAfterCommit(ctx context.Context, policy reviewPolicy, issue types.Issue, workspacePath, baseHead, head, changedFiles, status string) aiReviewOutcome {
 	outcome := aiReviewOutcome{
 		Passed:       true,
 		Summary:      "AI Review 通过",
@@ -1080,7 +1167,7 @@ func (o *Orchestrator) aiReviewAfterCommit(ctx context.Context, rt runtimeSnapsh
 			outcome.Reasons = append(outcome.Reasons, "git diff --check 未通过: "+err.Error())
 		}
 	}
-	expected := rt.workflow.Config.Agent.AIReview.ExpectedChangedFiles
+	expected := policy.expectedChangedFiles
 	if len(expected) > 0 && !sameStringSet(outcome.ChangedFiles, expected) {
 		outcome.Passed = false
 		outcome.Reasons = append(outcome.Reasons, fmt.Sprintf("变更文件不符合预期: got %v want %v", outcome.ChangedFiles, expected))
