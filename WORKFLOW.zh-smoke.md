@@ -32,10 +32,9 @@ hooks:
 agent:
   max_concurrent_agents: 1
   max_turns: 1
-  ai_review:
-    enabled: true
-    auto_merge: true
-    rework_on_failure: true
+  review_policy:
+    mode: auto
+    on_ai_fail: rework
     expected_changed_files:
       - SMOKE.md
 codex:

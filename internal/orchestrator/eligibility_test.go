@@ -101,6 +101,26 @@ func TestReviewWaitStateIsNotDispatchEligible(t *testing.T) {
 	}
 }
 
+func TestManualAIReviewStateIsDispatchEligible(t *testing.T) {
+	issue := types.Issue{
+		ID:         "i1",
+		Identifier: "ZEE-1",
+		Title:      "Review",
+		State:      "AI Review",
+	}
+
+	ok, reason := candidateEligible(issue, eligibilityState{
+		activeStates:   []string{"In Progress", "AI Review", "Human Review", "Merging"},
+		terminalStates: []string{"Done", "Canceled"},
+		maxConcurrent:  1,
+		aiReview:       true,
+	})
+
+	if !ok {
+		t.Fatalf("expected manual AI Review state to be eligible, reason = %q", reason)
+	}
+}
+
 func TestAvailableSlotsHonorsGlobalAndPerStateLimits(t *testing.T) {
 	state := eligibilityState{
 		maxConcurrent: 3,

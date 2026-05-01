@@ -162,6 +162,36 @@ func TestResolveRejectsInvalidDispatchConfig(t *testing.T) {
 	}
 }
 
+func TestResolveRejectsInvalidReviewPolicy(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	for _, tc := range []struct {
+		name   string
+		policy types.ReviewPolicyConfig
+	}{
+		{
+			name:   "mode",
+			policy: types.ReviewPolicyConfig{Mode: "robot"},
+		},
+		{
+			name:   "on_ai_fail",
+			policy: types.ReviewPolicyConfig{Mode: "ai", OnAIFail: "ignore"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Resolve(types.Config{
+				Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+				Agent:   types.AgentConfig{ReviewPolicy: tc.policy},
+			}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+			if err == nil {
+				t.Fatal("expected invalid review policy error")
+			}
+			if Code(err) != ErrInvalidReviewPolicy {
+				t.Fatalf("code = %q", Code(err))
+			}
+		})
+	}
+}
+
 func TestResolveNormalizesPerStateConcurrency(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(types.Config{

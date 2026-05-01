@@ -1267,7 +1267,7 @@ func TestRunAgentWritesWorkpadAndMovesToHumanReviewAfterLocalCommit(t *testing.T
 	}
 }
 
-func TestRunAgentMovesToAIReviewWhenEnabled(t *testing.T) {
+func TestRunAgentReviewPolicyAIMovesThroughAIReviewBackToHumanReview(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1283,8 +1283,9 @@ func TestRunAgentMovesToAIReviewWhenEnabled(t *testing.T) {
 			Config: types.Config{
 				Agent: types.AgentConfig{
 					MaxTurns: 1,
-					AIReview: types.AIReviewConfig{
-						Enabled:              true,
+					ReviewPolicy: types.ReviewPolicyConfig{
+						Mode:                 "ai",
+						OnAIFail:             "rework",
 						ExpectedChangedFiles: []string{"README.md"},
 					},
 				},
@@ -1300,7 +1301,7 @@ func TestRunAgentMovesToAIReviewWhenEnabled(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if got, want := tracker.states, []string{"AI Review"}; !reflect.DeepEqual(got, want) {
+	if got, want := tracker.states, []string{"AI Review", "Human Review"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
 	if !strings.Contains(tracker.workpad, "AI Review") {
@@ -1308,7 +1309,89 @@ func TestRunAgentMovesToAIReviewWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestRunAgentAIReviewAutoMergesWhenEnabled(t *testing.T) {
+func TestRunAgentReviewPolicyHumanMovesImplementationToHumanReview(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-MANUAL-AI",
+		Title:      "manual ai review smoke",
+		State:      "In Progress",
+	}
+	tracker := &recordingTracker{issue: issue}
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Agent: types.AgentConfig{
+					MaxTurns: 1,
+					ReviewPolicy: types.ReviewPolicyConfig{
+						Mode:                "human",
+						AllowManualAIReview: true,
+						OnAIFail:            "rework",
+					},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    commitRunner{},
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if got, want := tracker.states, []string{"Human Review"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+	if strings.Contains(tracker.workpad, "Go orchestrator 已完成 AI Review") {
+		t.Fatalf("human review policy should not run the AI Review workpad during implementation handoff:\n%s", tracker.workpad)
+	}
+}
+
+func TestRunAgentProcessesManualAIReviewWhenPolicyAllows(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-MANUAL-AI",
+		Title:      "manual ai review smoke",
+		State:      "AI Review",
+	}
+	tracker := &recordingTracker{issue: issue}
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Agent: types.AgentConfig{
+					ReviewPolicy: types.ReviewPolicyConfig{
+						Mode:                "human",
+						AllowManualAIReview: true,
+						OnAIFail:            "rework",
+					},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if got, want := tracker.states, []string{"Human Review"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+	if !strings.Contains(tracker.workpad, "AI Review") {
+		t.Fatalf("workpad missing AI Review:\n%s", tracker.workpad)
+	}
+}
+
+func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1327,9 +1410,9 @@ func TestRunAgentAIReviewAutoMergesWhenEnabled(t *testing.T) {
 			Config: types.Config{
 				Agent: types.AgentConfig{
 					MaxTurns: 1,
-					AIReview: types.AIReviewConfig{
-						Enabled:              true,
-						AutoMerge:            true,
+					ReviewPolicy: types.ReviewPolicyConfig{
+						Mode:                 "auto",
+						OnAIFail:             "rework",
 						ExpectedChangedFiles: []string{"README.md"},
 					},
 				},

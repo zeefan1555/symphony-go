@@ -19,6 +19,7 @@ const (
 	ErrInvalidMaxTurns           = "invalid_max_turns"
 	ErrInvalidMaxRetryBackoff    = "invalid_max_retry_backoff"
 	ErrInvalidPollingInterval    = "invalid_polling_interval"
+	ErrInvalidReviewPolicy       = "invalid_review_policy"
 )
 
 type Error struct {
@@ -180,6 +181,21 @@ func validate(cfg types.Config) error {
 	}
 	if cfg.Agent.MaxRetryBackoffMS <= 0 {
 		return &Error{Code: ErrInvalidMaxRetryBackoff, Message: "agent.max_retry_backoff_ms must be positive"}
+	}
+	if err := validateReviewPolicy(cfg.Agent.ReviewPolicy); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateReviewPolicy(policy types.ReviewPolicyConfig) error {
+	mode := strings.ToLower(strings.TrimSpace(policy.Mode))
+	if mode != "" && mode != "human" && mode != "ai" && mode != "auto" {
+		return &Error{Code: ErrInvalidReviewPolicy, Message: "agent.review_policy.mode must be one of human, ai, auto"}
+	}
+	onFail := strings.ToLower(strings.TrimSpace(policy.OnAIFail))
+	if onFail != "" && onFail != "rework" && onFail != "hold" {
+		return &Error{Code: ErrInvalidReviewPolicy, Message: "agent.review_policy.on_ai_fail must be one of rework, hold"}
 	}
 	return nil
 }
