@@ -20,6 +20,7 @@ const (
 	ErrInvalidMaxRetryBackoff    = "invalid_max_retry_backoff"
 	ErrInvalidPollingInterval    = "invalid_polling_interval"
 	ErrInvalidReviewPolicy       = "invalid_review_policy"
+	ErrInvalidMergePolicy        = "invalid_merge_policy"
 )
 
 type Error struct {
@@ -81,6 +82,7 @@ func applyDefaults(cfg *types.Config) {
 	if cfg.Agent.MaxRetryBackoffMS == 0 {
 		cfg.Agent.MaxRetryBackoffMS = 300000
 	}
+	applyMergePolicyDefaults(&cfg.Agent.MergePolicy)
 	if cfg.Codex.Command == "" {
 		cfg.Codex.Command = "codex app-server"
 	}
@@ -185,7 +187,26 @@ func validate(cfg types.Config) error {
 	if err := validateReviewPolicy(cfg.Agent.ReviewPolicy); err != nil {
 		return err
 	}
+	if err := validateMergePolicy(cfg.Agent.MergePolicy); err != nil {
+		return err
+	}
 	return nil
+}
+
+func applyMergePolicyDefaults(policy *types.MergePolicyConfig) {
+	policy.Mode = strings.ToLower(strings.TrimSpace(policy.Mode))
+	policy.Skill = strings.TrimSpace(policy.Skill)
+	if policy.Mode == "" {
+		policy.Mode = "local"
+	}
+	if policy.Skill == "" {
+		switch policy.Mode {
+		case "pr":
+			policy.Skill = "land"
+		default:
+			policy.Skill = "local-merge"
+		}
+	}
 }
 
 func validateReviewPolicy(policy types.ReviewPolicyConfig) error {
@@ -196,6 +217,24 @@ func validateReviewPolicy(policy types.ReviewPolicyConfig) error {
 	onFail := strings.ToLower(strings.TrimSpace(policy.OnAIFail))
 	if onFail != "" && onFail != "rework" && onFail != "hold" {
 		return &Error{Code: ErrInvalidReviewPolicy, Message: "agent.review_policy.on_ai_fail must be one of rework, hold"}
+	}
+	return nil
+}
+
+func validateMergePolicy(policy types.MergePolicyConfig) error {
+	mode := strings.ToLower(strings.TrimSpace(policy.Mode))
+	if mode != "" && mode != "local" && mode != "pr" {
+		return &Error{Code: ErrInvalidMergePolicy, Message: "agent.merge_policy.mode must be one of local, pr"}
+	}
+	skill := strings.TrimSpace(policy.Skill)
+	if skill != "" && skill != "local-merge" && skill != "land" {
+		return &Error{Code: ErrInvalidMergePolicy, Message: "agent.merge_policy.skill must be one of local-merge, land"}
+	}
+	if mode == "local" && skill == "land" {
+		return &Error{Code: ErrInvalidMergePolicy, Message: "agent.merge_policy.mode local must use local-merge skill"}
+	}
+	if mode == "pr" && skill == "local-merge" {
+		return &Error{Code: ErrInvalidMergePolicy, Message: "agent.merge_policy.mode pr must use land skill"}
 	}
 	return nil
 }

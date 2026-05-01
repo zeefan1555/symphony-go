@@ -1396,7 +1396,6 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	defer cancel()
 
 	repoRoot := t.TempDir()
-	mergeTarget := initGitRepo(t, repoRoot)
 	issue := types.Issue{
 		ID:          "issue-id",
 		Identifier:  "ZEE-AI-MERGE",
@@ -1405,6 +1404,7 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 		State:       "In Progress",
 	}
 	tracker := &recordingTracker{issue: issue}
+	runner := &recordingRunner{result: codex.SessionResult{SessionID: "merge-session"}}
 	o := New(Options{
 		Workflow: &types.Workflow{
 			Config: types.Config{
@@ -1420,10 +1420,10 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
 		Tracker:     tracker,
-		Workspace:   workspace.New(filepath.Join(repoRoot, ".worktrees"), gitWorktreeHook(repoRoot)),
-		Runner:      commitRunner{},
+		Workspace:   workspace.New(filepath.Join(repoRoot, ".worktrees"), gitSeedHook()),
+		Runner:      &sequenceRunner{runners: []AgentRunner{commitRunner{}, runner}},
 		RepoRoot:    repoRoot,
-		MergeTarget: mergeTarget,
+		MergeTarget: "main",
 	})
 
 	if err := o.runAgent(ctx, issue, 0); err != nil {
@@ -1433,7 +1433,16 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	if got, want := tracker.states, []string{"AI Review", "Merging", "Done"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
-	if !strings.Contains(tracker.workpad, "本地合并完成") {
+	if len(runner.requests) != 1 {
+		t.Fatalf("merge runner calls = %d, want 1", len(runner.requests))
+	}
+	if got := runner.requests[0].WorkspacePath; !strings.HasSuffix(got, filepath.Join(".worktrees", issue.Identifier)) {
+		t.Fatalf("merge workspace = %q, want issue worktree", got)
+	}
+	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, ".codex/skills/local-merge/SKILL.md") {
+		t.Fatalf("merge prompt missing local-merge skill:\n%s", prompt)
+	}
+	if !strings.Contains(tracker.workpad, "local-merge") {
 		t.Fatalf("workpad missing merge completion:\n%s", tracker.workpad)
 	}
 	if len(tracker.workpads) < 4 {
@@ -1444,7 +1453,7 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	for _, want := range []string{
 		"- [x] 准备 ZEE-AI-MERGE 的本地 worktree",
 		"- [ ] 运行 Codex agent 完成 issue 任务",
-		"- [ ] 本地 merge 到目标分支",
+		"- [ ] 执行 merge policy 对应 skill",
 		"- [ ] 定位并只修改 `README.md`",
 		"- [ ] 写入 smoke marker",
 		"- [ ] 运行 `git diff --check`",
@@ -1459,7 +1468,7 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 		"- [x] 检测本地提交和变更文件",
 		"- [x] 写入交接记录并流转到 Review",
 		"- [x] 完成 AI Review 或等待人工 review",
-		"- [x] 本地 merge 到目标分支",
+		"- [x] 执行 merge policy 对应 skill",
 		"- [x] 流转到 Done",
 		"- [x] 定位并只修改 `README.md`",
 		"- [x] 写入 smoke marker",
@@ -1471,6 +1480,53 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	}
 	if strings.Contains(final, "不创建 PR") {
 		t.Fatalf("constraint-only line leaked into task plan:\n%s", final)
+	}
+}
+
+func TestMergeIssueUsesLandSkillForPRPolicy(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repoRoot := t.TempDir()
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-PR-MERGE",
+		Title:      "pr merge smoke",
+		State:      "Merging",
+	}
+	tracker := &recordingTracker{issue: issue}
+	runner := &recordingRunner{result: codex.SessionResult{SessionID: "land-session"}}
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Agent: types.AgentConfig{
+					MergePolicy: types.MergePolicyConfig{Mode: "pr"},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:     tracker,
+		Workspace:   workspace.New(filepath.Join(repoRoot, ".worktrees"), gitSeedHook()),
+		Runner:      runner,
+		RepoRoot:    repoRoot,
+		MergeTarget: "main",
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if got, want := tracker.states, []string{"Done"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+	if len(runner.requests) != 1 {
+		t.Fatalf("merge runner calls = %d, want 1", len(runner.requests))
+	}
+	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, ".codex/skills/land/SKILL.md") {
+		t.Fatalf("merge prompt missing land skill:\n%s", prompt)
+	}
+	if !strings.Contains(tracker.workpad, "land") {
+		t.Fatalf("workpad missing land skill:\n%s", tracker.workpad)
 	}
 }
 
@@ -1699,6 +1755,14 @@ func TestPollKeepsReloadErrorVisibleAfterTrackerSuccess(t *testing.T) {
 	}
 	if snapshot.Polling.IntervalMS != 2000 {
 		t.Fatalf("polling interval = %d, want 2000", snapshot.Polling.IntervalMS)
+	}
+}
+
+func TestRepoRootFromWorkflowUsesWorkflowDirectory(t *testing.T) {
+	workflowPath := filepath.Join(t.TempDir(), "repo", "WORKFLOW.md")
+
+	if got, want := RepoRootFromWorkflow(workflowPath), filepath.Dir(workflowPath); got != want {
+		t.Fatalf("repo root = %q, want %q", got, want)
 	}
 }
 
@@ -2343,6 +2407,34 @@ type countingRunner struct {
 func (r *countingRunner) RunSession(ctx context.Context, request codex.SessionRequest, _ func(codex.Event)) (codex.SessionResult, error) {
 	r.started <- request.Issue.ID
 	return completeFakeSession(ctx, request, nil)
+}
+
+type sequenceRunner struct {
+	runners []AgentRunner
+	next    int
+}
+
+func (r *sequenceRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+	if r.next >= len(r.runners) {
+		return codex.SessionResult{}, fmt.Errorf("unexpected runner call %d", r.next+1)
+	}
+	next := r.runners[r.next]
+	r.next++
+	return next.RunSession(ctx, request, onEvent)
+}
+
+type recordingRunner struct {
+	result   codex.SessionResult
+	err      error
+	requests []codex.SessionRequest
+}
+
+func (r *recordingRunner) RunSession(_ context.Context, request codex.SessionRequest, _ func(codex.Event)) (codex.SessionResult, error) {
+	r.requests = append(r.requests, request)
+	if r.result.SessionID == "" {
+		r.result.SessionID = "recording-session"
+	}
+	return r.result, r.err
 }
 
 type commitRunner struct{}

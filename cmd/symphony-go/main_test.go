@@ -9,6 +9,9 @@ func TestDefaultRunOptionsEnableTUI(t *testing.T) {
 	if !opts.TUI {
 		t.Fatal("TUI should be enabled by default for continuous run")
 	}
+	if opts.MergeTarget != "main" {
+		t.Fatalf("merge target = %q, want main", opts.MergeTarget)
+	}
 }
 
 func TestOnceDisablesTUIWhenNotExplicit(t *testing.T) {

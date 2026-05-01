@@ -34,7 +34,7 @@ type runOptions struct {
 func defaultRunOptions() runOptions {
 	return runOptions{
 		WorkflowPath: "./WORKFLOW.md",
-		MergeTarget:  "feat_zff",
+		MergeTarget:  "main",
 		TUI:          true,
 	}
 }

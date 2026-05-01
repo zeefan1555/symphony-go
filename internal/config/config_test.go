@@ -192,6 +192,68 @@ func TestResolveRejectsInvalidReviewPolicy(t *testing.T) {
 	}
 }
 
+func TestResolveDefaultsMergePolicyToLocalSkill(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	resolved, err := Resolve(types.Config{
+		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Agent.MergePolicy.Mode != "local" {
+		t.Fatalf("merge policy mode = %q, want local", resolved.Agent.MergePolicy.Mode)
+	}
+	if resolved.Agent.MergePolicy.Skill != "local-merge" {
+		t.Fatalf("merge policy skill = %q, want local-merge", resolved.Agent.MergePolicy.Skill)
+	}
+}
+
+func TestResolveDefaultsMergePolicySkillFromMode(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	resolved, err := Resolve(types.Config{
+		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Agent: types.AgentConfig{
+			MergePolicy: types.MergePolicyConfig{Mode: "pr"},
+		},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Agent.MergePolicy.Skill != "land" {
+		t.Fatalf("merge policy skill = %q, want land", resolved.Agent.MergePolicy.Skill)
+	}
+}
+
+func TestResolveRejectsInvalidMergePolicy(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	for _, tc := range []struct {
+		name   string
+		policy types.MergePolicyConfig
+	}{
+		{
+			name:   "mode",
+			policy: types.MergePolicyConfig{Mode: "direct"},
+		},
+		{
+			name:   "skill",
+			policy: types.MergePolicyConfig{Mode: "local", Skill: "unknown"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Resolve(types.Config{
+				Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+				Agent:   types.AgentConfig{MergePolicy: tc.policy},
+			}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+			if err == nil {
+				t.Fatal("expected invalid merge policy error")
+			}
+			if Code(err) != ErrInvalidMergePolicy {
+				t.Fatalf("code = %q", Code(err))
+			}
+		})
+	}
+}
+
 func TestResolveNormalizesPerStateConcurrency(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(types.Config{

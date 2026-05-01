@@ -2,8 +2,8 @@
 name: local-merge
 description:
   Merge a local Symphony issue worktree branch into the local main checkout
-  during the Linear Merging state; use for local smoke workflows that do not
-  create PRs or push branches.
+  during the Linear Merging state; use for direct workflows that do not create
+  PRs.
 ---
 
 # Local Merge
@@ -11,6 +11,8 @@ description:
 ## Goals
 
 - Merge the reviewed issue branch into the real local `main` checkout.
+- Push the updated `main` branch after merge validation when the workflow uses
+  the direct local merge path.
 - Keep the flow small, deterministic, and easy to audit.
 - Fail fast when the real local checkout cannot be merged safely.
 - Avoid slow fallback paths that make a smoke workflow look successful without
@@ -19,9 +21,10 @@ description:
 ## Use When
 
 - The Linear issue is in `Merging`.
-- The workflow is local-only: no PR, no push, no GitHub merge.
+- The workflow is direct: no PR and no GitHub merge button.
 - The issue branch already has a reviewed local commit.
-- The desired final state is `Done` after local merge validation passes.
+- The desired final state is `Done` after local merge validation and direct
+  push pass.
 
 ## Hard Rules
 
@@ -29,7 +32,7 @@ description:
 - Do not create a temporary main worktree to bypass a dirty or locked checkout.
 - Do not switch or modify a dirty checkout that contains unowned changes.
 - Do not move the Linear issue to `Done` unless the real local `main` checkout
-  contains the merge commit.
+  contains the merge commit and the intended remote push has succeeded.
 - If Git cannot write `.git/worktrees/<issue>/index.lock`, treat it as a
   sandbox/runtime problem. Record the blocker instead of retrying repeatedly.
 - If the repository is running under Symphony/Codex sandboxing, confirm the
@@ -108,7 +111,16 @@ description:
 
    Add any issue-specific validation from the workpad or issue description.
 
-6. Update the single Linear workpad comment.
+6. Push the target branch directly.
+
+   ```bash
+   git -C "$main_checkout" push origin main
+   ```
+
+   If push fails because `origin/main` advanced, stop and record a blocker.
+   Do not force-push `main`.
+
+7. Update the single Linear workpad comment.
 
    Record:
 
@@ -117,10 +129,11 @@ description:
    - local main checkout path
    - merge commit
    - validation commands and results
+   - push command and result
    - any blocker if merge did not complete
 
-7. Move the issue to `Done` only after the real local main checkout contains the
-   merge commit and validation passed.
+8. Move the issue to `Done` only after the real local main checkout contains the
+   merge commit, validation passed, and direct push succeeded.
 
 ## Blocker Template
 
@@ -135,7 +148,7 @@ Use this in the workpad when merge cannot proceed:
 - Blocker: `<dirty main checkout | missing main checkout | sandbox index.lock | merge conflict | validation failure>`
 - Evidence: `<command and key output>`
 - Impact: local `main` was not updated, so the issue was not moved to `Done`.
-- Unblock action: run the merge from a clean real `main` checkout with write access to the repository `.git`, then rerun validation.
+- Unblock action: run the merge from a clean real `main` checkout with write access to the repository `.git`, then rerun validation and push.
 ```
 
 ## Notes For Symphony Local Smoke

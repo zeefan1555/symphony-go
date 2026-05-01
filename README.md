@@ -148,10 +148,10 @@ For the local smoke workflow:
 Todo -> In Progress -> Human Review -> Merging -> Done
 ```
 
-During `Merging`, the Go orchestrator merges the issue branch, for example `symphony-go/ZEE-8`, into the configured local target branch. The Go workflow uses the `symphony-go/` branch prefix so it does not collide with Elixir smoke worktrees such as `symphony/ZEE-8`. The default target branch is:
+During `Merging`, the Go orchestrator reads `agent.merge_policy` and dispatches the configured merge skill. `mode: local` uses `.codex/skills/local-merge/SKILL.md`; `mode: pr` uses `.codex/skills/land/SKILL.md`. The Go workflow uses the `symphony-go/` branch prefix so it does not collide with Elixir smoke worktrees such as `symphony/ZEE-8`. The default local merge target branch is:
 
 ```text
-feat_zff
+main
 ```
 
 Override it when needed:
