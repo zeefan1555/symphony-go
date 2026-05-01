@@ -15,7 +15,7 @@ lark-cli base +table-create \
   --base-token app_xxx \
   --name "项目管理" \
   --fields '[{"name":"项目名称","type":"text"}]' \
-  --view '[{"name":"默认表格","type":"grid"}]' 
+  --view '[{"name":"默认表格","type":"grid"}]'
 ```
 
 ## 参数

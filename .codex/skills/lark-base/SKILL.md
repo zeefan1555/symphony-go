@@ -63,7 +63,7 @@ metadata:
 
 ### 2.2 Base 模块
 
-用于管理 Base 本体，或从用户给出的链接进入后续 Base 操作。  
+用于管理 Base 本体，或从用户给出的链接进入后续 Base 操作。
 模块索引：[`references/lark-base-workspace.md`](references/lark-base-workspace.md)
 
 | 命令 | 用途 / 何时使用 | 必读 reference | 路由提醒 |
@@ -75,7 +75,7 @@ metadata:
 
 ### 2.3 表与数据模块
 
-这是最常用的大模块，包含 `table / field / record / view` 四类子模块。  
+这是最常用的大模块，包含 `table / field / record / view` 四类子模块。
 补充示例：[`references/examples.md`](references/examples.md)，适合需要串联 table / record / view 完整操作链路时再读。
 
 #### 2.3.1 Table 子模块
@@ -89,7 +89,7 @@ metadata:
 
 #### 2.3.2 Field 子模块
 
-普通字段管理走这里；如果字段类型是 `formula` 或 `lookup`，转到下方“公式 / Lookup 模块”。  
+普通字段管理走这里；如果字段类型是 `formula` 或 `lookup`，转到下方“公式 / Lookup 模块”。
 子模块索引：[`references/lark-base-field.md`](references/lark-base-field.md)
 
 | 命令 | 用途 / 何时使用 | 必读 reference | 路由提醒 |
@@ -130,7 +130,7 @@ metadata:
 
 只要用户诉求涉及派生指标、条件判断、文本处理、日期差、跨表计算、跨表筛选后取值，都要先判断是否进入本模块。
 
-默认优先考虑 `formula`：适合常规计算、条件判断、文本处理、日期差、跨表聚合，以及需要长期显示在表里的派生结果。  
+默认优先考虑 `formula`：适合常规计算、条件判断、文本处理、日期差、跨表聚合，以及需要长期显示在表里的派生结果。
 只有当用户明确要求 `lookup`，或场景天然符合 `from / select / where / aggregate` 这种固定查找建模时，再使用 `lookup`。
 
 | 命令 | 用途 / 何时使用 | 必读 reference | 路由提醒 |
@@ -156,7 +156,7 @@ metadata:
 
 ### 2.6 Workflow 模块
 
-这是高约束模块。执行任何 workflow 命令前，都必须先读对应命令文档和 schema。  
+这是高约束模块。执行任何 workflow 命令前，都必须先读对应命令文档和 schema。
 模块索引：[`references/lark-base-workflow.md`](references/lark-base-workflow.md)
 
 | 命令 | 用途 / 何时使用 | 必读 reference | 路由提醒 |
@@ -178,8 +178,8 @@ metadata:
 
 ### 2.8 表单模块
 
-用于管理表单本体和表单题目。  
-模块索引：[`references/lark-base-form.md`](references/lark-base-form.md)、[`references/lark-base-form-questions.md`](references/lark-base-form-questions.md)  
+用于管理表单本体和表单题目。
+模块索引：[`references/lark-base-form.md`](references/lark-base-form.md)、[`references/lark-base-form-questions.md`](references/lark-base-form-questions.md)
 表单问题相关操作依赖 `form-id`；具体获取方式见 `form-list` 和 `form-create` 的 reference。
 
 | 命令 | 用途 / 何时使用 | 必读 reference | 路由提醒 |
@@ -191,7 +191,7 @@ metadata:
 
 ### 2.9 权限与角色模块
 
-用于启用高级权限，以及管理 Base 自定义角色。  
+用于启用高级权限，以及管理 Base 自定义角色。
 涉及 `+advperm-enable / +advperm-disable / +role-*` 时，操作用户必须为 Base 管理员，否则会返回权限错误。
 
 | 命令 | 用途 / 何时使用 | 必读 reference | 路由提醒 |

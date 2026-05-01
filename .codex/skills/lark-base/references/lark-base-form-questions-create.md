@@ -37,7 +37,7 @@ lark-cli base +form-questions-create \
   --table-id <table_id> \
   --form-id <form_id> \
   --questions '[{"type":"number","title":"服务评分","style":{"type":"rating","icon":"star","min":1,"max":5}}]'
-  
+
 # 添加带描述的问题（纯文本）
 lark-cli base +form-questions-create \
   --base-token <base_token> \
@@ -49,7 +49,7 @@ lark-cli base +form-questions-create \
   --base-token <base_token> \
   --table-id <table_id> \
   --form-id <form_id> \
-  --questions '[{"type":"text","title":"反馈建议","description":"更多详情请查看[帮助文档](https://example.com/help)"}]'  
+  --questions '[{"type":"text","title":"反馈建议","description":"更多详情请查看[帮助文档](https://example.com/help)"}]'
 ```
 
 ## 参数

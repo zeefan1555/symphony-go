@@ -1,7 +1,7 @@
 # base +role-create
 
 > **前置条件：** 先阅读 [`../lark-shared/SKILL.md`](../../lark-shared/SKILL.md) 了解认证、全局参数和安全规则。
-> 
+>
 > **前置条件：** 需要base开启了高级权限，如果调用这个接口返回没有开启高级权限，可以参考 [`lark-base-advperm-enable.md`](lark-base-advperm-enable.md) 了解高级权限启用规则。
 
 在指定 Base 中创建一个自定义角色，需传入完整的 AdvPermBaseRoleConfig 作为角色配置。

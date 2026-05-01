@@ -23,7 +23,7 @@ lark-cli base +form-questions-update \
     {"id":"q_001","title":"姓名（必填）","required":true},
     {"id":"q_002","title":"联系方式","required":false}
   ]'
-  
+
 # 更新问题描述（纯文本）
 lark-cli base +form-questions-update \
   --base-token <base_token> \
@@ -35,7 +35,7 @@ lark-cli base +form-questions-update \
   --base-token <base_token> \
   --table-id <table_id> \
   --form-id <form_id> \
-  --questions '[{"id":"q_001","description":"更多说明请参考[帮助文档](https://example.com/help)"}]'  
+  --questions '[{"id":"q_001","description":"更多说明请参考[帮助文档](https://example.com/help)"}]'
 ```
 
 ## 参数

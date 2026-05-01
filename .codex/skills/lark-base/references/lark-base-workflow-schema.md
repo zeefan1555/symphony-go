@@ -151,7 +151,7 @@
   "table_name": "订单表",
   "watched_field_name": "状态",
   "trigger_control_list": ["pasteUpdate", "automationBatchUpdate"],
-  "condition_list": [] /* AndCondition 数组 */ 
+  "condition_list": [] /* AndCondition 数组 */
 }
 ```
 
@@ -253,7 +253,7 @@
 | `offset` | 是 | 提前/延后的偏移量（正数=提前，负数=延后；范围由 `unit` 决定）：`MINUTE` ∈ {0, 5, 15, 30, -5, -15, -30}；`HOUR` ∈ [-6, -1] ∪ [1, 6]；`DAY` ∈ [-7, 7]；`WEEK` ∈ [-7, -1] ∪ [1, 7]；`MONTH` ∈ [-7, -1] ∪ [1, 7] |
 | `hour` | 是 | 触发小时 (0-23)，默认 9 |
 | `minute` | 是 | 触发分钟 (0-59)，默认 0 |
-| `condition_list` | 否 | 过滤条件数组，数组中每个元素为 AndCondition 结构，多个 AndCondition 之间为 OR 关系  | 
+| `condition_list` | 否 | 过滤条件数组，数组中每个元素为 AndCondition 结构，多个 AndCondition 之间为 OR 关系  |
 
 
 ### LarkMessageTrigger

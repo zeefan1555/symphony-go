@@ -33,6 +33,9 @@ description:
 - Do not switch or modify a dirty checkout that contains unowned changes.
 - Do not move the Linear issue to `Done` unless the real local `main` checkout
   contains the merge commit and the intended remote push has succeeded.
+- If local `main` has extra ahead commits beyond the issue merge, push them only
+  when they are explicitly part of the current workflow session and documented
+  in the workpad; otherwise stop and record a blocker.
 - If Git cannot write `.git/worktrees/<issue>/index.lock`, treat it as a
   sandbox/runtime problem. Record the blocker instead of retrying repeatedly.
 - If the repository is running under Symphony/Codex sandboxing, confirm the
@@ -119,6 +122,9 @@ description:
 
    If push fails because `origin/main` advanced, stop and record a blocker.
    Do not force-push `main`.
+   If `main` is already ahead because the reviewed issue merge and documented
+   workflow follow-up commits are present locally, push that exact ahead range
+   after validation instead of trying to rewrite history.
 
 7. Update the single Linear workpad comment.
 
@@ -129,6 +135,7 @@ description:
    - local main checkout path
    - merge commit
    - validation commands and results
+   - ahead commits included in the push
    - push command and result
    - any blocker if merge did not complete
 
