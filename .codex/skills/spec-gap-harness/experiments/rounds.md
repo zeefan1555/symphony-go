@@ -203,3 +203,17 @@
 - **Darwin 判定**：keep evidence。真实场景确认 workspace_safety 核心行为符合 SPEC；不需要代码 patch。
 - **Coverage ledger 更新**：`9 workspace_safety` 继续 `covered`，证据从单测升级到真实 issue `ZEE-35`。
 - **下一轮候选**：切到 `agent_runner`，用同样方式构造真实 issue/workflow 验证 continuation/session/cwd 行为。
+## Round ZEE-42: real_integration.auto_merge_no_human_review - listener-owned terminal flow
+
+- **Round goal**：替代 `scenario`，旧信号是“父会话手工 merge 也算完成”，新 SPEC 信号是 listener 在真实 Linear + Codex + git worktree 场景中自己完成 `Todo -> In Progress -> AI Review -> Merging -> Done`，且不进入 `Human Review`。
+- **Iteration**：1 baseline/ratchet for the ZEE-41 fixes。上一轮 ZEE-41 已暴露 root checkout writable root 与状态 owner 重叠问题，本轮用新真实 issue 验证修复后的 SPEC signal。
+- **Spec 范围**：`SPEC.md:900-968`、`SPEC.md:1033-1064`、`SPEC.md:1935-1936`、`SPEC.md:2027-2036`。
+- **Workflow / Issue**：`WORKFLOW.md@975aac0`；Linear issue `ZEE-42`，初始 `Todo`，目标 `Done`；issue 只允许创建 `SPEC_SMOKE.md` 并写入 `SPEC real integration smoke: 2026-05-02 16:50:23 +0800`。
+- **本轮运行**：`make build` 后启动 issue-scoped listener，PID `61357`，daemon log `.symphony/logs/ZEE-42-20260502-165107.out`，JSONL `.symphony/logs/run-20260502-165107.jsonl`，human log `.symphony/logs/run-20260502-165107.human.log`。
+- **Commit**：`before=975aac0`，issue commit `03e3263 ZEE-42 记录 SPEC 真实集成冒烟`，merge commit `after=96220b6 合并 symphony-go/ZEE-42 到 main`。
+- **Gap table**：`real_integration.auto_merge_no_human_review` 判定 `conforms`；`agent_runner.linear_graphql_tool_contract` 判定 `unclear`，因为真实 run 中 `linear_graphql` 不在 PATH/tool surface，自动化靠 `linear` CLI fallback 成功。
+- **已修复内容**：本轮不修改代码；验证前一轮已保留的 `Merging` writable-root 和 workflow handoff 修复。
+- **验证结果**：ZEE-42 到 `Done`；human log line 101-103 证明 orchestrator 自动 `In Progress -> AI Review -> Merging`；line 164 证明 child 自己在 repo root 执行 `git merge --no-ff` 成功；line 178 证明 `git push origin main` 成功；line 197 证明 `before_remove` cleanup 运行；`rg -n "SPEC real integration smoke: 2026-05-02 16:50:23 \+0800" SPEC_SMOKE.md` 通过；`git diff --check` 通过；`git status --short --branch` 为 `## main...origin/main`。
+- **Darwin 判定**：keep。真实 run 已证明 ZEE-41 的两个修复让全自动流更接近 SPEC：没有默认 Human Review，没有父会话手工 merge，terminal cleanup 也完成。
+- **Coverage ledger 更新**：`17-18 real_integration` 从 `partial` 更新为 `covered`；`10 agent_runner` 和 `12 agent_runner` 更新为 `partial`，下一步聚焦 `linear_graphql` optional tool contract。
+- **下一轮候选**：`agent_runner.linear_graphql_tool_contract`。最小动作是先判断 `linear_graphql` 是计划实现的 client-side tool 还是文档/Workflow 遗留期望；若计划实现，补 tool advertising/structured failure 的 synthetic test，再用真实 issue 验证一次 comment/status 写入。

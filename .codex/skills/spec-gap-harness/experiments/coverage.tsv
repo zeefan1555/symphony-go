@@ -4,12 +4,12 @@ spec_range	scenario_id	status	last_round	evidence	next_gap
 5-6	workflow_config	partial	2026-05-01-workflow_config_dynamic_reload	go test ./internal/workflow -run Reloader; go test ./internal/orchestrator -run reload tests	workspace_safety
 7-8	orchestrator_state	untested	-	-	-
 9	workspace_safety	covered	ZEE-35	go/.symphony/logs/run-20260501-224057.human.log; go/.worktrees-safety/ZEE-35/WORKSPACE_SAFETY_PROOF.md; commit 7a58ac0	agent_runner
-10	agent_runner	untested	-	-	-
+10	agent_runner	partial	ZEE-42	.symphony/logs/run-20260502-165107.human.log; real Codex sessions 019de...5c6fce and 019de...db65d0; issue worktree .worktrees/ZEE-42	agent_runner.linear_graphql_tool_contract
 11	tracker_selection	untested	-	-	-
-12	agent_runner	untested	-	-	-
+12	agent_runner	partial	ZEE-42	.symphony/logs/run-20260502-165107.human.log shows command -v linear_graphql empty and CLI fallback success	agent_runner.linear_graphql_tool_contract
 13	observability	partial	ZEE-33	go/.symphony/logs/run-20260501-222142.jsonl; go/.symphony/logs/run-20260501-222142.human.log	observability.sink_failure
 14	orchestrator_state	untested	-	-	-
 15	security_ops	untested	-	-	-
 16	cli_lifecycle	untested	-	-	-
-17-18	real_integration	partial	ZEE-33	go/.symphony/logs/run-20260501-222142.jsonl	observability.sink_failure
+17-18	real_integration	covered	ZEE-42	.symphony/logs/run-20260502-165107.jsonl; .symphony/logs/run-20260502-165107.human.log; Linear ZEE-42 Done; merge commit 96220b6	agent_runner.linear_graphql_tool_contract
 Appendix A	ssh_worker_optional	not_applicable	-	-	-
