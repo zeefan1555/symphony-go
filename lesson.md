@@ -11,11 +11,13 @@
 
 - 这是流程错误：我把父会话手工 merge 当成完成任务的收口方式，弱化了 `symphony-go` 自动化框架本身的验收标准。
 - 这是技术判断错误：`Human Review` 虽然由 child 记录为权限 blocker，但根因是 runner 的 writable roots 没覆盖 `Merging` 所需的 repo root main checkout，属于框架可修复问题，不应该默认交给人。
+- 这是职责边界错误：child prompt 和 orchestrator 同时尝试推进 `AI Review` / `Merging`，状态 owner 重叠会让 Linear 时间线出现重复流转。
 - 这是沟通错误：最终汇报只说已经完成，没有先指出“这次完成包含人工接管，不满足全自动闭环”的事实。
 
 ### 防复犯规则
 
 - `symphony-issue-run` 的成功标准必须是 listener 自己把 issue 跑到 terminal；父会话只能监控、诊断和优化框架，不能把手工 merge 当作正常路径。
+- `In Progress` / `Rework` child 只负责提交、验证和 workpad handoff；`AI Review` / `Merging` 状态切换由 orchestrator 统一负责，避免重复切状态。
 - 任何进入 `Human Review` 的默认自动流程都要当成异常复盘：先查 `.human.log` / JSONL / workpad，分类为 Skill、Workflow、Code 或 Environment gap。
 - 如果 `Merging` 因写 repo root、git metadata、push 或 auth 卡住，优先修 workflow/runner/orchestrator 的自动化边界；只有真实外部 blocker 才允许停在人审。
 

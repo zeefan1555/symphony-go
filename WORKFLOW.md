@@ -124,6 +124,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - `agent.review_policy.mode` 是 review 路由的唯一语义开关，不要用多个布尔值组合推断流程。
 - 当前默认使用 `mode: auto`，目标路径是 `In Progress -> AI Review -> Merging -> Done`。
 - 实现、验证和本地 commit 完成后进入 `AI Review`，由 orchestrator 执行机器复核。
+- `In Progress` / `Rework` 的 agent turn 不要自行把 issue 移到 `AI Review` 或 `Merging`；完成 commit 和 workpad handoff 后结束 turn，由 orchestrator 根据 HEAD 变化推进状态。
 - `AI Review` 通过后自动进入 `Merging`，再按本 Workflow 的 `Merging` 阶段指引把 worktree 分支合入 `main` 并 push。
 - `AI Review` 不通过时，按 `on_ai_fail: rework` 进入 `Rework`，下一轮必须基于 review 发现重新计划、修复、验证和提交。
 - `Human Review` 只作为真实外部 blocker 的人工 hold 状态；默认流程不得依赖人工把 issue 从 `Human Review` 推到 `Merging`。
@@ -153,7 +154,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - `Backlog`：不要修改 issue 内容或状态，停止并等待人类移动到 `Todo`。
    - `Todo`：立即移动到 `In Progress`，然后确保 bootstrap workpad comment 存在，不存在则创建，随后进入执行流程。
    - `In Progress`：从当前 scratchpad comment 继续执行。
-   - `AI Review`：执行 AI Review；通过后进入 `Merging`，失败时进入 `Rework` 或记录 blocker。
+   - `AI Review`：由 orchestrator 执行机器复核；正常情况下 agent 不会直接处理该状态。
    - `Human Review`：只等待真实外部 blocker 的人工解锁；不要自行改代码或合并。
    - `Merging`：进入后执行本地 main merge + push 流程；该状态要求 issue worktree 分支已有本地提交。
    - `Rework`：基于 AI Review 发现进入 rework 流程。
@@ -261,7 +262,8 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
     - 如果执行中有任何不清楚的地方，在底部添加简短 `### Confusions` section。
     - 不要额外发布 completion summary comment。
 9. 状态切换前重新打开并刷新 workpad，让 `Plan`、`Acceptance Criteria`、`Validation` 与已完成工作完全一致。
-10. 只有此时才移动 issue 到 `AI Review`。
+10. 不要自行移动 issue 到 `AI Review` 或 `Merging`。
+    - 完成 commit、validation 和 workpad handoff 后结束 turn，orchestrator 会基于 HEAD 变化自动移动到 `AI Review` 并继续后续状态。
     - 例外：如果按 blocked-access escape hatch 被工具或 auth 阻塞，可以带 blocker brief 和明确解锁动作移动到 `Human Review`。
 
 ## Step 3：AI Review、Rework 与 main merge 处理
@@ -301,7 +303,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 如果 session 内无法通过 `linear_graphql` 编辑 comment，先记录 blocker；不要调用 Linear MCP/app 工具兜底。
 - 临时 proof edit 只允许用于本地验证，commit 前必须恢复。
 - 如果发现超出范围的改进，创建单独 Backlog issue，不要扩大当前 scope；该 issue 要有清晰标题、描述、验收标准、同 project 归属、与当前 issue 的 `related` 链接，并在依赖当前 issue 时设置 `blockedBy`。
-- 未达到 `AI Review` 完成门槛前，不要移动到 `AI Review`。
+- 未达到 `AI Review` 完成门槛前，不要移动到 `AI Review`；达到门槛后也不要自行切换，由 orchestrator 统一 handoff。
 - 不要把 `Human Review` 当成默认审核阶段；它只用于真实外部 blocker。
 - 在 `Merging` 中不要创建 PR；只允许执行 main merge + validation + push。
 - 如果状态是 terminal，例如 `Done`，什么都不做并退出。
