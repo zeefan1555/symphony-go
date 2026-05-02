@@ -79,9 +79,9 @@ No description provided.
 1. 这是无人值守的 orchestration session。不要要求人类执行后续动作。
 2. 只有遇到真实 blocker 时才可以提前停止，例如缺少必要 auth、权限、secret 或工具。若被阻塞，必须记录到 workpad，并按 workflow 移动 issue 状态。
 3. 最终回复只报告已完成动作和 blocker，不要写“给用户的下一步”。
-4. 所有写给外部系统的可见内容默认使用中文，包括 Linear workpad、GitHub PR 标题、PR 正文、PR 根评论、review inline 回复和 Codex review 回复。命令、路径、错误原文、代码标识符和第三方模板字段可以保留原文。
+4. 所有写给外部系统的可见内容默认使用中文，包括 Linear workpad、commit message 和 Codex review 回复。命令、路径、错误原文、代码标识符和第三方模板字段可以保留原文。
 
-只在提供的 repository worktree 内工作，不要触碰其他路径。
+只在当前 repo root 和该 issue 的 repository worktree 内工作，不要触碰其他路径。
 
 ## 前置条件：使用 `linear_graphql`，不要使用 Linear MCP/app 工具
 
@@ -92,7 +92,6 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 读取 issue、team states、comments：使用 `linear_graphql` query。
 - 更新 issue 状态：使用 `linear_graphql` 的 `issueUpdate` mutation。
 - 创建或更新 `## Codex Workpad`：使用 `linear_graphql` 的 `commentCreate` / `commentUpdate` mutation。
-- 关联 GitHub PR：优先使用 `linear_graphql` 的 `attachmentLinkGitHubPR` mutation。
 - 如果改用 `linear` CLI，先读取 `.codex/skills/linear-cli/SKILL.md`，并使用 `linear issue view/update/comment/link` 命令完成同等操作。
 - 不调用 Linear MCP/app 工具，例如 `linear_save_comment`、`linear_save_issue`、`linear_get_issue` 等；这些工具会触发交互式审批，导致无人值守 run 失败。
 
@@ -105,8 +104,6 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 保持 ticket metadata 最新，包括状态、checklist、acceptance criteria 和链接。
 - 使用一个持久的 Linear comment 作为进度事实源。
 - 所有进度和交接信息都写入同一个 workpad comment；不要额外发布“done”或 summary comment。
-- GitHub PR 标题和正文必须使用中文，正文至少包含 `摘要`、`验证` 和关联 Linear issue。
-- 所有 GitHub 评论必须使用中文，并用 `[codex]` 前缀标识 agent 回复；引用 reviewer 原文或命令输出时可以保留原文。
 - 如果 ticket 正文或评论里有 `Validation`、`Test Plan` 或 `Testing`，必须把它们同步到 workpad 的验收和验证项，并在完成前逐项执行。
 - 执行中发现有价值但超出范围的改进时，创建单独 Linear issue，不要扩大当前 scope。follow-up issue 必须有清晰标题、描述、验收标准，放入 `Backlog`，归属同一 project，关联当前 issue；如果依赖当前 issue，使用 `blockedBy`。
 - 只有达到对应质量门槛后才移动状态。
@@ -117,36 +114,34 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 - `linear`：操作 Linear。
 - `linear-cli`：当 `linear_graphql` 不可用或 CLI 更适合时，用 `linear` CLI 操作 Linear；不要调用 Linear MCP/app 工具。
-- `push`：实现完成后发布当前分支并创建/更新 PR；PR 标题、正文和标签都在进入 `Human Review` 前准备好。
-- `land`：当前 Workflow 在 `Merging` 阶段要求打开并遵循 `.codex/skills/land/SKILL.md`；只负责 land 已存在的 PR、回拉 root checkout，并把证据记录到 workpad。
+- `pull`：实现前同步最新 `origin/main`，减少最终合并冲突。
 
 ## Review 路由原则
 
 - `agent.review_policy.mode` 是 review 路由的唯一语义开关，不要用多个布尔值组合推断流程。
 - `mode: human`：默认路径是 `In Progress -> Human Review`。实现、验证和 commit 完成后，等待人工审核；是否进入合并由人类移动 Linear state 决定。
 - `mode: ai`：默认路径是 `In Progress -> AI Review -> Human Review`。AI Review 通过后仍等待人工决定是否合并。
-- `mode: auto`：默认路径是 `In Progress -> AI Review -> Merging -> Done`。AI Review 通过后自动进入 `Merging`，再按本 Workflow 的 `Merging` 阶段指引执行 land skill。
-- `Human Review` 是等待态。daemon 可以轮询并记录等待，但不得在该状态继续写代码、改 PR 或自行合并。
+- `mode: auto`：默认路径是 `In Progress -> AI Review -> Merging -> Done`。AI Review 通过后自动进入 `Merging`，再按本 Workflow 的 `Merging` 阶段指引把 worktree 分支合入 `main` 并 push。
+- `Human Review` 是等待态。daemon 可以轮询并记录等待，但不得在该状态继续写代码或自行合并。
 - 当 `allow_manual_ai_review: true` 时，人工可以把 issue 从 `Human Review` 手动切到 `AI Review`，让 daemon 额外跑一次机器复核。
 - `AI Review` 通过后按 `mode` 决定下一站：`human` / `ai` 回到 `Human Review`，`auto` 进入 `Merging`。
 - `AI Review` 不通过时，按 `on_ai_fail` 处理：`rework` 进入 `Rework`，`hold` 停留在 `AI Review` 并把 blocker 写入 workpad。
-- 人工批准合并时，只需要把 issue 切到 `Merging`；后续按本 Workflow 的 `Merging` 阶段指引执行 land skill。
+- 人工批准合并时，只需要把 issue 切到 `Merging`；后续按本 Workflow 的 `Merging` 阶段指引合入 `main` 并 push。
 
 ## 阶段技能路由
 
 - 本 Workflow 正文是默认注入给 agent 的总 SOP；阶段级 skill 只作为该 SOP 指定的执行材料。
-- `Merging` 阶段固定读取 `.codex/skills/land/SKILL.md`，打开并遵循其中步骤。
+- `Merging` 阶段不走 PR land；直接把当前 issue worktree 分支合入 repo root 的 `main`，验证后 `git push origin main`。
 - 新增阶段时，先在 Linear 创建同名状态，再在本 Workflow 的状态映射和对应步骤里写清楚该阶段使用哪个 skill。
 
 ## 状态映射
 
 - `Backlog`：不属于本 workflow 范围；不要修改。
 - `Todo`：排队状态；开始主动工作前立即转到 `In Progress`。
-  - 特例：如果已经挂了 PR，把它当作反馈或 rework loop，先完整扫 PR feedback，处理或明确 pushback，重新验证，再回到 `Human Review`。
 - `In Progress`：正在实现。
 - `AI Review`：由 `review_policy.mode` 自动触发，或由人工从 `Human Review` 手动触发；复核通过后按 review policy 路由，复核失败时按 `on_ai_fail` 处理。
 - `Human Review`：实现已提交并验证，等待人工批准；这是默认 review 终点。
-- `Merging`：人工已批准；打开并遵循 `.codex/skills/land/SKILL.md`，land 已存在的 PR。不要在该状态创建新 PR；如果 PR 缺失，记录 blocker 并停止。
+- `Merging`：人工已批准；把 issue worktree 分支合入 repo root 的 `main`，验证后 push `main`。不要创建 PR。
 - `Rework`：reviewer 要求修改；需要重新计划和实现。
 - `Done`：终态；无需继续操作。
 
@@ -157,16 +152,15 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 3. 按状态进入对应流程：
    - `Backlog`：不要修改 issue 内容或状态，停止并等待人类移动到 `Todo`。
    - `Todo`：立即移动到 `In Progress`，然后确保 bootstrap workpad comment 存在，不存在则创建，随后进入执行流程。
-     - 如果 PR 已存在，先读取所有 open PR comments，判断哪些需要修改、哪些需要明确 pushback。
    - `In Progress`：从当前 scratchpad comment 继续执行。
    - `AI Review`：执行 AI Review；通过后回到 `Human Review`，失败时进入 `Rework` 或记录 blocker。
    - `Human Review`：等待并轮询人工决策或 review 更新；不要自行改代码或合并。
-   - `Merging`：进入后打开并遵循 `.codex/skills/land/SKILL.md`；该状态要求 PR 已存在。
+   - `Merging`：进入后执行本地 main merge + push 流程；该状态要求 issue worktree 分支已有本地提交。
    - `Rework`：进入 rework 流程。
    - `Done`：什么都不做并退出。
-4. 检查当前分支是否已有 PR，以及 PR 是否已关闭。
-   - 如果当前分支 PR 已 `CLOSED` 或 `MERGED`，本轮不要复用旧分支工作。
-   - 从 `origin/main` 创建新分支，并作为新 attempt 重启执行流程。
+4. 检查当前 issue worktree 分支、`git status --short` 和 `HEAD`。
+   - 如果 worktree 有未解释的脏改动，先在 workpad 记录并判断是否属于当前 issue；不要覆盖不理解的改动。
+   - 如果当前分支不是 issue 分支，停止并记录 blocker，不要在错误分支上继续。
 5. 对 `Todo` ticket，启动顺序必须严格如下：
    - 通过 `linear_graphql` 的 `issueUpdate` mutation 将状态更新为 `In Progress`
    - 查找或创建 `## Codex Workpad` bootstrap comment
@@ -190,7 +184,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 5. 在 workpad 顶部加入紧凑环境戳，格式为：
    - `<host>:<abs-workdir>@<short-sha>`
    - 示例：`devbox-01:<repo-root>/.worktrees/MT-32@7bdde33bc`
-   - 不要包含 Linear issue 字段已经能推导出的 metadata，例如 issue ID、status、branch、PR link。
+   - 不要包含 Linear issue 字段已经能推导出的 metadata，例如 issue ID、status、branch。
 6. 在同一个 comment 中加入明确的 acceptance criteria 和 TODO checklist。
    - 如果改动影响用户可见行为，加入 UI walkthrough 验收项，描述端到端验证路径。
    - 如果改动触及 app 文件或 app 行为，在 `Acceptance Criteria` 中加入 app-specific flow checks，例如启动路径、变更后的交互路径和预期结果。
@@ -204,29 +198,35 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
      - 同步后的 `HEAD` short SHA
 10. compact context，然后进入执行。
 
-## PR feedback sweep 协议（必须执行）
+## Main merge 协议（Merging 阶段必须执行）
 
-当 ticket 已挂载 PR 时，进入 `Human Review` 前必须执行：
+当 ticket 进入 `Merging` 时，不创建 PR，直接把 issue worktree 分支合入 repo root 的 `main`：
 
-1. 从 issue links 或 attachments 中识别 PR number。
-2. 收集所有反馈渠道：
-   - 顶层 PR comments：`gh pr view --comments`
-   - inline review comments：`gh api repos/<owner>/<repo>/pulls/<pr>/comments`
-   - review summaries/states：`gh pr view --json reviews`
-3. 每条 actionable reviewer comment，无论来自人还是 bot，包括 inline review comment，都视为 blocking，直到满足以下之一：
-   - 已通过代码、测试或文档改动解决
-   - 已在该 thread 上发布明确且有理由的中文 pushback 回复
-4. 更新 workpad plan/checklist，列出每个 feedback item 及其解决状态。
-5. feedback-driven change 后重新运行验证并 push 更新。
-6. 循环执行，直到没有 outstanding actionable comments。
+1. 在 issue worktree 中确认分支名、`HEAD` short SHA 和 `git status --short`。
+2. 确认 issue worktree 已有本次任务提交；如果没有提交，停止并在 workpad 记录 blocker。
+3. 回到 repo root，确认当前 checkout 是 `main`，且 `git status --short` 干净。
+   - 如果 root checkout 不在 `main`，先切到 `main`。
+   - 如果 root checkout 有无关脏改动，停止并记录 blocker；不要覆盖或 stash 不属于本 issue 的改动。
+4. 在 repo root 执行 `git fetch origin main`，再用 `git pull --ff-only origin main` 同步最新 `main`。
+5. 执行 `git merge --no-ff <issue-worktree-branch>`。
+6. 如果发生冲突，只解决当前 issue 必需的冲突；解决后重跑验证并记录冲突文件。
+7. 在 repo root 运行当前 scope 要求的验证。
+8. 验证通过后执行 `git push origin main`。
+9. 更新 workpad，记录：
+   - issue branch
+   - issue branch HEAD
+   - main merge commit short SHA
+   - validation 命令和结果
+   - push 结果
+10. push 成功后移动 issue 到 `Done`。
 
 ## Blocked-access escape hatch（必须遵守）
 
 仅当缺少必要工具、auth 或权限，且本 session 无法解决时使用。
 
-- GitHub 默认不是 valid blocker。必须先尝试 fallback 策略，例如 alternate remote/auth mode，然后继续 publish/review flow。
-- GitHub access/auth 问题不能直接移动到 `Human Review`，除非所有 fallback 都已尝试并记录在 workpad。
-- 如果缺少非 GitHub 的必要工具，或缺少非 GitHub 的必要 auth，移动 ticket 到 `Human Review`，并在 workpad 写入短 blocker brief，包含：
+- Git push 默认不是 valid blocker。必须先尝试最小 fallback，例如 `git fetch` / auth 状态检查 / 重新 push，然后继续 main merge flow。
+- Git access/auth 问题不能直接移动到 `Human Review`，除非所有 fallback 都已尝试并记录在 workpad。
+- 如果缺少必要工具或 auth，移动 ticket 到 `Human Review`，并在 workpad 写入短 blocker brief，包含：
   - 缺少什么
   - 为什么阻塞必要 acceptance 或 validation
   - 需要人类执行的精确解锁动作
@@ -242,58 +242,45 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - 勾选已完成事项。
    - 在合适位置添加新发现事项。
    - scope 变化时保持 parent/child 结构完整。
-   - 每个有意义里程碑后立即更新 workpad，例如复现完成、代码改动完成、验证运行、review feedback 已处理。
+   - 每个有意义里程碑后立即更新 workpad，例如复现完成、代码改动完成、验证运行、人工反馈已处理。
    - 不要让已完成工作在计划里保持未勾选。
-   - 如果 ticket 从 `Todo` 开始且已经有 PR，kickoff 后立刻执行完整 PR feedback sweep，再做新 feature work。
 5. 运行当前 scope 必需的验证和测试。
    - 强制门禁：执行 ticket 提供的所有 `Validation`、`Test Plan` 或 `Testing` 要求；未满足即视为未完成。
    - 优先使用能直接证明改动行为的 targeted proof。
    - 可以使用临时本地 proof edit 来验证假设，例如临时调整 build input 或本地 hardcode 某个 UI account/response path，但必须在 commit/push 前全部恢复。
    - 把临时 proof 步骤和结果记录到 workpad 的 `Validation` 或 `Notes`，让 reviewer 可复核。
-   - 如果触及 app，运行 `launch-app` 验证，并在 handoff 前通过 `github-pr-media` 捕获或上传媒体。
+   - 如果触及 app，运行 `launch-app` 验证，并在 workpad 中记录关键路径和结果。
 6. 重新检查全部 acceptance criteria，补齐 gap。
-7. 每次 `git push` 前，先运行当前 scope 要求的验证并确认通过；如果失败，修复并重跑直到绿色，然后 commit 并 push。
-8. 使用 `push` skill 发布分支并创建或更新 PR，然后把 PR URL 关联到 issue。优先使用 attachment；如果 attachment 不可用，再写入 workpad。
-   - 确保 GitHub PR 有 `symphony` label。
-   - PR 标题和正文必须是中文；如果仓库没有 PR 模板，按 `.codex/skills/push/SKILL.md` 的中文 fallback 结构生成。
-9. 把最新 `origin/main` merge 到当前分支，解决冲突并重跑检查。
-10. 更新 workpad comment 的最终 checklist 和 validation notes。
+7. 提交当前 issue worktree 分支：
+   - commit 前确认 `git status --short` 只包含当前 issue 需要的文件。
+   - commit message 使用中文或清晰英文，必须包含 issue identifier。
+   - commit 后记录 issue branch 和 `HEAD` short SHA。
+8. 更新 workpad comment 的最终 checklist 和 validation notes。
     - 勾选已完成的 plan、acceptance、validation 项。
     - 在同一个 workpad comment 中加入最终 handoff notes，包括 commit 和 validation summary。
-    - 不要把 PR URL 写进 workpad；PR 关联应放在 issue attachment/link 字段。
+    - 明确写出后续 `Merging` 阶段将把该 issue branch 合入 `main` 并 push。
     - 如果执行中有任何不清楚的地方，在底部添加简短 `### Confusions` section。
     - 不要额外发布 completion summary comment。
-11. 移动到 `Human Review` 前，轮询 PR feedback 和 checks：
-    - 读取 PR `Manual QA Plan` comment（如有），据此强化 UI/runtime test coverage。
-    - 执行完整 PR feedback sweep。
-    - 确认最新改动后的 PR checks 全部通过。
-    - 确认 ticket 提供的所有 validation/test-plan 项都在 workpad 中明确标记完成。
-    - 持续 check-address-verify，直到没有 outstanding comments 且 checks 完全通过。
-    - 状态切换前重新打开并刷新 workpad，让 `Plan`、`Acceptance Criteria`、`Validation` 与已完成工作完全一致。
-12. 只有此时才移动 issue 到 `Human Review`。
-    - 例外：如果按 blocked-access escape hatch 被非 GitHub 工具或 auth 阻塞，可以带 blocker brief 和明确解锁动作移动到 `Human Review`。
-13. 如果 `Todo` ticket 在 kickoff 时已挂 PR：
-    - 确保所有已有 PR feedback 都已审阅并解决，包括 inline review comments；解决方式可以是代码修改，也可以是明确且有理由的 pushback。
-    - 确保分支已 push 所需更新。
-    - 然后移动到 `Human Review`。
+9. 状态切换前重新打开并刷新 workpad，让 `Plan`、`Acceptance Criteria`、`Validation` 与已完成工作完全一致。
+10. 只有此时才移动 issue 到 `Human Review`。
+    - 例外：如果按 blocked-access escape hatch 被工具或 auth 阻塞，可以带 blocker brief 和明确解锁动作移动到 `Human Review`。
 
-## Step 3：Human Review 与 merge 处理
+## Step 3：Human Review 与 main merge 处理
 
 1. 当 issue 处于 `Human Review`，不要编码，也不要修改 ticket 内容。
-2. 按需轮询更新，包括人类和 bot 的 GitHub PR review comments。
-3. 如果 review feedback 要求改动，移动 issue 到 `Rework` 并执行 rework 流程。
+2. 按需轮询人工决策或评论。
+3. 如果人工反馈要求改动，移动 issue 到 `Rework` 并执行 rework 流程。
 4. 如果批准，人类会把 issue 移动到 `Merging`。
-5. 当 issue 处于 `Merging`，打开并遵循 `.codex/skills/land/SKILL.md`；此阶段只 land 已存在 PR，并在 merge 后回拉 root checkout。
-6. merge skill 成功返回后，orchestrator 清理 issue worktree 并移动 issue 到 `Done`。
+5. 当 issue 处于 `Merging`，执行 `Main merge 协议`：把 issue worktree 分支合入 repo root 的 `main`，验证并 `git push origin main`。
+6. push 成功后，更新 workpad 证据并移动 issue 到 `Done`。
 
 ## Step 4：Rework 处理
 
 1. 把 `Rework` 当作完整方案重置，而不是增量补丁。
 2. 重新阅读完整 issue body 和所有人工 comments；明确本次 attempt 要做出哪些不同处理。
-3. 关闭当前 issue 绑定的旧 PR。
-4. 删除 issue 上现有 `## Codex Workpad` comment。
-5. 从 `origin/main` 创建新分支。
-6. 从正常 kickoff flow 重新开始：
+3. 删除 issue 上现有 `## Codex Workpad` comment。
+4. 从最新 `origin/main` 创建或重置当前 issue worktree 分支。
+5. 从正常 kickoff flow 重新开始：
    - 如果当前 issue 状态是 `Todo`，移动到 `In Progress`；否则保持当前状态。
    - 创建新的 bootstrap `## Codex Workpad` comment。
    - 构建新的 plan/checklist，并端到端执行。
@@ -302,18 +289,14 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 - Step 1/2 checklist 全部完成，并准确反映在单一 workpad comment 中。
 - Acceptance criteria 和 ticket 提供的必要 validation items 全部完成。
+- issue worktree 分支已有本次任务 commit。
 - 最新 commit 的 validation/tests 绿色。
-- PR feedback sweep 完成，且没有 actionable comments。
-- PR checks 绿色，分支已 push，PR 已关联到 issue。
-- 进入 `Human Review` 前 PR 必须已经存在；`Merging` 阶段不补建 PR。
-- 必要 PR metadata 已存在，例如 `symphony` label。
-- PR 标题、PR 正文和所有新增 GitHub 评论均为中文。
+- workpad 已记录 issue branch、HEAD short SHA、validation 命令和结果。
+- 不创建 PR；进入 `Human Review` 前只需要本地 issue branch commit 和验证证据。
 - 如果触及 app，runtime validation/media 要求已完成。
 
 ## Guardrails
 
-- 如果当前分支 PR 已关闭或合并，不要复用该分支或之前实现状态。
-- 对已关闭或合并的分支 PR，从 `origin/main` 创建新分支，并像全新任务一样从复现和计划重启。
 - 如果 issue 状态是 `Backlog`，不要修改它；等待人类移动到 `Todo`。
 - 不要编辑 issue body/description 来记录计划或进度。
 - 每个 issue 只使用一个持久 workpad comment：`## Codex Workpad`。
@@ -322,6 +305,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 如果发现超出范围的改进，创建单独 Backlog issue，不要扩大当前 scope；该 issue 要有清晰标题、描述、验收标准、同 project 归属、与当前 issue 的 `related` 链接，并在依赖当前 issue 时设置 `blockedBy`。
 - 未达到 `Human Review` 完成门槛前，不要移动到 `Human Review`。
 - 在 `Human Review` 中不要修改代码；等待并轮询。
+- 在 `Merging` 中不要创建 PR；只允许执行 main merge + validation + push。
 - 如果状态是 terminal，例如 `Done`，什么都不做并退出。
 - issue 文本保持简洁、具体、面向 reviewer。
 - 如果被阻塞且尚无 workpad，添加一个 blocker comment，说明 blocker、影响和下一步解锁动作。
