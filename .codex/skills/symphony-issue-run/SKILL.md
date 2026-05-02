@@ -31,8 +31,8 @@ git status --short --branch
 ```
 
 - Read `WORKFLOW.md` before creating the issue. The current workflow defines
-  the Linear project, active states, workspace root, review policy, and merge
-  policy.
+  the Linear project, active states, workspace root, review policy, and
+  state-to-skill routing.
 
 ## Create The Issue
 
@@ -58,6 +58,9 @@ cat > "$tmp_issue" <<'EOF'
 - 只在 `/Users/bytedance/symphony-go` 仓库内工作。
 - 使用当前仓库的 `.worktrees/<ISSUE>` worktree。
 - Linear 评论、GitHub PR 标题和正文默认使用中文。
+- 如果人工把 issue 切到 `Merging`，由 `agent.state_skills.Merging`
+  指向的 repo-root skill 负责 land 已存在 PR 和 root 回拉；PR 必须已在
+  `Human Review` 前创建，worktree 清理由 orchestrator workspace manager 完成。
 EOF
 
 linear issue create \
@@ -80,7 +83,15 @@ If the intended flow requires human-controlled start, create the issue in
 `Backlog` and let the user move it to `Todo`. If the goal is immediate
 processing, create it in `Todo`.
 
-## Start The Listener
+## Start The Listener Fast
+
+First check whether a listener is already running. Do not start a duplicate
+service just because an old PID file exists:
+
+```sh
+pgrep -fl 'bin/symphony-go run --workflow ./WORKFLOW.md' || true
+test -f .symphony/pids/symphony-go.pid && cat .symphony/pids/symphony-go.pid || true
+```
 
 For normal operation, start one continuous listener from the repo root:
 
@@ -107,43 +118,42 @@ ISSUE=<ISSUE> WORKFLOW=./WORKFLOW.md MERGE_TARGET=main make run-once
 `run-once` is not the normal listener mode. Use it only to test one poll or
 diagnose a specific issue.
 
-## PR Review And Local Cleanup
+## Merging Supervision
 
-Keep PR-specific operating details in this skill. `WORKFLOW.md` should only
-describe the high-level state machine and policy; this skill owns the concrete
-operator steps for PR approval, local pull, and worktree cleanup.
+Merging operating details belong to `.codex/skills/land/SKILL.md`, not here.
+This skill only supervises whether the Merging state completed end to end.
 
-When the issue branch has been pushed and a PR exists:
-
-1. Let the user review and approve/merge the PR in GitHub.
-2. After the PR is merged, update the local main checkout.
-3. Remove the issue worktree after confirming the issue is terminal or the PR
-   merge has landed on `origin/main`.
-
-Use these commands from the repository root:
+When the user moves an issue to `Merging`, watch the latest human log:
 
 ```sh
-git switch main
-git pull --ff-only origin main
+latest_log=$(ls -t .symphony/logs/run-*.human.log | head -1)
+tail -n 160 "$latest_log"
 ```
 
-Then clean the matching issue worktree:
+Expected evidence:
 
-```sh
-git worktree list --porcelain
-git worktree remove .worktrees/<ISSUE>
-```
+- `merge_skill_started` for the issue and `.codex/skills/land/SKILL.md`.
+- An existing GitHub PR URL, usually attached back to the Linear issue before
+  `Human Review`.
+- PR state becomes `MERGED`.
+- Root checkout is aligned: `git status --short --branch` prints
+  `## main...origin/main` with no changed files.
+- `git worktree list --porcelain` no longer lists `.worktrees/<ISSUE>`.
 
-If `git worktree remove` refuses because the worktree has local changes, stop
-and inspect the diff. Do not force-remove it unless the user explicitly
-confirms that the changes are disposable:
+If no PR exists when the issue enters `Merging`, treat it as a workflow
+violation. Do not create a new PR inside `Merging`; record the blocker in the
+workpad and route the issue back to implementation/rework.
 
-```sh
-git -C .worktrees/<ISSUE> status --short --branch
-git -C .worktrees/<ISSUE> diff --stat
-```
+If the first Merging attempt fails with `bufio.Scanner: token too long`, do not
+restart blindly. Confirm whether the listener retries and whether a second run
+continues. If it repeats, treat it as a runner/log-scanner bug and fix that
+separately from the issue work.
 
-After cleanup, verify the local repo is aligned and no issue worktree remains:
+If PR merge succeeded and the worktree was removed but root is still behind,
+perform safe recovery only after proving root runtime copies are identical to
+`origin/main`; stop on any divergent local edit.
+
+After Merging, verify the local repo is aligned and no issue worktree remains:
 
 ```sh
 git status --short --branch
@@ -212,11 +222,15 @@ Expected signs:
 - Do not create the issue in a state outside `WORKFLOW.md` active states unless
   the user explicitly wants to hold it.
 - Do not run only `make run-once` when the user asked for a listener service.
+- Do not start a second listener when the first one is already polling; duplicate
+  listeners can dispatch the same issue twice.
 - Do not use Linear MCP/app tools from unattended child agents.
 - Do not hardcode another repository path, remote, branch, or project.
 - Do not declare the listener healthy just because a PID file exists; confirm
   with `ps` and logs.
 - Do not delete `.worktrees/<ISSUE>` manually while the issue is active.
+- Do not declare Merging complete until PR state, root checkout, Linear state,
+  and worktree cleanup have all been checked.
 
 ## Handoff
 
@@ -227,4 +241,6 @@ Report back with:
 - PID and log path if background mode was used.
 - Current issue state.
 - Worktree path if created.
+- PR URL and merge commit if Merging ran.
+- Root checkout status after merge.
 - Latest relevant log evidence.

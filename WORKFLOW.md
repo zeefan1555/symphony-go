@@ -36,8 +36,6 @@ agent:
     mode: human
     allow_manual_ai_review: true
     on_ai_fail: rework
-  state_skills:
-    Merging: .codex/skills/pr/SKILL.md
 codex:
   command: codex --config shell_environment_policy.inherit=all --config 'model="gpt-5.5"' --config model_reasoning_effort=xhigh app-server
   approval_policy: never
@@ -119,26 +117,26 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 - `linear`：操作 Linear。
 - `linear-cli`：当 `linear_graphql` 不可用或 CLI 更适合时，用 `linear` CLI 操作 Linear；不要调用 Linear MCP/app 工具。
-- `agent.state_skills`：把 Linear state 名映射到当前 repo root 下的 `SKILL.md` 相对路径；到达对应状态后，daemon 读取该 skill 并执行。
-- `pr`：当前 `Merging` 状态绑定 `.codex/skills/pr/SKILL.md`；PR 创建、合并、回拉和 worktree 清理细节只写在该 skill 内。
+- `push`：实现完成后发布当前分支并创建/更新 PR；PR 标题、正文和标签都在进入 `Human Review` 前准备好。
+- `land`：当前 Workflow 在 `Merging` 阶段要求打开并遵循 `.codex/skills/land/SKILL.md`；只负责 land 已存在的 PR、回拉 root checkout，并把证据记录到 workpad。
 
 ## Review 路由原则
 
 - `agent.review_policy.mode` 是 review 路由的唯一语义开关，不要用多个布尔值组合推断流程。
 - `mode: human`：默认路径是 `In Progress -> Human Review`。实现、验证和 commit 完成后，等待人工审核；是否进入合并由人类移动 Linear state 决定。
 - `mode: ai`：默认路径是 `In Progress -> AI Review -> Human Review`。AI Review 通过后仍等待人工决定是否合并。
-- `mode: auto`：默认路径是 `In Progress -> AI Review -> Merging -> Done`。AI Review 通过后自动进入 `Merging`，再由 `agent.state_skills.Merging` 处理。
+- `mode: auto`：默认路径是 `In Progress -> AI Review -> Merging -> Done`。AI Review 通过后自动进入 `Merging`，再按本 Workflow 的 `Merging` 阶段指引执行 land skill。
 - `Human Review` 是等待态。daemon 可以轮询并记录等待，但不得在该状态继续写代码、改 PR 或自行合并。
 - 当 `allow_manual_ai_review: true` 时，人工可以把 issue 从 `Human Review` 手动切到 `AI Review`，让 daemon 额外跑一次机器复核。
 - `AI Review` 通过后按 `mode` 决定下一站：`human` / `ai` 回到 `Human Review`，`auto` 进入 `Merging`。
 - `AI Review` 不通过时，按 `on_ai_fail` 处理：`rework` 进入 `Rework`，`hold` 停留在 `AI Review` 并把 blocker 写入 workpad。
-- 人工批准合并时，只需要把 issue 切到 `Merging`；后续由 `agent.state_skills.Merging` 对应 skill flow 自动处理。
+- 人工批准合并时，只需要把 issue 切到 `Merging`；后续按本 Workflow 的 `Merging` 阶段指引执行 land skill。
 
-## State Skills
+## 阶段技能路由
 
-- `agent.state_skills` 是状态扩展点；key 必须与 Linear state 名一致，value 必须是当前 repo root 下的 `SKILL.md` 相对路径。
-- Go orchestrator 不根据 skill 名硬编码行为；它只负责在进入对应 state 时打开并遵循配置的 skill。
-- 新增阶段时，先在 Linear 创建同名状态，再在 `agent.state_skills` 添加映射，不要为每个新阶段修改 Go 代码。
+- 本 Workflow 正文是默认注入给 agent 的总 SOP；阶段级 skill 只作为该 SOP 指定的执行材料。
+- `Merging` 阶段固定读取 `.codex/skills/land/SKILL.md`，打开并遵循其中步骤。
+- 新增阶段时，先在 Linear 创建同名状态，再在本 Workflow 的状态映射和对应步骤里写清楚该阶段使用哪个 skill。
 
 ## 状态映射
 
@@ -148,7 +146,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - `In Progress`：正在实现。
 - `AI Review`：由 `review_policy.mode` 自动触发，或由人工从 `Human Review` 手动触发；复核通过后按 review policy 路由，复核失败时按 `on_ai_fail` 处理。
 - `Human Review`：实现已提交并验证，等待人工批准；这是默认 review 终点。
-- `Merging`：人工已批准；读取 `agent.state_skills.Merging`，执行对应 skill flow，不要把此状态硬编码成某一种 merge 命令。
+- `Merging`：人工已批准；打开并遵循 `.codex/skills/land/SKILL.md`，land 已存在的 PR。不要在该状态创建新 PR；如果 PR 缺失，记录 blocker 并停止。
 - `Rework`：reviewer 要求修改；需要重新计划和实现。
 - `Done`：终态；无需继续操作。
 
@@ -163,7 +161,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - `In Progress`：从当前 scratchpad comment 继续执行。
    - `AI Review`：执行 AI Review；通过后回到 `Human Review`，失败时进入 `Rework` 或记录 blocker。
    - `Human Review`：等待并轮询人工决策或 review 更新；不要自行改代码或合并。
-   - `Merging`：进入后读取 `agent.state_skills.Merging`，打开并遵循对应 `SKILL.md`。
+   - `Merging`：进入后打开并遵循 `.codex/skills/land/SKILL.md`；该状态要求 PR 已存在。
    - `Rework`：进入 rework 流程。
    - `Done`：什么都不做并退出。
 4. 检查当前分支是否已有 PR，以及 PR 是否已关闭。
@@ -255,7 +253,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - 如果触及 app，运行 `launch-app` 验证，并在 handoff 前通过 `github-pr-media` 捕获或上传媒体。
 6. 重新检查全部 acceptance criteria，补齐 gap。
 7. 每次 `git push` 前，先运行当前 scope 要求的验证并确认通过；如果失败，修复并重跑直到绿色，然后 commit 并 push。
-8. 把 PR URL 关联到 issue。优先使用 attachment；如果 attachment 不可用，再写入 workpad。
+8. 使用 `push` skill 发布分支并创建或更新 PR，然后把 PR URL 关联到 issue。优先使用 attachment；如果 attachment 不可用，再写入 workpad。
    - 确保 GitHub PR 有 `symphony` label。
    - PR 标题和正文必须是中文；如果仓库没有 PR 模板，按 `.codex/skills/push/SKILL.md` 的中文 fallback 结构生成。
 9. 把最新 `origin/main` merge 到当前分支，解决冲突并重跑检查。
@@ -285,8 +283,8 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 2. 按需轮询更新，包括人类和 bot 的 GitHub PR review comments。
 3. 如果 review feedback 要求改动，移动 issue 到 `Rework` 并执行 rework 流程。
 4. 如果批准，人类会把 issue 移动到 `Merging`。
-5. 当 issue 处于 `Merging`，读取 `agent.state_skills.Merging`，打开并遵循对应 `SKILL.md`，直到落地完成或记录 blocker。
-6. merge 完成后，移动 issue 到 `Done`。
+5. 当 issue 处于 `Merging`，打开并遵循 `.codex/skills/land/SKILL.md`；此阶段只 land 已存在 PR，并在 merge 后回拉 root checkout。
+6. merge skill 成功返回后，orchestrator 清理 issue worktree 并移动 issue 到 `Done`。
 
 ## Step 4：Rework 处理
 
@@ -307,6 +305,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 最新 commit 的 validation/tests 绿色。
 - PR feedback sweep 完成，且没有 actionable comments。
 - PR checks 绿色，分支已 push，PR 已关联到 issue。
+- 进入 `Human Review` 前 PR 必须已经存在；`Merging` 阶段不补建 PR。
 - 必要 PR metadata 已存在，例如 `symphony` label。
 - PR 标题、PR 正文和所有新增 GitHub 评论均为中文。
 - 如果触及 app，runtime validation/media 要求已完成。

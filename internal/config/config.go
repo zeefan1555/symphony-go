@@ -20,7 +20,7 @@ const (
 	ErrInvalidMaxRetryBackoff    = "invalid_max_retry_backoff"
 	ErrInvalidPollingInterval    = "invalid_polling_interval"
 	ErrInvalidReviewPolicy       = "invalid_review_policy"
-	ErrInvalidMergePolicy        = "invalid_merge_policy"
+	ErrInvalidStateSkill         = "invalid_state_skill"
 )
 
 type Error struct {
@@ -197,14 +197,6 @@ func applyStateSkillDefaults(agent *types.AgentConfig) {
 	if agent.StateSkills == nil {
 		agent.StateSkills = map[string]string{}
 	}
-	if strings.TrimSpace(agent.StateSkills["Merging"]) != "" {
-		return
-	}
-	if legacy := strings.TrimSpace(agent.MergePolicy.Skill); legacy != "" {
-		agent.StateSkills["Merging"] = legacy
-		return
-	}
-	agent.StateSkills["Merging"] = ".codex/skills/local-merge/SKILL.md"
 }
 
 func validateReviewPolicy(policy types.ReviewPolicyConfig) error {
@@ -225,9 +217,6 @@ func validateStateSkills(agent types.AgentConfig) error {
 			return err
 		}
 	}
-	if err := validateSkillPath("agent.merge_policy.skill", agent.MergePolicy.Skill, true); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -238,17 +227,17 @@ func validateSkillPath(field, value string, allowEmpty bool) error {
 		if allowEmpty {
 			return nil
 		}
-		return &Error{Code: ErrInvalidMergePolicy, Message: field + " must be a repo-root relative SKILL.md path"}
+		return &Error{Code: ErrInvalidStateSkill, Message: field + " must be a repo-root relative SKILL.md path"}
 	}
 	if strings.ContainsAny(raw, "\x00\r\n") || filepath.IsAbs(path) {
-		return &Error{Code: ErrInvalidMergePolicy, Message: field + " must be a repo-root relative SKILL.md path"}
+		return &Error{Code: ErrInvalidStateSkill, Message: field + " must be a repo-root relative SKILL.md path"}
 	}
 	clean := filepath.Clean(path)
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return &Error{Code: ErrInvalidMergePolicy, Message: field + " must stay under the repo root"}
+		return &Error{Code: ErrInvalidStateSkill, Message: field + " must stay under the repo root"}
 	}
 	if !strings.ContainsAny(path, `/\`) || filepath.Base(clean) != "SKILL.md" {
-		return &Error{Code: ErrInvalidMergePolicy, Message: field + " must be a repo-root relative SKILL.md path"}
+		return &Error{Code: ErrInvalidStateSkill, Message: field + " must be a repo-root relative SKILL.md path"}
 	}
 	return nil
 }

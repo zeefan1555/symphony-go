@@ -73,7 +73,6 @@ type AgentConfig struct {
 	MaxConcurrentAgentsByState map[string]int     `yaml:"max_concurrent_agents_by_state"`
 	ReviewPolicy               ReviewPolicyConfig `yaml:"review_policy"`
 	StateSkills                map[string]string  `yaml:"state_skills"`
-	MergePolicy                MergePolicyConfig  `yaml:"merge_policy"`
 	AIReview                   AIReviewConfig     `yaml:"ai_review"`
 }
 
@@ -82,11 +81,6 @@ type ReviewPolicyConfig struct {
 	AllowManualAIReview  bool     `yaml:"allow_manual_ai_review"`
 	OnAIFail             string   `yaml:"on_ai_fail"`
 	ExpectedChangedFiles []string `yaml:"expected_changed_files"`
-}
-
-type MergePolicyConfig struct {
-	Mode  string `yaml:"mode"`
-	Skill string `yaml:"skill"`
 }
 
 // AIReviewConfig is kept for legacy workflow files. Prefer ReviewPolicyConfig.

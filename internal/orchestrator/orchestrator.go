@@ -337,21 +337,22 @@ func (o *Orchestrator) popPendingTerminalCleanup(issueID string) (terminalCleanu
 	return cleanup, ok
 }
 
-func (o *Orchestrator) cleanupWorkspace(ctx context.Context, manager *workspace.Manager, issue types.Issue, entry observability.RunningEntry) {
+func (o *Orchestrator) cleanupWorkspace(ctx context.Context, manager *workspace.Manager, issue types.Issue, entry observability.RunningEntry) error {
 	path := entry.WorkspacePath
 	if path == "" {
 		var err error
 		path, err = manager.PathForIssue(issue)
 		if err != nil {
 			o.logIssue(issue, "workspace_cleanup_failed", err.Error(), nil)
-			return
+			return err
 		}
 	}
 	if err := manager.Remove(workspace.WithHookIssue(ctx, issue), path); err != nil {
 		o.logIssue(issue, "workspace_cleanup_failed", err.Error(), map[string]any{"workspace_path": path})
-		return
+		return err
 	}
 	o.logIssue(issue, "workspace_cleaned", "workspace removed", map[string]any{"workspace_path": path})
+	return nil
 }
 
 func waitForDispatched(ctx context.Context, dispatched []<-chan struct{}) error {
@@ -1026,7 +1027,6 @@ const (
 	reviewPolicyAuto  = "auto"
 	aiFailRework      = "rework"
 	aiFailHold        = "hold"
-	defaultMergeSkill = ".codex/skills/local-merge/SKILL.md"
 )
 
 type reviewPolicy struct {
@@ -1164,6 +1164,9 @@ func (o *Orchestrator) runStateSkill(ctx context.Context, rt runtimeSnapshot, is
 		"duration_ms": duration.Milliseconds(),
 	})
 	if strings.EqualFold(issue.State, "Merging") {
+		if err := o.cleanupWorkspace(ctx, rt.workspace, issue, observability.RunningEntry{WorkspacePath: workspacePath}); err != nil {
+			return err
+		}
 		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Done"); err != nil {
 			return err
 		}
@@ -1174,12 +1177,6 @@ func (o *Orchestrator) runStateSkill(ctx context.Context, rt runtimeSnapshot, is
 
 func effectiveStateSkill(agent types.AgentConfig, state string) stateSkill {
 	path := configuredStateSkillPath(agent, state)
-	if path == "" && strings.EqualFold(state, "Merging") {
-		path = strings.TrimSpace(agent.MergePolicy.Skill)
-	}
-	if path == "" && strings.EqualFold(state, "Merging") {
-		path = defaultMergeSkill
-	}
 	return stateSkill{state: state, path: path}
 }
 
@@ -1194,9 +1191,6 @@ func configuredStateSkillPath(agent types.AgentConfig, state string) string {
 
 func absoluteSkillPath(repoRoot, skillPath string) string {
 	skillPath = strings.TrimSpace(skillPath)
-	if skillPath == "" {
-		skillPath = defaultMergeSkill
-	}
 	return filepath.Clean(filepath.Join(repoRoot, skillPath))
 }
 

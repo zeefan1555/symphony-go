@@ -1415,6 +1415,9 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 						OnAIFail:             "rework",
 						ExpectedChangedFiles: []string{"README.md"},
 					},
+					StateSkills: map[string]string{
+						"Merging": ".codex/skills/land/SKILL.md",
+					},
 				},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
@@ -1439,10 +1442,10 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	if got := runner.requests[0].WorkspacePath; !strings.HasSuffix(got, filepath.Join(".worktrees", issue.Identifier)) {
 		t.Fatalf("merge workspace = %q, want issue worktree", got)
 	}
-	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, ".codex/skills/local-merge/SKILL.md") {
-		t.Fatalf("merge prompt missing local-merge skill:\n%s", prompt)
+	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, ".codex/skills/land/SKILL.md") {
+		t.Fatalf("merge prompt missing land skill:\n%s", prompt)
 	}
-	if !strings.Contains(tracker.workpad, "local-merge") {
+	if !strings.Contains(tracker.workpad, "land") {
 		t.Fatalf("workpad missing merge completion:\n%s", tracker.workpad)
 	}
 	if len(tracker.workpads) < 4 {
@@ -1483,24 +1486,24 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	}
 }
 
-func TestMergingStateUsesConfiguredPRSkillPath(t *testing.T) {
+func TestMergingStateUsesConfiguredStateSkillPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repoRoot := t.TempDir()
 	issue := types.Issue{
 		ID:         "issue-id",
-		Identifier: "ZEE-PR-MERGE",
-		Title:      "pr merge smoke",
+		Identifier: "ZEE-LAND-MERGE",
+		Title:      "land merge smoke",
 		State:      "Merging",
 	}
 	tracker := &recordingTracker{issue: issue}
-	runner := &recordingRunner{result: codex.SessionResult{SessionID: "pr-session"}}
+	runner := &recordingRunner{result: codex.SessionResult{SessionID: "land-session"}}
 	o := New(Options{
 		Workflow: &types.Workflow{
 			Config: types.Config{
 				Agent: types.AgentConfig{
-					StateSkills: map[string]string{"Merging": ".codex/skills/pr/SKILL.md"},
+					StateSkills: map[string]string{"Merging": ".codex/skills/land/SKILL.md"},
 				},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
@@ -1522,11 +1525,100 @@ func TestMergingStateUsesConfiguredPRSkillPath(t *testing.T) {
 	if len(runner.requests) != 1 {
 		t.Fatalf("merge runner calls = %d, want 1", len(runner.requests))
 	}
-	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, filepath.Join(repoRoot, ".codex/skills/pr/SKILL.md")) {
-		t.Fatalf("merge prompt missing pr skill:\n%s", prompt)
+	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, filepath.Join(repoRoot, ".codex/skills/land/SKILL.md")) {
+		t.Fatalf("merge prompt missing land skill:\n%s", prompt)
 	}
-	if !strings.Contains(tracker.workpad, "pr") {
-		t.Fatalf("workpad missing pr skill:\n%s", tracker.workpad)
+	if !strings.Contains(tracker.workpad, "land") {
+		t.Fatalf("workpad missing land skill:\n%s", tracker.workpad)
+	}
+}
+
+func TestMergingStateWithoutStateSkillUsesWorkflowPrompt(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-NO-MERGE-SKILL",
+		Title:      "no merge skill",
+		State:      "Merging",
+	}
+	tracker := &recordingTracker{issue: issue}
+	runner := &recordingRunner{}
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config:         types.Config{},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), ".worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+	if len(runner.requests) != 1 {
+		t.Fatalf("runner calls = %d, want 1", len(runner.requests))
+	}
+	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, "work on ZEE-NO-MERGE-SKILL") {
+		t.Fatalf("runner prompt = %q, want rendered workflow prompt", prompt)
+	}
+	if len(tracker.states) != 0 {
+		t.Fatalf("state updates = %#v, want none", tracker.states)
+	}
+}
+
+func TestMergingStateCleansWorkspaceThroughManager(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repoRoot := t.TempDir()
+	cleanupMarker := filepath.Join(repoRoot, "cleanup.txt")
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-PR-CLEAN",
+		Title:      "pr cleanup smoke",
+		State:      "Merging",
+	}
+	hooks := gitSeedHook()
+	hooks.BeforeRemove = fmt.Sprintf("printf cleanup > %s", shellQuote(cleanupMarker))
+	hooks.TimeoutMS = 5000
+	tracker := &recordingTracker{issue: issue}
+	runner := &recordingRunner{result: codex.SessionResult{SessionID: "pr-session"}}
+	workspaceManager := workspace.New(filepath.Join(repoRoot, ".worktrees"), hooks)
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Agent: types.AgentConfig{
+					StateSkills: map[string]string{"Merging": ".codex/skills/land/SKILL.md"},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:     tracker,
+		Workspace:   workspaceManager,
+		Runner:      runner,
+		RepoRoot:    repoRoot,
+		MergeTarget: "main",
+	})
+
+	workspacePath, err := workspaceManager.PathForIssue(issue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if _, err := os.Stat(workspacePath); !os.IsNotExist(err) {
+		t.Fatalf("workspace after merging skill err = %v, want removed", err)
+	}
+	if got, err := os.ReadFile(cleanupMarker); err != nil || string(got) != "cleanup" {
+		t.Fatalf("before_remove marker = %q, err=%v", got, err)
+	}
+	if got, want := tracker.states, []string{"Done"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
 }
 

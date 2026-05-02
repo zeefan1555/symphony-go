@@ -15,6 +15,7 @@ This skill is scoped to `/Users/bytedance/symphony-go`.
 - Ensure the PR is conflict-free with main.
 - Keep CI green and fix failures when they occur.
 - Squash-merge the PR once checks pass.
+- Pull the merged result back into the root `main` checkout.
 - Keep GitHub PR comments, review replies, PR title/body updates, and root
   status comments in Chinese. Prefix agent-authored GitHub comments with
   `[codex]`.
@@ -22,11 +23,30 @@ This skill is scoped to `/Users/bytedance/symphony-go`.
   unless blocked.
 - No need to delete remote branches after merge; the repo auto-deletes head
   branches.
+- Do not remove the issue worktree in this skill. Symphony Go removes it through
+  the workspace manager after the Merging skill succeeds.
 
 ## Preconditions
 
 - `gh` CLI is authenticated.
 - You are on the PR branch with a clean working tree.
+- A PR already exists for the current branch. PR creation belongs to the
+  implementation/push stage before Human Review, not to Merging.
+
+## Primary Command
+
+Run from the issue worktree branch:
+
+```sh
+repo_root=/Users/bytedance/symphony-go
+"$repo_root/.codex/skills/land/scripts/land_pr_flow.sh" \
+  --repo-root "$repo_root" \
+  --target main
+```
+
+The script fails if no open PR exists for the current branch. On success it
+prints the PR URL, merge commit, root checkout status, and notes that worktree
+cleanup is owned by the orchestrator. Copy those facts into the Linear workpad.
 
 ## Steps
 
@@ -42,22 +62,29 @@ This skill is scoped to `/Users/bytedance/symphony-go`.
 7. Watch checks until complete.
 8. If checks fail, pull logs, fix the issue, commit with the `commit` skill,
    push with the `push` skill, and re-run checks.
-9. When all checks are green and review feedback is addressed, squash-merge and
-   delete the branch using the PR title/body for the merge subject/body.
-10. **Context guard:** Before implementing review feedback, confirm it does not
+9. When all checks are green and review feedback is addressed, squash-merge
+   using the PR title/body for the merge subject/body.
+10. Fast-forward the root checkout after merge:
+    - fetch `origin/main`;
+    - clear only root runtime copies that are byte-for-byte identical to
+      `origin/main`;
+    - `git -C /Users/bytedance/symphony-go pull --ff-only origin main`.
+11. Return success so the orchestrator can remove `.worktrees/<ISSUE>` and move
+    Linear to `Done`.
+12. **Context guard:** Before implementing review feedback, confirm it does not
     conflict with the user’s stated intent or task context. If it conflicts,
     respond inline with a justification and ask the user before changing code.
-11. **Pushback template:** When disagreeing, reply inline in Chinese with:
+13. **Pushback template:** When disagreeing, reply inline in Chinese with:
     acknowledge + rationale + offer alternative.
-12. **Ambiguity gate:** When ambiguity blocks progress, use the clarification
+14. **Ambiguity gate:** When ambiguity blocks progress, use the clarification
     flow (assign PR to current GH user, mention them, wait for response). Do not
     implement until ambiguity is resolved.
     - If you are confident you know better than the reviewer, you may proceed
       without asking the user, but reply inline with your rationale.
-13. **Per-comment mode:** For each review comment, choose one of: accept,
+15. **Per-comment mode:** For each review comment, choose one of: accept,
     clarify, or push back. Reply inline (or in the issue thread for Codex
     reviews) stating the mode before changing code.
-14. **Reply before change:** Always respond with intended action before pushing
+16. **Reply before change:** Always respond with intended action before pushing
     code changes (inline for review comments, issue thread for Codex reviews).
 
 ## Commands
@@ -101,6 +128,11 @@ fi
 
 # Squash-merge (remote branches auto-delete on merge in this repo)
 gh pr merge --squash --subject "$pr_title" --body "$pr_body"
+
+# Sync root checkout after merge. If root has runtime copies of the same merged
+# changes, clear only byte-identical paths before pulling.
+git -C /Users/bytedance/symphony-go fetch origin main
+git -C /Users/bytedance/symphony-go pull --ff-only origin main
 ```
 
 ## Async Watch Helper
@@ -133,6 +165,10 @@ Exit codes:
   remediation is to fetch latest `origin/main`, merge, force-push, and rerun CI.
 - If mergeability is `UNKNOWN`, wait and re-check.
 - Do not merge while review comments (human or Codex review) are outstanding.
+- If no PR exists for the branch, stop and record a blocker. Do not create a PR
+  in Merging; route the issue back to implementation/push.
+- If root checkout has divergent local edits after PR merge, stop and record the
+  exact paths. Do not reset or delete unrelated root edits.
 - Codex review jobs retry on failure and are non-blocking; use the presence of
   `## Codex Review — <persona>` issue comments (not job status) as the signal
   that review feedback is available.

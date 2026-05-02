@@ -7,13 +7,19 @@ description: Use when Symphony Go reaches Merging for a GitHub PR based merge fl
 
 This skill is scoped to `/Users/bytedance/symphony-go`.
 
+Use the bundled script for the mechanical merge flow. The agent's job is to
+prepare the PR title/body and inspect blockers; the script owns the ordered
+commands through root pull. The Go orchestrator owns issue worktree cleanup
+through the configured workspace hooks after this skill returns successfully.
+
 ## Goals
 
 - Turn the current issue worktree branch into a GitHub PR if one does not exist.
 - Keep the branch, PR title, PR body, and visible comments up to date in Chinese.
 - Wait for checks and review feedback, then squash-merge the PR.
 - Pull the merged result back into the root `main` checkout.
-- Remove the issue worktree only after the merge is visible on `origin/main`.
+- Leave issue worktree cleanup to the Go orchestrator after the merge is visible
+  on `origin/main`.
 
 Do not delegate to another repo skill. This file is the complete PR merge flow.
 
@@ -23,7 +29,41 @@ Do not delegate to another repo skill. This file is the complete PR merge flow.
 - `gh` is authenticated for the repo.
 - The merge target is `main` unless the orchestrator prompt says otherwise.
 
-## Steps
+## Primary Command
+
+Run from the issue worktree, after reading the current diff and choosing a
+Chinese PR title/body:
+
+```sh
+repo_root=/Users/bytedance/symphony-go
+tmp_body=$(mktemp)
+cat > "$tmp_body" <<'EOF'
+## 摘要
+
+- <用中文概括本次变更>
+
+## 验证
+
+- `git diff --check`
+- `make build`
+
+Linear: <ISSUE>
+EOF
+
+"$repo_root/.codex/skills/pr/scripts/pr_merge_flow.sh" \
+  --repo-root "$repo_root" \
+  --target main \
+  --commit-message "<type(scope): 中文提交信息>" \
+  --pr-title "<中文 PR 标题>" \
+  --pr-body-file "$tmp_body"
+```
+
+The script prints the PR URL, merge commit, and root checkout status. Copy those
+facts into the persistent Linear workpad in Chinese. After the script finishes,
+do not remove the issue worktree manually; return success so the orchestrator can
+run the configured workspace cleanup path.
+
+## Script Flow
 
 1. Identify context:
    - `branch=$(git branch --show-current)`
@@ -64,13 +104,16 @@ Do not delegate to another repo skill. This file is the complete PR merge flow.
      byte-for-byte identical to `origin/main`. Stop on any divergent local edit.
    - `git -C "$repo_root" switch main`
    - `git -C "$repo_root" pull --ff-only origin main`
-9. Remove the issue worktree:
-   - `git worktree remove "$issue_worktree"`.
-   - If removal refuses because of local changes, stop and report
-     `git -C "$issue_worktree" status --short --branch` and
-     `git -C "$issue_worktree" diff --stat`.
-10. Report evidence in the workpad: PR URL, merge commit/result, root pull
-    result, and worktree cleanup result.
+9. Report evidence in the workpad: PR URL, merge commit/result, and root pull
+   result. Do not remove the issue worktree in this skill; cleanup is owned by
+   the orchestrator workspace manager.
+
+## Manual Fallback
+
+Use the step-by-step commands manually only if
+`.codex/skills/pr/scripts/pr_merge_flow.sh` is missing, not executable, or exits
+before creating side effects. If the script exits after creating or merging a
+PR, inspect the current PR/root/worktree state before retrying.
 
 ## Root Checkout Safety
 
@@ -78,39 +121,12 @@ The root checkout may contain temporary runtime copies of the same changes that
 were just merged. Before pulling, clear only files that exactly match
 `origin/main`; this avoids deleting unrelated user edits.
 
-```sh
-repo_root=/Users/bytedance/symphony-go
-git -C "$repo_root" fetch origin main
-
-dirty=$(git -C "$repo_root" status --porcelain)
-if [ -n "$dirty" ]; then
-  printf '%s\n' "$dirty" | while IFS= read -r line; do
-    path=${line#???}
-    case "$line" in
-      '?? '*)
-        if git -C "$repo_root" show "origin/main:$path" >/tmp/pr-origin-file 2>/dev/null \
-          && cmp -s "$repo_root/$path" /tmp/pr-origin-file; then
-          rm -f "$repo_root/$path"
-        else
-          echo "root checkout has divergent untracked file: $path" >&2
-          exit 1
-        fi
-        ;;
-      *)
-        if git -C "$repo_root" diff --quiet origin/main -- "$path"; then
-          git -C "$repo_root" restore --staged --worktree -- "$path"
-        else
-          echo "root checkout has divergent local edit: $path" >&2
-          exit 1
-        fi
-        ;;
-    esac
-  done
-fi
-
-git -C "$repo_root" switch main
-git -C "$repo_root" pull --ff-only origin main
-```
+The bundled script implements this safety check, including untracked
+directories. Manual fallback must use the same rule: for tracked paths, compare
+the working tree to `origin/main` before `git restore`; for untracked
+directories, compare every contained file with `git show origin/main:<path>`
+before deleting it. Never delete a whole untracked directory from only the
+top-level `?? dir/` status line.
 
 ## Failure Handling
 
@@ -121,3 +137,5 @@ git -C "$repo_root" pull --ff-only origin main
   the issue worktree, rerun validation, commit, and push.
 - Do not force-remove worktrees or reset the root checkout unless every affected
   path has been proven identical to `origin/main`.
+- If `gh pr checks --watch` says `no checks reported`, treat it as no remote
+  checks to wait for; rely on the local validation already run by the script.
