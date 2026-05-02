@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,7 +13,6 @@ import (
 	"github.com/zeefan1555/symphony-go/internal/logging"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/types"
-	"github.com/zeefan1555/symphony-go/internal/workflow"
 	"github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
@@ -31,18 +29,10 @@ type AgentRunner interface {
 }
 
 const (
-	continuationPromptText        = "Continue working on the same issue. Re-check the current workspace state, finish any remaining acceptance criteria from the issue, run the smallest relevant verification, and report concrete progress or blockers. Do not repeat completed work."
-	mergingContinuationPromptText = "Continue in the same reviewer session and execute the merge protocol for this issue. Re-check the current workspace and issue state, perform the required merge steps, run the smallest relevant verification, move the issue to Done only after the merge is complete, and report concrete results or blockers."
+	continuationPromptText = "Continue working on the same issue. Re-check the current workspace state, finish any remaining acceptance criteria from the issue, run the smallest relevant verification, and report concrete progress or blockers. Do not repeat completed work."
 )
 
 var errNoRetryNeeded = errors.New("no retry needed")
-
-type agentPhase string
-
-const (
-	phaseImplementer agentPhase = "implementer"
-	phaseReviewer    agentPhase = "reviewer"
-)
 
 type WorkflowReloader interface {
 	Current() *types.Workflow
@@ -803,199 +793,6 @@ func (o *Orchestrator) runAgent(ctx context.Context, issue types.Issue, attempt 
 	return err
 }
 
-func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, issue types.Issue, attempt int) error {
-	if isTerminal(issue.State, rt.workflow.Config.Tracker.TerminalStates) {
-		return nil
-	}
-	switch issue.State {
-	case "Todo":
-		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "In Progress"); err != nil {
-			return err
-		}
-		issue.State = "In Progress"
-		o.logIssue(issue, "state_changed", "Todo -> In Progress", nil)
-	}
-	switch issue.State {
-	case "Human Review", "In Review":
-		o.logIssue(issue, "waiting_for_review", "issue is waiting for human review", nil)
-		return errNoRetryNeeded
-	case "AI Review", "Merging":
-		return o.runPhaseAgent(ctx, rt, issue, attempt, phaseReviewer)
-	}
-	return o.runPhaseAgent(ctx, rt, issue, attempt, phaseImplementer)
-}
-
-func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, issue types.Issue, attempt int, phase agentPhase) error {
-	switch phase {
-	case phaseImplementer, phaseReviewer:
-	default:
-		return fmt.Errorf("unknown agent phase %q", phase)
-	}
-	o.setRunning(observability.RunningEntry{
-		IssueID:         issue.ID,
-		IssueIdentifier: issue.Identifier,
-		State:           issue.State,
-		TurnCount:       1,
-		StartedAt:       time.Now(),
-		LastEvent:       "preparing workspace",
-		LastMessage:     "preparing workspace",
-	})
-	hookCtx := workspace.WithHookIssue(ctx, issue)
-	workspacePath, _, err := rt.workspace.Ensure(hookCtx, issue)
-	if err != nil {
-		o.removeRunning(issue.ID)
-		return err
-	}
-	defer func() {
-		if err := rt.workspace.AfterRun(workspace.WithHookIssue(context.Background(), issue), workspacePath); err != nil {
-			o.logIssue(issue, "after_run_hook_failed", err.Error(), nil)
-		}
-	}()
-	if err := rt.workspace.BeforeRun(hookCtx, workspacePath); err != nil {
-		o.removeRunning(issue.ID)
-		return err
-	}
-	maxTurns := rt.workflow.Config.Agent.MaxTurns
-	var renderAttempt *int
-	if attempt > 0 {
-		value := attempt
-		renderAttempt = &value
-	}
-	prompt, err := workflow.Render(rt.workflow.PromptTemplate, issue, renderAttempt)
-	if err != nil {
-		return err
-	}
-	o.setRunning(observability.RunningEntry{
-		IssueID:         issue.ID,
-		IssueIdentifier: issue.Identifier,
-		State:           issue.State,
-		WorkspacePath:   workspacePath,
-		TurnCount:       1,
-		StartedAt:       time.Now(),
-	})
-	var nextIssue *types.Issue
-	maxTurnsReached := false
-	noRetryNeeded := false
-	request := codex.SessionRequest{
-		WorkspacePath: workspacePath,
-		Issue:         issue,
-		Prompts:       []codex.TurnPrompt{{Text: prompt, Attempt: renderAttempt}},
-	}
-	request.AfterTurn = func(ctx context.Context, result codex.Result, turn int) (codex.TurnPrompt, bool, error) {
-		o.logIssue(issue, "turn_completed", "Codex turn completed", map[string]any{"session_id": result.SessionID})
-		refreshed, err := rt.tracker.FetchIssue(ctx, issue.ID)
-		if err != nil {
-			return codex.TurnPrompt{}, false, err
-		}
-		if !isActive(refreshed.State, rt.workflow.Config.Tracker.ActiveStates) || isTerminal(refreshed.State, rt.workflow.Config.Tracker.TerminalStates) {
-			noRetryNeeded = true
-			return codex.TurnPrompt{}, false, nil
-		}
-		if refreshed.State == "Human Review" || refreshed.State == "In Review" || refreshed.State == "AI Review" {
-			nextIssue = &refreshed
-			return codex.TurnPrompt{}, false, nil
-		}
-		if turn >= maxTurns {
-			maxTurnsReached = true
-			return codex.TurnPrompt{}, false, nil
-		}
-		if refreshed.State == "Merging" {
-			if phase != phaseReviewer {
-				nextIssue = &refreshed
-				return codex.TurnPrompt{}, false, nil
-			}
-			issue = refreshed
-			o.setRunning(observability.RunningEntry{
-				IssueID:         issue.ID,
-				IssueIdentifier: issue.Identifier,
-				State:           issue.State,
-				WorkspacePath:   workspacePath,
-				TurnCount:       turn + 1,
-				StartedAt:       time.Now(),
-			})
-			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true}, true, nil
-		}
-		issue = refreshed
-		o.setRunning(observability.RunningEntry{
-			IssueID:         issue.ID,
-			IssueIdentifier: issue.Identifier,
-			State:           issue.State,
-			WorkspacePath:   workspacePath,
-			TurnCount:       turn + 1,
-			StartedAt:       time.Now(),
-		})
-		return codex.TurnPrompt{Text: continuationPromptText, Continuation: true}, true, nil
-	}
-	_, err = rt.runner.RunSession(ctx, request, func(event codex.Event) {
-		o.updateRunningFromEvent(issue.ID, event)
-		o.logIssue(issue, "codex_event", event.Name, event.Payload)
-	})
-	o.removeRunning(issue.ID)
-	if err != nil {
-		return err
-	}
-	if nextIssue != nil {
-		if nextIssue.State == "Human Review" || nextIssue.State == "In Review" {
-			o.logIssue(*nextIssue, "waiting_for_review", "issue is waiting for human review", nil)
-			return errNoRetryNeeded
-		}
-		if nextIssue.State == "AI Review" || nextIssue.State == "Rework" {
-			return errNoRetryNeeded
-		}
-		return o.runAgentWith(ctx, rt, *nextIssue, attempt)
-	}
-	if maxTurnsReached {
-		return fmt.Errorf("reached max turns for %s while issue stayed active", issue.Identifier)
-	}
-	if noRetryNeeded {
-		return errNoRetryNeeded
-	}
-	return nil
-}
-
-const (
-	reviewPolicyHuman = "human"
-	reviewPolicyAI    = "ai"
-	reviewPolicyAuto  = "auto"
-)
-
-type reviewPolicy struct {
-	mode                string
-	allowManualAIReview bool
-}
-
-func effectiveReviewPolicy(agent types.AgentConfig) reviewPolicy {
-	cfg := agent.ReviewPolicy
-	mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
-	if mode == "" {
-		return legacyReviewPolicy(agent.AIReview)
-	}
-	if mode != reviewPolicyAI && mode != reviewPolicyAuto {
-		mode = reviewPolicyHuman
-	}
-	return reviewPolicy{
-		mode:                mode,
-		allowManualAIReview: cfg.AllowManualAIReview,
-	}
-}
-
-func legacyReviewPolicy(review types.AIReviewConfig) reviewPolicy {
-	policy := reviewPolicy{
-		mode: reviewPolicyHuman,
-	}
-	if review.Enabled {
-		policy.mode = reviewPolicyAI
-		if review.AutoMerge {
-			policy.mode = reviewPolicyAuto
-		}
-	}
-	return policy
-}
-
-func (p reviewPolicy) allowsAIReviewState() bool {
-	return p.mode == reviewPolicyAI || p.mode == reviewPolicyAuto || p.allowManualAIReview
-}
-
 func logPreview(value string, max int) string {
 	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
 	return truncateRunes(value, max)
@@ -1327,14 +1124,4 @@ func effectiveMergeTarget(opts Options) string {
 
 func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
-}
-
-func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(output), fmt.Errorf("git %s failed: %w: %s", strings.Join(args, " "), err, string(output))
-	}
-	return string(output), nil
 }
