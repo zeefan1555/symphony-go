@@ -392,7 +392,7 @@ func TestWorkerNormalExitSchedulesContinuationRetry(t *testing.T) {
 		},
 		Tracker:   &snapshotTracker{issue: issue},
 		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
-		Runner:    noCommitRunner{},
+		Runner:    &recordingRunner{},
 		NewTimer:  timerFactory,
 	})
 
@@ -409,7 +409,7 @@ func TestWorkerNormalExitSchedulesContinuationRetry(t *testing.T) {
 	}
 }
 
-func TestWorkerHandoffDoesNotEnterRetryQueue(t *testing.T) {
+func TestWorkerTurnRefreshDoesNotAutoHandoffOrEnterRetryQueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -439,8 +439,8 @@ func TestWorkerHandoffDoesNotEnterRetryQueue(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatalf("timed out waiting for worker exit: %v", ctx.Err())
 	}
-	if tracker.updatedState != "Human Review" {
-		t.Fatalf("updated state = %q, want Human Review", tracker.updatedState)
+	if tracker.updatedState != "" {
+		t.Fatalf("updated state = %q, want no automatic handoff", tracker.updatedState)
 	}
 	if len(o.Snapshot().Retrying) != 0 {
 		t.Fatalf("retry queue = %#v, want empty after handoff", o.Snapshot().Retrying)
@@ -1273,7 +1273,7 @@ func TestRunAgentContinuesInSameSessionWithoutResendingOriginalPrompt(t *testing
 	}
 }
 
-func TestRunAgentMovesToHumanReviewAfterLocalCommit(t *testing.T) {
+func TestRunAgentDoesNotMoveToHumanReviewAfterLocalCommit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1300,12 +1300,12 @@ func TestRunAgentMovesToHumanReviewAfterLocalCommit(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if tracker.updatedState != "Human Review" {
-		t.Fatalf("updated state = %q, want Human Review", tracker.updatedState)
+	if tracker.updatedState != "" {
+		t.Fatalf("updated state = %q, want no automatic state update", tracker.updatedState)
 	}
 }
 
-func TestRunAgentReviewPolicyAIMovesThroughAIReviewBackToHumanReview(t *testing.T) {
+func TestRunAgentReviewPolicyAIDoesNotMoveThroughAIReviewAfterCommit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1315,7 +1315,7 @@ func TestRunAgentReviewPolicyAIMovesThroughAIReviewBackToHumanReview(t *testing.
 		Title:      "ai review smoke",
 		State:      "In Progress",
 	}
-	tracker := &recordingTracker{issue: issue}
+	tracker := &snapshotTracker{issue: issue}
 	o := New(Options{
 		Workflow: &types.Workflow{
 			Config: types.Config{
@@ -1339,12 +1339,12 @@ func TestRunAgentReviewPolicyAIMovesThroughAIReviewBackToHumanReview(t *testing.
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if got, want := tracker.states, []string{"AI Review", "Human Review"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("state updates = %#v, want %#v", got, want)
+	if tracker.updatedState != "" {
+		t.Fatalf("updated state = %q, want no automatic state update", tracker.updatedState)
 	}
 }
 
-func TestRunAgentReviewPolicyHumanMovesImplementationToHumanReview(t *testing.T) {
+func TestRunAgentReviewPolicyHumanDoesNotMoveImplementationToHumanReview(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1354,7 +1354,7 @@ func TestRunAgentReviewPolicyHumanMovesImplementationToHumanReview(t *testing.T)
 		Title:      "manual ai review smoke",
 		State:      "In Progress",
 	}
-	tracker := &recordingTracker{issue: issue}
+	tracker := &snapshotTracker{issue: issue}
 	o := New(Options{
 		Workflow: &types.Workflow{
 			Config: types.Config{
@@ -1378,8 +1378,8 @@ func TestRunAgentReviewPolicyHumanMovesImplementationToHumanReview(t *testing.T)
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if got, want := tracker.states, []string{"Human Review"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("state updates = %#v, want %#v", got, want)
+	if tracker.updatedState != "" {
+		t.Fatalf("updated state = %q, want no automatic state update", tracker.updatedState)
 	}
 }
 
@@ -1420,11 +1420,10 @@ func TestRunAgentProcessesManualAIReviewWhenPolicyAllows(t *testing.T) {
 	}
 }
 
-func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
+func TestRunAgentReviewPolicyAutoStopsWhenAgentMovesToAIReview(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	repoRoot := t.TempDir()
 	issue := types.Issue{
 		ID:          "issue-id",
 		Identifier:  "ZEE-AI-MERGE",
@@ -1433,7 +1432,6 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 		State:       "In Progress",
 	}
 	tracker := &recordingTracker{issue: issue}
-	runner := &recordingRunner{result: codex.SessionResult{SessionID: "merge-session"}}
 	o := New(Options{
 		Workflow: &types.Workflow{
 			Config: types.Config{
@@ -1449,9 +1447,8 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
 		Tracker:     tracker,
-		Workspace:   workspace.New(filepath.Join(repoRoot, ".worktrees"), gitSeedHook()),
-		Runner:      &sequenceRunner{runners: []AgentRunner{commitRunner{}, runner}},
-		RepoRoot:    repoRoot,
+		Workspace:   workspace.New(filepath.Join(t.TempDir(), ".worktrees"), gitSeedHook()),
+		Runner:      stateChangingRunner{tracker: tracker, state: "AI Review", commit: true},
 		MergeTarget: "main",
 	})
 
@@ -1459,20 +1456,8 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if got, want := tracker.states, []string{"AI Review", "Merging"}; !reflect.DeepEqual(got, want) {
+	if got, want := tracker.states, []string{"AI Review"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
-	}
-	if len(runner.requests) != 1 {
-		t.Fatalf("merging runner calls = %d, want 1", len(runner.requests))
-	}
-	if got := runner.requests[0].WorkspacePath; !strings.HasSuffix(got, filepath.Join(".worktrees", issue.Identifier)) {
-		t.Fatalf("merging workspace = %q, want issue worktree", got)
-	}
-	if prompt := runner.requests[0].Prompts[0].Text; !strings.Contains(prompt, "work on ZEE-AI-MERGE") {
-		t.Fatalf("merging prompt missing rendered workflow prompt:\n%s", prompt)
-	}
-	if prompt := runner.requests[0].Prompts[0].Text; strings.Contains(prompt, ".codex/skills/land/SKILL.md") {
-		t.Fatalf("merging prompt should not be standalone skill prompt:\n%s", prompt)
 	}
 }
 

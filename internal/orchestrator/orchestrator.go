@@ -836,7 +836,6 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 		o.removeRunning(issue.ID)
 		return err
 	}
-	baseHead, _ := gitOutput(ctx, workspacePath, "rev-parse", "--short", "HEAD")
 	maxTurns := rt.workflow.Config.Agent.MaxTurns
 	var renderAttempt *int
 	if attempt > 0 {
@@ -857,6 +856,7 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 	})
 	var nextIssue *types.Issue
 	maxTurnsReached := false
+	noRetryNeeded := false
 	request := codex.SessionRequest{
 		WorkspacePath: workspacePath,
 		Issue:         issue,
@@ -864,24 +864,15 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 	}
 	request.AfterTurn = func(ctx context.Context, result codex.Result, turn int) (codex.TurnPrompt, bool, error) {
 		o.logIssue(issue, "turn_completed", "Codex turn completed", map[string]any{"session_id": result.SessionID})
-		nextState, handoff, handoffErr := o.handoffAfterTurn(ctx, rt, issue, workspacePath, strings.TrimSpace(baseHead), result)
-		if handoffErr != nil {
-			return codex.TurnPrompt{}, false, handoffErr
-		}
-		if handoff {
-			updated := issue
-			updated.State = nextState
-			nextIssue = &updated
-			return codex.TurnPrompt{}, false, nil
-		}
 		refreshed, err := rt.tracker.FetchIssue(ctx, issue.ID)
 		if err != nil {
 			return codex.TurnPrompt{}, false, err
 		}
 		if !isActive(refreshed.State, rt.workflow.Config.Tracker.ActiveStates) || isTerminal(refreshed.State, rt.workflow.Config.Tracker.TerminalStates) {
+			noRetryNeeded = true
 			return codex.TurnPrompt{}, false, nil
 		}
-		if refreshed.State == "Human Review" || refreshed.State == "In Review" || refreshed.State == "Merging" {
+		if refreshed.State == "Human Review" || refreshed.State == "In Review" || refreshed.State == "AI Review" || refreshed.State == "Merging" {
 			nextIssue = &refreshed
 			return codex.TurnPrompt{}, false, nil
 		}
@@ -921,59 +912,10 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 	if maxTurnsReached {
 		return fmt.Errorf("reached max turns for %s while issue stayed active", issue.Identifier)
 	}
+	if noRetryNeeded {
+		return errNoRetryNeeded
+	}
 	return nil
-}
-
-func (o *Orchestrator) handoffAfterTurn(ctx context.Context, rt runtimeSnapshot, issue types.Issue, workspacePath, baseHead string, result codex.Result) (string, bool, error) {
-	head, err := gitOutput(ctx, workspacePath, "rev-parse", "--short", "HEAD")
-	if err != nil {
-		return "", false, fmt.Errorf("read HEAD after Codex turn: %w", err)
-	}
-	head = strings.TrimSpace(head)
-	if head == "" || head == baseHead {
-		return "", false, nil
-	}
-
-	changedFiles, _ := gitOutput(ctx, workspacePath, "show", "--name-only", "--format=", "--no-renames", "HEAD")
-	status, _ := gitOutput(ctx, workspacePath, "status", "--short")
-	policy := effectiveReviewPolicy(rt.workflow.Config.Agent)
-	if policy.runsAIReviewAfterCommit() {
-		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "AI Review"); err != nil {
-			return "", false, err
-		}
-		outcome := o.aiReviewAfterCommit(ctx, policy, issue, workspacePath, baseHead, head, changedFiles, status)
-		o.logIssue(issue, "state_changed", "In Progress -> AI Review", map[string]any{
-			"commit":        head,
-			"changed_files": outcome.ChangedFiles,
-		})
-		if outcome.Passed {
-			nextState := policy.stateAfterPassedAIReview()
-			if err := rt.tracker.UpdateIssueState(ctx, issue.ID, nextState); err != nil {
-				return "", false, err
-			}
-			o.logIssue(issue, "ai_review_completed", "AI Review passed", map[string]any{"commit": head})
-			o.logIssue(issue, "state_changed", "AI Review -> "+nextState, map[string]any{"commit": head})
-			return nextState, true, nil
-		} else if policy.reworkOnAIFail() {
-			if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Rework"); err != nil {
-				return "", false, err
-			}
-			o.logIssue(issue, "ai_review_failed", outcome.Summary, map[string]any{"reasons": outcome.Reasons})
-			o.logIssue(issue, "state_changed", "AI Review -> Rework", map[string]any{"commit": head})
-			return "Rework", true, nil
-		} else {
-			o.logIssue(issue, "ai_review_completed", outcome.Summary, map[string]any{"commit": head, "reasons": outcome.Reasons})
-		}
-		return "AI Review", true, nil
-	}
-	if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Human Review"); err != nil {
-		return "", false, err
-	}
-	o.logIssue(issue, "state_changed", "In Progress -> Human Review", map[string]any{
-		"commit":        head,
-		"changed_files": nonEmptyLines(changedFiles),
-	})
-	return "Human Review", true, nil
 }
 
 func (o *Orchestrator) reviewIssueState(ctx context.Context, rt runtimeSnapshot, issue types.Issue) error {
@@ -1085,10 +1027,6 @@ func legacyReviewPolicy(review types.AIReviewConfig) reviewPolicy {
 
 func (p reviewPolicy) allowsAIReviewState() bool {
 	return p.mode == reviewPolicyAI || p.mode == reviewPolicyAuto || p.allowManualAIReview
-}
-
-func (p reviewPolicy) runsAIReviewAfterCommit() bool {
-	return p.mode == reviewPolicyAI || p.mode == reviewPolicyAuto
 }
 
 func (p reviewPolicy) stateAfterPassedAIReview() string {
