@@ -23,8 +23,8 @@ This skill is scoped to `/Users/bytedance/symphony-go`.
   unless blocked.
 - No need to delete remote branches after merge; the repo auto-deletes head
   branches.
-- Do not remove the issue worktree in this skill. Symphony Go removes it through
-  the workspace manager after the Merging skill succeeds.
+- Do not remove the issue worktree in this skill. Leave cleanup to Symphony Go's
+  terminal-state workspace cleanup or to an explicit operator instruction.
 
 ## Preconditions
 

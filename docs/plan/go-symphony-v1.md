@@ -112,7 +112,7 @@
 
 ### Local Merge Flow
 
-- issue 进入 `Merging` 状态时，使用 `agent.state_skills.Merging` 配置的 skill；未配置时不做默认 local merge。
+- issue 进入 `Merging` 状态时，继续注入 Workflow prompt；由 Workflow 文本定义 local merge 步骤。
 - 将 issue worktree branch 合入当前外层仓库目标分支，初始目标为 `feat_zff`。
 - v1 不创建临时 clone fallback。
 - 如果发生 merge conflict，在 workpad 里记录 blocker，并让 issue 保持可 review 的状态，不隐藏冲突。

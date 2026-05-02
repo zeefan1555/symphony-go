@@ -640,6 +640,11 @@ func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue types.Issue, attem
 		o.releaseIssue(issue.ID)
 		return
 	}
+	if o.cleanupTerminalIssueAfterExit(context.Background(), rt, issue) {
+		o.releaseIssue(issue.ID)
+		o.signalPollNow()
+		return
+	}
 	if errors.Is(err, context.Canceled) {
 		if !o.retryQueued(issue.ID) {
 			o.releaseIssue(issue.ID)
@@ -661,6 +666,24 @@ func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue types.Issue, attem
 		return
 	}
 	o.scheduleRetry(issue, 1, retryContinuation, nil)
+}
+
+func (o *Orchestrator) cleanupTerminalIssueAfterExit(ctx context.Context, rt runtimeSnapshot, issue types.Issue) bool {
+	refreshed, err := rt.tracker.FetchIssue(ctx, issue.ID)
+	if err != nil {
+		o.logIssue(issue, "terminal_cleanup_check_failed", err.Error(), nil)
+		return false
+	}
+	if !isTerminal(refreshed.State, rt.workflow.Config.Tracker.TerminalStates) {
+		return false
+	}
+	if refreshed.Identifier == "" {
+		refreshed.Identifier = issue.Identifier
+	}
+	if err := o.cleanupWorkspace(workspace.WithHookSource(ctx, "worker_exit_terminal_cleanup"), rt.workspace, refreshed, observability.RunningEntry{}); err != nil {
+		return false
+	}
+	return true
 }
 
 func (o *Orchestrator) handleRetry(issueID string) {
@@ -782,12 +805,6 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 		}
 		issue.State = "In Progress"
 		o.logIssue(issue, "state_changed", "Todo -> In Progress", nil)
-	}
-	if skill := effectiveStateSkill(rt.workflow.Config.Agent, issue.State); skill.path != "" {
-		if err := o.runStateSkill(ctx, rt, issue, skill); err != nil {
-			return err
-		}
-		return errNoRetryNeeded
 	}
 	switch issue.State {
 	case "Human Review", "In Review":
@@ -1005,7 +1022,7 @@ func (o *Orchestrator) reviewIssueState(ctx context.Context, rt runtimeSnapshot,
 		o.logIssue(issue, "state_changed", "AI Review -> "+nextState, map[string]any{"commit": strings.TrimSpace(head)})
 		if nextState == "Merging" {
 			issue.State = "Merging"
-			return o.runStateSkill(ctx, rt, issue, effectiveStateSkill(rt.workflow.Config.Agent, issue.State))
+			return o.runAgentWith(ctx, rt, issue, 0)
 		}
 		return errNoRetryNeeded
 	}
@@ -1034,11 +1051,6 @@ type reviewPolicy struct {
 	allowManualAIReview  bool
 	onAIFail             string
 	expectedChangedFiles []string
-}
-
-type stateSkill struct {
-	state string
-	path  string
 }
 
 func effectiveReviewPolicy(agent types.AgentConfig) reviewPolicy {
@@ -1104,116 +1116,6 @@ func (p reviewPolicy) stateAfterPassedAIReview() string {
 
 func (p reviewPolicy) reworkOnAIFail() bool {
 	return p.onAIFail == aiFailRework
-}
-
-func (o *Orchestrator) runStateSkill(ctx context.Context, rt runtimeSnapshot, issue types.Issue, skill stateSkill) error {
-	if rt.runner == nil {
-		return fmt.Errorf("%s skill %s requires an agent runner", skill.state, skill.path)
-	}
-	hookCtx := workspace.WithHookIssue(ctx, issue)
-	workspacePath, _, err := rt.workspace.Ensure(hookCtx, issue)
-	if err != nil {
-		return err
-	}
-	if err := rt.workspace.BeforeRun(hookCtx, workspacePath); err != nil {
-		return err
-	}
-	defer func() {
-		if err := rt.workspace.AfterRun(workspace.WithHookIssue(context.Background(), issue), workspacePath); err != nil {
-			o.logIssue(issue, "after_run_hook_failed", err.Error(), nil)
-		}
-	}()
-	repoRoot := rt.repoRoot
-	if repoRoot == "" {
-		repoRoot = "."
-	}
-	target := rt.mergeTarget
-	if target == "" {
-		target = "main"
-	}
-	started := time.Now()
-	o.logIssue(issue, "merge_skill_started", "starting merge skill", map[string]any{
-		"state":     skill.state,
-		"skill":     skill.path,
-		"target":    target,
-		"workspace": workspacePath,
-	})
-	result, err := rt.runner.RunSession(ctx, codex.SessionRequest{
-		WorkspacePath: workspacePath,
-		Issue:         issue,
-		Prompts: []codex.TurnPrompt{{
-			Text: stateSkillPrompt(issue, skill, repoRoot, workspacePath, target),
-		}},
-	}, func(event codex.Event) {
-		o.updateRunningFromEvent(issue.ID, event)
-		o.logIssue(issue, "codex_event", event.Name, event.Payload)
-	})
-	if err != nil {
-		_ = o.upsertWorkpad(ctx, rt, issue, "merge_blocked", stateSkillBlockedWorkpad(issue, skill, err.Error()))
-		return fmt.Errorf("%s skill %s failed: %w", skill.state, skill.path, err)
-	}
-	duration := time.Since(started)
-	if err := o.upsertWorkpad(ctx, rt, issue, "merge_completed", stateSkillCompletedWorkpad(issue, skill, workspacePath, target, duration, result.SessionID)); err != nil {
-		return err
-	}
-	o.logIssue(issue, "merge_skill_completed", "merge skill completed", map[string]any{
-		"state":       skill.state,
-		"skill":       skill.path,
-		"target":      target,
-		"session_id":  result.SessionID,
-		"duration_ms": duration.Milliseconds(),
-	})
-	if strings.EqualFold(issue.State, "Merging") {
-		if err := o.cleanupWorkspace(ctx, rt.workspace, issue, observability.RunningEntry{WorkspacePath: workspacePath}); err != nil {
-			return err
-		}
-		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Done"); err != nil {
-			return err
-		}
-		o.logIssue(issue, "state_changed", "Merging -> Done", map[string]any{"skill": skill.path, "target": target})
-	}
-	return nil
-}
-
-func effectiveStateSkill(agent types.AgentConfig, state string) stateSkill {
-	path := configuredStateSkillPath(agent, state)
-	return stateSkill{state: state, path: path}
-}
-
-func configuredStateSkillPath(agent types.AgentConfig, state string) string {
-	for key, value := range agent.StateSkills {
-		if strings.EqualFold(strings.TrimSpace(key), state) {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
-func absoluteSkillPath(repoRoot, skillPath string) string {
-	skillPath = strings.TrimSpace(skillPath)
-	return filepath.Clean(filepath.Join(repoRoot, skillPath))
-}
-
-func stateSkillPrompt(issue types.Issue, skill stateSkill, repoRoot, workspacePath, target string) string {
-	absolutePath := absoluteSkillPath(repoRoot, skill.path)
-	return fmt.Sprintf(`你正在处理 Linear ticket %s 的 %s 阶段。
-
-这是状态驱动的 skill 阶段。请按当前配置的 repo-root 相对路径执行对应 skill，不要在 Go 代码语义之外发明固定流程。
-
-- state: %s
-- skill path: %s
-- skill 文件（以 repo root 为准）: %s
-- repo root: %s
-- issue worktree: %s
-- merge target: %s
-
-要求：
-1. 先打开并遵循 repo root 里的 skill 文件，不要改用其他流程；如果 issue worktree 里有旧版同名 skill，以 repo root 版本为准。
-2. 不要调用 Linear MCP/app tool；无人值守写 Linear 时必须使用 linear CLI，或者只把结果写入最终回复交给父 orchestrator 记录。
-3. 写给 Linear、GitHub 或 workpad 的新增可见内容使用中文。
-4. 如果 skill 完成并已验证，把关键证据写入 workpad；如果阻塞，写清 blocker 和证据。
-5. 不要越权清理或回退不属于本 issue 的本地改动。
-`, issue.Identifier, skill.state, skill.state, skill.path, absolutePath, repoRoot, workspacePath, target)
 }
 
 func nonEmptyLines(value string) []string {
@@ -1333,23 +1235,6 @@ func handoffWorkpad(issue types.Issue, workspacePath, baseHead, head string, res
 `, workspacePath, baseHead, head, result.SessionID, time.Now().Format(time.RFC3339), strings.TrimSpace(changedFiles), strings.TrimSpace(status)))
 }
 
-func stateSkillBlockedWorkpad(issue types.Issue, skill stateSkill, output string) string {
-	return workflowWorkpad(issue, workpadProgress{Task: true, Worktree: true, Agent: true, Commit: true, Handoff: true, Review: true, Merging: true}, fmt.Sprintf(`### 阻塞项
-
-- %s 的 %s skill 执行失败。
-
-### 指标
-
-- skill：%s
-
-### 阶段记录
-
-~~~text
-%s
-~~~
-`, issue.Identifier, skill.state, skill.path, output))
-}
-
 func aiReviewWorkpad(issue types.Issue, workspacePath, baseHead, head string, outcome aiReviewOutcome) string {
 	return workflowWorkpad(issue, workpadProgress{Task: true, Worktree: true, Agent: true, Commit: true, Handoff: true, Review: true}, fmt.Sprintf(`### AI Review
 
@@ -1368,24 +1253,7 @@ func aiReviewWorkpad(issue types.Issue, workspacePath, baseHead, head string, ou
 ### 记录
 
 - %s AI Review 完成。
-`, issue.Identifier, outcome.Summary, workspacePath, baseHead, head, strings.Join(outcome.ChangedFiles, ", "), strings.Join(outcome.Reasons, "; "), time.Now().Format(time.RFC3339)))
-}
-
-func stateSkillCompletedWorkpad(issue types.Issue, skill stateSkill, workspacePath, target string, duration time.Duration, sessionID string) string {
-	return workflowWorkpad(issue, workpadProgress{Task: true, Worktree: true, Agent: true, Commit: true, Handoff: true, Review: true, Merging: true, Done: true}, fmt.Sprintf(`### 指标
-
-- issue：%s
-- state：%s
-- skill：%s
-- worktree：%s
-- merge target：%s
-- Codex session：%s
-- skill 耗时：%dms
-
-### 阶段记录
-
-- %s skill 已完成。
-`, issue.Identifier, skill.state, skill.path, workspacePath, target, sessionID, duration.Milliseconds(), skill.state))
+	`, issue.Identifier, outcome.Summary, workspacePath, baseHead, head, strings.Join(outcome.ChangedFiles, ", "), strings.Join(outcome.Reasons, "; "), time.Now().Format(time.RFC3339)))
 }
 
 type workpadProgress struct {
@@ -1413,7 +1281,7 @@ func workflowWorkpad(issue types.Issue, progress workpadProgress, body string) s
 %s 检测本地提交和变更文件
 %s 写入交接记录并流转到 Review
 %s 完成 AI Review 或等待人工 review
-%s 执行 Merging skill
+%s 执行 Merging 阶段流程
 %s 流转到 Done
 
 %s`, taskPlanChecklist(issue, progress.Task), checkbox(progress.Worktree), issue.Identifier, checkbox(progress.Agent), checkbox(progress.Commit), checkbox(progress.Handoff), checkbox(progress.Review), checkbox(progress.Merging), checkbox(progress.Done), body)

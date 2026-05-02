@@ -114,7 +114,6 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 - `linear`：操作 Linear。
 - `linear-cli`：当 `linear_graphql` 不可用或 CLI 更适合时，用 `linear` CLI 操作 Linear；不要调用 Linear MCP/app 工具。
-- `pull`：实现前同步最新 `origin/main`，减少最终合并冲突。
 
 ## Review 路由原则
 
@@ -128,9 +127,9 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - `AI Review` 不通过时，按 `on_ai_fail` 处理：`rework` 进入 `Rework`，`hold` 停留在 `AI Review` 并把 blocker 写入 workpad。
 - 人工批准合并时，只需要把 issue 切到 `Merging`；后续按本 Workflow 的 `Merging` 阶段指引合入 `main` 并 push。
 
-## 阶段技能路由
+## 阶段路由
 
-- 本 Workflow 正文是默认注入给 agent 的总 SOP；阶段级 skill 只作为该 SOP 指定的执行材料。
+- 本 Workflow 正文是默认注入给 agent 的总 SOP；阶段级说明优先写在这里，避免和额外配置漂移。
 - `Merging` 阶段不走 PR land；直接把当前 issue worktree 分支合入 repo root 的 `main`，验证后 `git push origin main`。
 - 新增阶段时，先在 Linear 创建同名状态，再在本 Workflow 的状态映射和对应步骤里写清楚该阶段使用哪个 skill。
 
@@ -191,11 +190,9 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - 如果 ticket 正文或评论包含 `Validation`、`Test Plan` 或 `Testing`，把这些要求复制到 workpad 的 `Acceptance Criteria` 和 `Validation`，作为必选 checkbox，不要降级为可选。
 7. 对计划做 principal-style self-review，并在 comment 中修正计划。
 8. 实现前捕获具体复现信号，并记录到 workpad 的 `Notes`：可以是命令输出、截图或确定性的 UI 行为。
-9. 代码修改前运行 `pull` skill，同步最新 `origin/main`，并把结果记录到 workpad 的 `Notes`。
-   - 记录 `pull skill evidence`，包含：
-     - merge source(s)
-     - 结果：`clean` 或 `conflicts resolved`
-     - 同步后的 `HEAD` short SHA
+9. 代码修改前记录当前 issue worktree 的 branch、`HEAD` short SHA 和 `git status --short`。
+   - 不要尝试 `git pull origin <issue-branch>`；issue 分支默认只存在本地 worktree。
+   - 不要为了本地个人测试流主动 pull 远端 main；本 workflow 以当前本地 main 为合入目标。
 10. compact context，然后进入执行。
 
 ## Main merge 协议（Merging 阶段必须执行）
@@ -207,18 +204,19 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 3. 回到 repo root，确认当前 checkout 是 `main`，且 `git status --short` 干净。
    - 如果 root checkout 不在 `main`，先切到 `main`。
    - 如果 root checkout 有无关脏改动，停止并记录 blocker；不要覆盖或 stash 不属于本 issue 的改动。
-4. 在 repo root 执行 `git fetch origin main`，再用 `git pull --ff-only origin main` 同步最新 `main`。
+4. 不要在此阶段 pull 远端分支；本流程是把本地 issue worktree 分支合入本地 `main` 后再 push。
 5. 执行 `git merge --no-ff <issue-worktree-branch>`。
 6. 如果发生冲突，只解决当前 issue 必需的冲突；解决后重跑验证并记录冲突文件。
 7. 在 repo root 运行当前 scope 要求的验证。
 8. 验证通过后执行 `git push origin main`。
-9. 更新 workpad，记录：
+9. 如果 push 因远端 main 更新而失败，再按最小范围处理远端同步问题；不要在正常路径预先 pull。
+10. 更新 workpad，记录：
    - issue branch
    - issue branch HEAD
    - main merge commit short SHA
    - validation 命令和结果
    - push 结果
-10. push 成功后移动 issue 到 `Done`。
+11. push 成功后移动 issue 到 `Done`。
 
 ## Blocked-access escape hatch（必须遵守）
 
@@ -234,7 +232,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 ## Step 2：执行阶段（Todo -> In Progress -> Human Review）
 
-1. 确认当前 repo 状态：branch、`git status`、`HEAD`，并确认 kickoff `pull` sync 结果已记录到 workpad。
+1. 确认当前 issue worktree 状态：branch、`git status`、`HEAD`，并确认这些信息已记录到 workpad。
 2. 如果当前 issue 仍是 `Todo`，移动到 `In Progress`；否则保持当前状态。
 3. 加载现有 workpad comment，把它作为 active execution checklist。
    - 现实变化时可以主动编辑它，例如 scope、风险、验证方式或新发现任务。
@@ -279,7 +277,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 1. 把 `Rework` 当作完整方案重置，而不是增量补丁。
 2. 重新阅读完整 issue body 和所有人工 comments；明确本次 attempt 要做出哪些不同处理。
 3. 删除 issue 上现有 `## Codex Workpad` comment。
-4. 从最新 `origin/main` 创建或重置当前 issue worktree 分支。
+4. 从当前本地 `main` 创建或重置当前 issue worktree 分支。
 5. 从正常 kickoff flow 重新开始：
    - 如果当前 issue 状态是 `Todo`，移动到 `In Progress`；否则保持当前状态。
    - 创建新的 bootstrap `## Codex Workpad` comment。

@@ -20,7 +20,6 @@ const (
 	ErrInvalidMaxRetryBackoff    = "invalid_max_retry_backoff"
 	ErrInvalidPollingInterval    = "invalid_polling_interval"
 	ErrInvalidReviewPolicy       = "invalid_review_policy"
-	ErrInvalidStateSkill         = "invalid_state_skill"
 )
 
 type Error struct {
@@ -82,7 +81,6 @@ func applyDefaults(cfg *types.Config) {
 	if cfg.Agent.MaxRetryBackoffMS == 0 {
 		cfg.Agent.MaxRetryBackoffMS = 300000
 	}
-	applyStateSkillDefaults(&cfg.Agent)
 	if cfg.Codex.Command == "" {
 		cfg.Codex.Command = "codex app-server"
 	}
@@ -187,16 +185,7 @@ func validate(cfg types.Config) error {
 	if err := validateReviewPolicy(cfg.Agent.ReviewPolicy); err != nil {
 		return err
 	}
-	if err := validateStateSkills(cfg.Agent); err != nil {
-		return err
-	}
 	return nil
-}
-
-func applyStateSkillDefaults(agent *types.AgentConfig) {
-	if agent.StateSkills == nil {
-		agent.StateSkills = map[string]string{}
-	}
 }
 
 func validateReviewPolicy(policy types.ReviewPolicyConfig) error {
@@ -207,37 +196,6 @@ func validateReviewPolicy(policy types.ReviewPolicyConfig) error {
 	onFail := strings.ToLower(strings.TrimSpace(policy.OnAIFail))
 	if onFail != "" && onFail != "rework" && onFail != "hold" {
 		return &Error{Code: ErrInvalidReviewPolicy, Message: "agent.review_policy.on_ai_fail must be one of rework, hold"}
-	}
-	return nil
-}
-
-func validateStateSkills(agent types.AgentConfig) error {
-	for state, skillPath := range agent.StateSkills {
-		if err := validateSkillPath("agent.state_skills."+state, skillPath, false); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateSkillPath(field, value string, allowEmpty bool) error {
-	raw := value
-	path := strings.TrimSpace(value)
-	if path == "" {
-		if allowEmpty {
-			return nil
-		}
-		return &Error{Code: ErrInvalidStateSkill, Message: field + " must be a repo-root relative SKILL.md path"}
-	}
-	if strings.ContainsAny(raw, "\x00\r\n") || filepath.IsAbs(path) {
-		return &Error{Code: ErrInvalidStateSkill, Message: field + " must be a repo-root relative SKILL.md path"}
-	}
-	clean := filepath.Clean(path)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return &Error{Code: ErrInvalidStateSkill, Message: field + " must stay under the repo root"}
-	}
-	if !strings.ContainsAny(path, `/\`) || filepath.Base(clean) != "SKILL.md" {
-		return &Error{Code: ErrInvalidStateSkill, Message: field + " must be a repo-root relative SKILL.md path"}
 	}
 	return nil
 }
