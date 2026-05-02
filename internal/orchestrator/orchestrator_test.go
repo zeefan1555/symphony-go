@@ -1476,6 +1476,44 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	}
 }
 
+func TestRunAgentDoesNotAutoPromoteAfterCommitWhenAgentMovesToAIReview(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-AGENT-REVIEW",
+		Title:      "agent owned review transition",
+		State:      "In Progress",
+	}
+	tracker := &recordingTracker{issue: issue}
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Agent: types.AgentConfig{
+					MaxTurns: 1,
+					ReviewPolicy: types.ReviewPolicyConfig{
+						Mode:     "auto",
+						OnAIFail: "rework",
+					},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), ".worktrees"), gitSeedHook()),
+		Runner:    stateChangingRunner{tracker: tracker, state: "AI Review", commit: true},
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if got, want := tracker.states, []string{"AI Review"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+}
+
 func TestMergingStateUsesWorkflowPrompt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -2349,6 +2387,40 @@ func (r *recordingRunner) RunSession(_ context.Context, request codex.SessionReq
 		r.result.SessionID = "recording-session"
 	}
 	return r.result, r.err
+}
+
+type stateChangingRunner struct {
+	tracker *recordingTracker
+	state   string
+	commit  bool
+}
+
+func (r stateChangingRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+	if r.commit && request.Issue.State == "In Progress" {
+		if err := commitFile(ctx, request.WorkspacePath, "README.md", "agent owned transition\n", "agent commit"); err != nil {
+			return codex.SessionResult{}, err
+		}
+	}
+	if r.state != "" {
+		if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, r.state); err != nil {
+			return codex.SessionResult{}, err
+		}
+	}
+	return completeFakeSession(ctx, request, nil)
+}
+
+func commitFile(ctx context.Context, workspacePath, name, contents, message string) error {
+	if err := os.WriteFile(filepath.Join(workspacePath, name), []byte(contents), 0o644); err != nil {
+		return err
+	}
+	for _, args := range [][]string{{"add", name}, {"commit", "-m", message}} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = workspacePath
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return errFromOutput(args, err, string(output))
+		}
+	}
+	return nil
 }
 
 type commitRunner struct{}
