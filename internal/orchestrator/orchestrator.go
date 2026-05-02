@@ -24,7 +24,6 @@ type Tracker interface {
 	FetchIssue(context.Context, string) (types.Issue, error)
 	FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error)
 	UpdateIssueState(context.Context, string, string) error
-	UpsertWorkpad(context.Context, string, string) error
 }
 
 type AgentRunner interface {
@@ -837,10 +836,6 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 		o.removeRunning(issue.ID)
 		return err
 	}
-	if err := o.upsertWorkpad(ctx, rt, issue, "initial", initialWorkpad(issue, workspacePath)); err != nil {
-		o.removeRunning(issue.ID)
-		return err
-	}
 	baseHead, _ := gitOutput(ctx, workspacePath, "rev-parse", "--short", "HEAD")
 	maxTurns := rt.workflow.Config.Agent.MaxTurns
 	var renderAttempt *int
@@ -911,7 +906,6 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 	})
 	o.removeRunning(issue.ID)
 	if err != nil {
-		_ = o.upsertWorkpad(context.Background(), rt, issue, "blocked", blockedWorkpad(issue, workspacePath, err))
 		return err
 	}
 	if nextIssue != nil {
@@ -942,19 +936,12 @@ func (o *Orchestrator) handoffAfterTurn(ctx context.Context, rt runtimeSnapshot,
 
 	changedFiles, _ := gitOutput(ctx, workspacePath, "show", "--name-only", "--format=", "--no-renames", "HEAD")
 	status, _ := gitOutput(ctx, workspacePath, "status", "--short")
-	workpad := handoffWorkpad(issue, workspacePath, baseHead, head, result, changedFiles, status)
-	if err := o.upsertWorkpad(ctx, rt, issue, "handoff", workpad); err != nil {
-		return "", false, err
-	}
 	policy := effectiveReviewPolicy(rt.workflow.Config.Agent)
 	if policy.runsAIReviewAfterCommit() {
 		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "AI Review"); err != nil {
 			return "", false, err
 		}
 		outcome := o.aiReviewAfterCommit(ctx, policy, issue, workspacePath, baseHead, head, changedFiles, status)
-		if err := o.upsertWorkpad(ctx, rt, issue, "ai_review", aiReviewWorkpad(issue, workspacePath, baseHead, head, outcome)); err != nil {
-			return "", false, err
-		}
 		o.logIssue(issue, "state_changed", "In Progress -> AI Review", map[string]any{
 			"commit":        head,
 			"changed_files": outcome.ChangedFiles,
@@ -1010,9 +997,6 @@ func (o *Orchestrator) reviewIssueState(ctx context.Context, rt runtimeSnapshot,
 	changedFiles, _ := gitOutput(ctx, workspacePath, "show", "--name-only", "--format=", "--no-renames", "HEAD")
 	status, _ := gitOutput(ctx, workspacePath, "status", "--short")
 	outcome := o.aiReviewAfterCommit(ctx, policy, issue, workspacePath, strings.TrimSpace(baseHead), strings.TrimSpace(head), changedFiles, status)
-	if err := o.upsertWorkpad(ctx, rt, issue, "ai_review", aiReviewWorkpad(issue, workspacePath, strings.TrimSpace(baseHead), strings.TrimSpace(head), outcome)); err != nil {
-		return err
-	}
 	if outcome.Passed {
 		nextState := policy.stateAfterPassedAIReview()
 		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, nextState); err != nil {
@@ -1181,262 +1165,6 @@ func sameStringSet(left, right []string) bool {
 	return true
 }
 
-func initialWorkpad(issue types.Issue, workspacePath string) string {
-	return workflowWorkpad(issue, workpadProgress{Worktree: true}, fmt.Sprintf(`### 验收标准
-
-- issue 按配置的本地流程推进。
-- 本地 worktree 已创建：%s。
-
-### 阶段记录
-
-- %s 已准备好本地 worktree。
-`, workspacePath, time.Now().Format(time.RFC3339)))
-}
-
-func blockedWorkpad(issue types.Issue, workspacePath string, err error) string {
-	return workflowWorkpad(issue, workpadProgress{Worktree: true}, fmt.Sprintf(`### 验收标准
-
-- issue 按配置的本地流程推进。
-- 本地 worktree 已创建：%s。
-
-### 阻塞项
-
-- Agent 运行失败：%s
-`, workspacePath, err))
-}
-
-func handoffWorkpad(issue types.Issue, workspacePath, baseHead, head string, result codex.Result, changedFiles, status string) string {
-	return workflowWorkpad(issue, workpadProgress{Task: true, Worktree: true, Agent: true, Commit: true, Handoff: true}, fmt.Sprintf(`### 验收标准
-
-- [x] issue 流程产生了本地提交。
-- [x] 本地 worktree 路径：%s。
-- [x] Go orchestrator 已通过 GraphQL 写入此 Linear Workpad 评论。
-
-### 验证
-
-- [x] 基准 HEAD：%s
-- [x] 交接提交：%s
-- [x] Codex session：%s
-
-### 阶段记录
-
-- %s Go orchestrator 检测到本地提交，并已将 issue 移动到 Review。
-- 变更文件：
-
-~~~text
-%s
-~~~
-
-- 当前 git 状态：
-
-~~~text
-%s
-~~~
-`, workspacePath, baseHead, head, result.SessionID, time.Now().Format(time.RFC3339), strings.TrimSpace(changedFiles), strings.TrimSpace(status)))
-}
-
-func aiReviewWorkpad(issue types.Issue, workspacePath, baseHead, head string, outcome aiReviewOutcome) string {
-	return workflowWorkpad(issue, workpadProgress{Task: true, Worktree: true, Agent: true, Commit: true, Handoff: true, Review: true}, fmt.Sprintf(`### AI Review
-
-- [x] %s 已生成本地提交。
-- [x] Go orchestrator 已完成 AI Review。
-- [x] 结论：%s
-
-### 指标
-
-- worktree：%s
-- 基准 HEAD：%s
-- 提交 HEAD：%s
-- 变更文件：%s
-- 原因：%s
-
-### 记录
-
-- %s AI Review 完成。
-	`, issue.Identifier, outcome.Summary, workspacePath, baseHead, head, strings.Join(outcome.ChangedFiles, ", "), strings.Join(outcome.Reasons, "; "), time.Now().Format(time.RFC3339)))
-}
-
-type workpadProgress struct {
-	Task     bool
-	Worktree bool
-	Agent    bool
-	Commit   bool
-	Handoff  bool
-	Review   bool
-	Merging  bool
-	Done     bool
-}
-
-func workflowWorkpad(issue types.Issue, progress workpadProgress, body string) string {
-	return fmt.Sprintf(`## Codex Workpad
-
-### 任务计划
-
-%s
-
-### 框架进度
-
-%s 准备 %s 的本地 worktree
-%s 运行 Codex agent 完成 issue 任务
-%s 检测本地提交和变更文件
-%s 写入交接记录并流转到 Review
-%s 完成 AI Review 或等待人工 review
-%s 执行 Merging 阶段流程
-%s 流转到 Done
-
-%s`, taskPlanChecklist(issue, progress.Task), checkbox(progress.Worktree), issue.Identifier, checkbox(progress.Agent), checkbox(progress.Commit), checkbox(progress.Handoff), checkbox(progress.Review), checkbox(progress.Merging), checkbox(progress.Done), body)
-}
-
-func taskPlanChecklist(issue types.Issue, done bool) string {
-	steps := taskPlanSteps(issue)
-	lines := make([]string, 0, len(steps))
-	for _, step := range steps {
-		lines = append(lines, fmt.Sprintf("%s %s", checkbox(done), step))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func taskPlanSteps(issue types.Issue) []string {
-	var steps []string
-	for _, line := range strings.Split(issue.Description, "\n") {
-		step, ok := taskStepFromMarkdownLine(line)
-		if !ok {
-			continue
-		}
-		steps = append(steps, step)
-		if len(steps) == 6 {
-			break
-		}
-	}
-	if len(steps) > 0 {
-		return steps
-	}
-	title := strings.TrimSpace(issue.Title)
-	if title == "" {
-		title = issue.Identifier
-	}
-	return []string{"理解并完成 issue：" + title}
-}
-
-func taskStepFromMarkdownLine(line string) (string, bool) {
-	item := strings.TrimSpace(line)
-	foundListItem := false
-	for _, prefix := range []string{"- [ ] ", "- [x] ", "- [X] ", "- ", "* "} {
-		if strings.HasPrefix(item, prefix) {
-			item = strings.TrimSpace(strings.TrimPrefix(item, prefix))
-			foundListItem = true
-			break
-		}
-	}
-	if !foundListItem || item == "" || isConstraintOnlyStep(item) {
-		return "", false
-	}
-	if strings.HasPrefix(item, "只改 ") {
-		return "定位并只修改 " + strings.TrimSpace(strings.TrimPrefix(item, "只改 ")), true
-	}
-	return item, true
-}
-
-func isConstraintOnlyStep(item string) bool {
-	for _, prefix := range []string{"不创建", "不 push", "不调用", "不要", "所有 Workpad", "全程"} {
-		if strings.HasPrefix(item, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func checkbox(done bool) string {
-	if done {
-		return "- [x]"
-	}
-	return "- [ ]"
-}
-
-func (o *Orchestrator) upsertWorkpad(ctx context.Context, rt runtimeSnapshot, issue types.Issue, phase, body string) error {
-	if err := rt.tracker.UpsertWorkpad(ctx, issue.ID, body); err != nil {
-		return err
-	}
-	fields := map[string]any{
-		"phase": phase,
-		"bytes": len([]byte(body)),
-		"lines": countLines(body),
-	}
-	for key, value := range workpadLogSummary(body) {
-		fields[key] = value
-	}
-	o.logIssue(issue, "workpad_updated", "Linear workpad updated", fields)
-	return nil
-}
-
-func workpadLogSummary(body string) map[string]any {
-	task := checklistCounter{}
-	framework := checklistCounter{}
-	section := ""
-	sections := make([]string, 0)
-	preview := make([]string, 0, 3)
-	inFence := false
-	for _, line := range strings.Split(body, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "~~~") {
-			inFence = !inFence
-			continue
-		}
-		if strings.HasPrefix(trimmed, "### ") {
-			section = strings.TrimSpace(strings.TrimPrefix(trimmed, "### "))
-			sections = append(sections, section)
-			continue
-		}
-		done, text, ok := parseChecklistLine(trimmed)
-		if !ok {
-			if !inFence {
-				preview = appendWorkpadPreview(preview, section, trimmed)
-			}
-			continue
-		}
-		switch section {
-		case "任务计划":
-			task.add(done, text)
-		case "框架进度":
-			framework.add(done, text)
-		default:
-			if !inFence {
-				preview = appendWorkpadPreview(preview, section, text)
-			}
-		}
-	}
-	fields := map[string]any{}
-	if len(sections) > 0 {
-		fields["sections"] = strings.Join(sections, ",")
-	}
-	if task.total > 0 {
-		fields["task_progress"] = task.progress()
-	}
-	if framework.total > 0 {
-		fields["framework_progress"] = framework.progress()
-	}
-	if task.next != "" {
-		fields["next_step"] = task.next
-	} else if framework.next != "" {
-		fields["next_step"] = framework.next
-	}
-	if len(preview) > 0 {
-		fields["comment_preview"] = strings.Join(preview, "; ")
-	}
-	return fields
-}
-
-func appendWorkpadPreview(preview []string, section, line string) []string {
-	if len(preview) >= 3 || section == "" || section == "任务计划" || section == "框架进度" {
-		return preview
-	}
-	line = strings.TrimSpace(strings.TrimPrefix(line, "- "))
-	if line == "" {
-		return preview
-	}
-	return append(preview, truncateRunes(line, 120))
-}
-
 func logPreview(value string, max int) string {
 	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
 	return truncateRunes(value, max)
@@ -1454,40 +1182,6 @@ func truncateRunes(value string, max int) string {
 		return string(runes[:max])
 	}
 	return string(runes[:max-3]) + "..."
-}
-
-type checklistCounter struct {
-	done  int
-	total int
-	next  string
-}
-
-func (c *checklistCounter) add(done bool, text string) {
-	c.total++
-	if done {
-		c.done++
-		return
-	}
-	if c.next == "" {
-		c.next = text
-	}
-}
-
-func (c checklistCounter) progress() string {
-	return fmt.Sprintf("%d/%d", c.done, c.total)
-}
-
-func parseChecklistLine(line string) (bool, string, bool) {
-	switch {
-	case strings.HasPrefix(line, "- [x] "):
-		return true, strings.TrimSpace(strings.TrimPrefix(line, "- [x] ")), true
-	case strings.HasPrefix(line, "- [X] "):
-		return true, strings.TrimSpace(strings.TrimPrefix(line, "- [X] ")), true
-	case strings.HasPrefix(line, "- [ ] "):
-		return false, strings.TrimSpace(strings.TrimPrefix(line, "- [ ] ")), true
-	default:
-		return false, "", false
-	}
 }
 
 func countLines(value string) int {

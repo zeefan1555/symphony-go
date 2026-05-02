@@ -19,11 +19,10 @@ LDFLAGS := -linkmode=external
 .PHONY: build test run run-once zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
 
 build:
-	mkdir -p bin
-	$(GO) build -ldflags="$(LDFLAGS)" -o $(BINARY) ./cmd/symphony-go
+	GO=$(GO) SYMPHONY_GO_BUILD_LDFLAGS="$(LDFLAGS)" SYMPHONY_GO_BINARY="$(BINARY)" ./build.sh
 
 test:
-	$(GO) test -ldflags="$(LDFLAGS)" ./...
+	GO=$(GO) SYMPHONY_GO_TEST_LDFLAGS="$(LDFLAGS)" ./test.sh ./...
 
 run: build
 	$(BINARY) run --workflow $(WORKFLOW) --tui --merge-target $(MERGE_TARGET)

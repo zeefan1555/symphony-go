@@ -1273,7 +1273,7 @@ func TestRunAgentContinuesInSameSessionWithoutResendingOriginalPrompt(t *testing
 	}
 }
 
-func TestRunAgentWritesWorkpadAndMovesToHumanReviewAfterLocalCommit(t *testing.T) {
+func TestRunAgentMovesToHumanReviewAfterLocalCommit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1302,12 +1302,6 @@ func TestRunAgentWritesWorkpadAndMovesToHumanReviewAfterLocalCommit(t *testing.T
 
 	if tracker.updatedState != "Human Review" {
 		t.Fatalf("updated state = %q, want Human Review", tracker.updatedState)
-	}
-	if !strings.Contains(tracker.workpad, "交接提交") {
-		t.Fatalf("workpad missing handoff commit:\n%s", tracker.workpad)
-	}
-	if !strings.Contains(tracker.workpad, "README.md") {
-		t.Fatalf("workpad missing changed file:\n%s", tracker.workpad)
 	}
 }
 
@@ -1348,9 +1342,6 @@ func TestRunAgentReviewPolicyAIMovesThroughAIReviewBackToHumanReview(t *testing.
 	if got, want := tracker.states, []string{"AI Review", "Human Review"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
-	if !strings.Contains(tracker.workpad, "AI Review") {
-		t.Fatalf("workpad missing AI Review:\n%s", tracker.workpad)
-	}
 }
 
 func TestRunAgentReviewPolicyHumanMovesImplementationToHumanReview(t *testing.T) {
@@ -1390,9 +1381,6 @@ func TestRunAgentReviewPolicyHumanMovesImplementationToHumanReview(t *testing.T)
 	if got, want := tracker.states, []string{"Human Review"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
-	if strings.Contains(tracker.workpad, "Go orchestrator 已完成 AI Review") {
-		t.Fatalf("human review policy should not run the AI Review workpad during implementation handoff:\n%s", tracker.workpad)
-	}
 }
 
 func TestRunAgentProcessesManualAIReviewWhenPolicyAllows(t *testing.T) {
@@ -1429,9 +1417,6 @@ func TestRunAgentProcessesManualAIReviewWhenPolicyAllows(t *testing.T) {
 
 	if got, want := tracker.states, []string{"Human Review"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
-	}
-	if !strings.Contains(tracker.workpad, "AI Review") {
-		t.Fatalf("workpad missing AI Review:\n%s", tracker.workpad)
 	}
 }
 
@@ -1489,42 +1474,6 @@ func TestRunAgentReviewPolicyAutoMergesWhenAIReviewPasses(t *testing.T) {
 	if prompt := runner.requests[0].Prompts[0].Text; strings.Contains(prompt, ".codex/skills/land/SKILL.md") {
 		t.Fatalf("merging prompt should not be standalone skill prompt:\n%s", prompt)
 	}
-	if len(tracker.workpads) < 4 {
-		t.Fatalf("workpad updates = %d, want initial/handoff/review/merging", len(tracker.workpads))
-	}
-	initial := tracker.workpads[0]
-	reviewed := tracker.workpads[2]
-	for _, want := range []string{
-		"- [x] 准备 ZEE-AI-MERGE 的本地 worktree",
-		"- [ ] 运行 Codex agent 完成 issue 任务",
-		"- [ ] 执行 Merging 阶段流程",
-		"- [ ] 定位并只修改 `README.md`",
-		"- [ ] 写入 smoke marker",
-		"- [ ] 运行 `git diff --check`",
-	} {
-		if !strings.Contains(initial, want) {
-			t.Fatalf("initial workpad missing %q:\n%s", want, initial)
-		}
-	}
-	for _, want := range []string{
-		"- [x] 准备 ZEE-AI-MERGE 的本地 worktree",
-		"- [x] 运行 Codex agent 完成 issue 任务",
-		"- [x] 检测本地提交和变更文件",
-		"- [x] 写入交接记录并流转到 Review",
-		"- [x] 完成 AI Review 或等待人工 review",
-		"- [ ] 执行 Merging 阶段流程",
-		"- [ ] 流转到 Done",
-		"- [x] 定位并只修改 `README.md`",
-		"- [x] 写入 smoke marker",
-		"- [x] 运行 `git diff --check`",
-	} {
-		if !strings.Contains(reviewed, want) {
-			t.Fatalf("review workpad missing %q:\n%s", want, reviewed)
-		}
-	}
-	if strings.Contains(reviewed, "不创建 PR") {
-		t.Fatalf("constraint-only line leaked into task plan:\n%s", reviewed)
-	}
 }
 
 func TestMergingStateUsesWorkflowPrompt(t *testing.T) {
@@ -1560,54 +1509,6 @@ func TestMergingStateUsesWorkflowPrompt(t *testing.T) {
 	}
 	if len(tracker.states) != 0 {
 		t.Fatalf("state updates = %#v, want none", tracker.states)
-	}
-}
-
-func TestWorkpadLogSummaryTracksTaskAndFrameworkProgress(t *testing.T) {
-	issue := types.Issue{
-		Identifier:  "ZEE-PLAN",
-		Title:       "plan smoke",
-		Description: "- 只改 `README.md`\n- 写入 smoke marker\n- 运行 `git diff --check`\n- 不创建 PR\n",
-	}
-	initial := workflowWorkpad(issue, workpadProgress{Worktree: true}, "")
-	initialSummary := workpadLogSummary(initial)
-	if got, want := initialSummary["task_progress"], "0/3"; got != want {
-		t.Fatalf("initial task_progress = %v, want %s", got, want)
-	}
-	if got, want := initialSummary["framework_progress"], "1/7"; got != want {
-		t.Fatalf("initial framework_progress = %v, want %s", got, want)
-	}
-	if got, want := initialSummary["next_step"], "定位并只修改 `README.md`"; got != want {
-		t.Fatalf("initial next_step = %v, want %s", got, want)
-	}
-	if got, want := initialSummary["sections"], "任务计划,框架进度"; got != want {
-		t.Fatalf("initial sections = %v, want %s", got, want)
-	}
-
-	handoff := workflowWorkpad(issue, workpadProgress{Task: true, Worktree: true, Agent: true, Commit: true, Handoff: true}, `### 验证
-
-- [x] 本地提交已生成。
-- [x] Linear Workpad 已更新。
-
-~~~text
-large raw output should stay out of previews
-~~~
-`)
-	handoffSummary := workpadLogSummary(handoff)
-	if got, want := handoffSummary["task_progress"], "3/3"; got != want {
-		t.Fatalf("handoff task_progress = %v, want %s", got, want)
-	}
-	if got, want := handoffSummary["framework_progress"], "4/7"; got != want {
-		t.Fatalf("handoff framework_progress = %v, want %s", got, want)
-	}
-	if got, want := handoffSummary["next_step"], "完成 AI Review 或等待人工 review"; got != want {
-		t.Fatalf("handoff next_step = %v, want %s", got, want)
-	}
-	if got, want := handoffSummary["sections"], "任务计划,框架进度,验证"; got != want {
-		t.Fatalf("handoff sections = %v, want %s", got, want)
-	}
-	if got, want := handoffSummary["comment_preview"], "本地提交已生成。; Linear Workpad 已更新。"; got != want {
-		t.Fatalf("handoff comment_preview = %v, want %s", got, want)
 	}
 }
 
@@ -2017,7 +1918,6 @@ codex:
 
 type snapshotTracker struct {
 	issue        types.Issue
-	workpad      string
 	updatedState string
 }
 
@@ -2046,16 +1946,9 @@ func (t *snapshotTracker) UpdateIssueState(_ context.Context, _ string, state st
 	return nil
 }
 
-func (t *snapshotTracker) UpsertWorkpad(_ context.Context, _ string, body string) error {
-	t.workpad = body
-	return nil
-}
-
 type recordingTracker struct {
-	issue    types.Issue
-	workpad  string
-	workpads []string
-	states   []string
+	issue  types.Issue
+	states []string
 }
 
 func (t *recordingTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
@@ -2077,12 +1970,6 @@ func (t *recordingTracker) FetchIssueStatesByIDs(context.Context, []string) ([]t
 func (t *recordingTracker) UpdateIssueState(_ context.Context, _ string, state string) error {
 	t.states = append(t.states, state)
 	t.issue.State = state
-	return nil
-}
-
-func (t *recordingTracker) UpsertWorkpad(_ context.Context, _ string, body string) error {
-	t.workpad = body
-	t.workpads = append(t.workpads, body)
 	return nil
 }
 
@@ -2118,10 +2005,6 @@ func (t *sequenceIssueTracker) UpdateIssueState(context.Context, string, string)
 	return nil
 }
 
-func (t *sequenceIssueTracker) UpsertWorkpad(context.Context, string, string) error {
-	return nil
-}
-
 type emptyTracker struct{}
 
 func (emptyTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
@@ -2141,10 +2024,6 @@ func (emptyTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.Is
 }
 
 func (emptyTracker) UpdateIssueState(context.Context, string, string) error {
-	return nil
-}
-
-func (emptyTracker) UpsertWorkpad(context.Context, string, string) error {
 	return nil
 }
 
@@ -2169,10 +2048,6 @@ func (configTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.I
 }
 
 func (configTracker) UpdateIssueState(context.Context, string, string) error {
-	return nil
-}
-
-func (configTracker) UpsertWorkpad(context.Context, string, string) error {
 	return nil
 }
 
@@ -2219,7 +2094,6 @@ type listTracker struct {
 	mu             sync.Mutex
 	issues         []types.Issue
 	fetchActiveErr error
-	workpad        string
 	updatedState   string
 }
 
@@ -2263,13 +2137,6 @@ func (t *listTracker) UpdateIssueState(_ context.Context, issueID string, state 
 	return nil
 }
 
-func (t *listTracker) UpsertWorkpad(_ context.Context, _ string, body string) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.workpad = body
-	return nil
-}
-
 type reconciliationTracker struct {
 	mu             sync.Mutex
 	activeIssues   []types.Issue
@@ -2306,10 +2173,6 @@ func (t *reconciliationTracker) FetchIssueStatesByIDs(context.Context, []string)
 }
 
 func (t *reconciliationTracker) UpdateIssueState(context.Context, string, string) error {
-	return nil
-}
-
-func (t *reconciliationTracker) UpsertWorkpad(context.Context, string, string) error {
 	return nil
 }
 

@@ -1,63 +1,140 @@
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+# AGENTS.md
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+本文件是本仓给 AI 的长期指令入口。`README.md` 可以作为项目说明或用户文档参考，但面向 AI 的执行规则、踩坑经验和工作约束必须优先写在这里。
 
-## 1. Think Before Coding
+## 核心原则
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+- **简洁优先**：每个改动都尽量简单，影响面最小，不为假想需求增加抽象、配置或扩展点。
+- **根因导向**：遇到 bug、测试失败、构建失败或 CI 失败，先找根因，不做临时绕过。
+- **最小影响**：只改当前目标必需的文件和逻辑，不顺手重构、不顺手美化、不清理无关历史代码。
+- **有据可查**：结论必须带证据，例如 `file:line`、命令输出、日志片段或可复现步骤。
+- **验证先行**：没有验证就不要声称完成；能局部验证就局部验证，必要时再扩大范围。
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+## 工作流编排
 
-## 2. Simplicity First
+### 1. 默认先规划
 
-**Minimum code that solves the problem. Nothing speculative.**
+- 非平凡任务必须先规划，包括 3 步以上任务、跨文件修改、架构决策、行为改写、复杂排障。
+- 规划不只覆盖实现，也要覆盖验证步骤；每个子步骤都要有可检查的完成标准。
+- 如果发现前提错误、方向跑偏或验证结果不支持原判断，立即停止并重新规划，不要硬推。
+- 需求或设计存在歧义时，先补事实：读代码、读文档、查日志、跑最小复现；仍不清楚再向用户澄清。
+- 复杂方案或接口级改动要先写清楚输入、输出、行为变化、约束和验收标准，再开始编码。
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+### 2. 子代理策略
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+- 只有在当前运行环境允许、用户明确授权或任务已经自然拆成独立并行块时，才使用子代理。
+- 子代理适合承担调研、代码定位、并行分析、独立文件范围内的实现或复核。
+- 每个子代理只负责一个清晰任务，必须有明确输入、输出、文件边界和验收标准。
+- 不要把关键路径上马上需要的判断外包给子代理；阻塞当前决策的内容优先自己完成。
+- 子代理结果要被主线程复核和整合，不能未经判断直接当成最终结论。
 
-## 3. Surgical Changes
+### 3. 自我改进闭环
 
-**Touch only what you must. Clean up only your own mess.**
+- 每次收到用户纠正，都要判断是事实错误、流程错误、技术判断错误还是沟通错误。
+- 任何用户纠正后，都要按固定模板更新根目录 `lesson.md`，不要只在最终回复里口头总结。
+- `lesson.md` 每条经验必须使用以下格式：
 
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+```markdown
+## YYYY-MM-DD: 简短标题
 
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+### 用户纠正
 
-The test: Every changed line should trace directly to the user's request.
+- 用户指出了什么问题。
 
-## 4. Goal-Driven Execution
+### 错误模式
 
-**Define success criteria. Loop until verified.**
+- 我为什么会犯这个错，属于事实错误、流程错误、技术判断错误还是沟通错误。
 
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
+### 防复犯规则
 
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
+- 下次遇到同类场景必须遵守的规则。
+
+### 固定动作
+
+- 下次应该直接执行的命令、检查、文档更新或验证步骤。
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+- 同类错误出现两次，必须把规则补进本文件或 `lesson.md`，让下一次 AI 可以直接遵循。
+- 开始处理本仓任务时，优先快速查看本文件；遇到环境或验证问题时，再查看 `lesson.md`。
 
----
+### 4. 完成前验证
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+- 永远不要在没有证明的情况下标记任务完成。
+- bug 修复要尽量做到：先复现，再修复，再证明不再复现。
+- 行为改动要说明改动前后的可观察差异。
+- 修改代码后优先运行最小相关测试；影响面较大时再运行更完整的测试或构建。
+- 完成前自问：如果我是 Staff 工程师，会批准这个改动和这份验证证据吗？
+
+### 5. 追求优雅但不过度工程化
+
+- 非平凡改动前先问：有没有更直接、更少代码、更少依赖的做法？
+- 如果修复方案像 hack，停下来重新审视设计；掌握现有事实后选择更稳妥的解法。
+- 简单明显的修复不要过度设计，不引入未要求的新能力。
+- 提交或汇报前先挑战自己的方案：是否有不必要的抽象、隐藏副作用或验证缺口？
+
+### 6. 自主修 bug
+
+- 收到 bug 报告时，默认直接定位并修复，不把排障责任再抛回给用户。
+- 优先看失败测试、错误日志、运行时输出和最小复现路径。
+- 遇到 CI、构建、权限或环境失败，先区分环境问题和代码问题，再做最小修复。
+- 需要用户提供外部权限、密钥或业务决策时，说明当前已验证事实、阻塞点和下一步最小动作。
+
+## 任务管理
+
+1. **先写计划**：非平凡任务先列出可检查步骤，说明每步如何验证。
+2. **执行前确认**：计划中的假设要能被代码、日志、文档或测试支撑。
+3. **持续跟踪**：每完成一步就更新状态，不要到最后一次性补进度。
+4. **解释变化**：每个阶段给出高层摘要，说明为什么这样改。
+5. **记录结果**：最终说明改了什么、验证了什么、还有什么风险。
+6. **沉淀经验**：被用户纠正或遇到可复用坑点后，更新 `lesson.md`。
+
+## 本仓工程约定
+
+### AGENTS.md 是 AI 规则入口
+
+- 新增或修正 AI 行为约束时，优先更新 `AGENTS.md`。
+- `README.md` 不作为 AI 执行规则的唯一来源；如果 README 和本文件冲突，以本文件为准。
+- 工作流、自动化、脚本使用方式的长期约束，应该写在本文件或 `lesson.md`，不要散落在对话里。
+
+### 根目录脚本必须高内聚
+
+- 根目录脚本是给人和 AI 直接使用的稳定入口，必须自解释、可独立运行。
+- `./build.sh`、`./test.sh` 不要把核心逻辑外包给隐藏的二级脚本。
+- 如果确实需要共享实现，必须保证根目录入口仍能一眼看懂关键行为，并说明为什么值得拆分。
+- 新增工具脚本时默认放在最接近使用者的位置；只有内部辅助、非直接入口才放入 `scripts/`。
+
+### 测试和构建
+
+- 验证本仓 Go 代码时优先使用 `./test.sh` 和 `./build.sh`。
+- 不要手写裸 `go test` 或 `go build` 绕过仓库约定；本机 macOS 曾因裸 Go 临时二进制触发 `missing LC_UUID load command`。
+- 局部验证示例：
+
+```bash
+./test.sh ./internal/orchestrator ./internal/linear
+./test.sh ./internal/orchestrator -run TestName
+./build.sh
+```
+
+- 文档或脚本类改动至少运行 `git diff --check`；涉及 Go 行为时再运行相关 `./test.sh` / `./build.sh`。
+- 如果验证失败，报告时要区分：代码断言失败、环境限制、权限问题、缓存问题、工具链问题。
+
+### 精准编辑
+
+- 每一行修改都必须能追溯到当前请求。
+- 不改动自己不理解的代码；先补上下文，再决定是否修改。
+- 只删除因本次改动变得无用的导入、变量、分支、函数或注释。
+- 发现无关死代码或历史问题，只提示，不擅自删除。
+
+### 工作区安全
+
+- 可能存在用户或其他 agent 的未提交改动；不要回滚、覆盖或整理自己没有引入的变化。
+- 修改前先看 `git status --short --branch`，理解当前脏区。
+- 遇到不属于本任务的改动，保持原样；如果它阻塞当前任务，先说明冲突和可选处理方式。
+
+## 输出要求
+
+- 默认使用中文。
+- 先说结论，再给证据。
+- 复杂任务按「Summary / Evidence / Risks / Next Steps」组织；调试分析按「问题 / 根因 / 修复 / 验证」组织。
+- 简单查询直接回答，附关键证据即可。
+- 最终回复要列出实际验证命令和结果；如果没有运行验证，必须明确说明原因。
