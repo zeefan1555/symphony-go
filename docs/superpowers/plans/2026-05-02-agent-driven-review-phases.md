@@ -1198,4 +1198,3 @@ Expected: experiment files record issue ID, commits, logs, verdict, and any next
 **Placeholder scan:** The plan avoids placeholder markers and gives exact file paths, commands, test names, and code snippets for each code-changing step.
 
 **Type consistency:** The plan uses existing `codex.SessionRequest`, `codex.TurnPrompt`, `types.Issue`, `types.Workflow`, `types.AgentConfig`, `recordingTracker`, and existing test helpers. New names are consistently `agentPhase`, `phaseImplementer`, `phaseReviewer`, `runPhaseAgent`, `phasePrompt`, `reviewPreflight`, and `mergingContinuationPromptText`.
-
