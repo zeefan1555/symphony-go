@@ -30,7 +30,10 @@ type AgentRunner interface {
 	RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
 }
 
-const continuationPromptText = "Continue working on the same issue. Re-check the current workspace state, finish any remaining acceptance criteria from the issue, run the smallest relevant verification, and report concrete progress or blockers. Do not repeat completed work."
+const (
+	continuationPromptText        = "Continue working on the same issue. Re-check the current workspace state, finish any remaining acceptance criteria from the issue, run the smallest relevant verification, and report concrete progress or blockers. Do not repeat completed work."
+	mergingContinuationPromptText = "Continue in the same reviewer session and execute the merge protocol for this issue. Re-check the current workspace and issue state, perform the required merge steps, run the smallest relevant verification, move the issue to Done only after the merge is complete, and report concrete results or blockers."
+)
 
 var errNoRetryNeeded = errors.New("no retry needed")
 
@@ -816,7 +819,7 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 	case "Human Review", "In Review":
 		o.logIssue(issue, "waiting_for_review", "issue is waiting for human review", nil)
 		return errNoRetryNeeded
-	case "AI Review":
+	case "AI Review", "Merging":
 		return o.runPhaseAgent(ctx, rt, issue, attempt, phaseReviewer)
 	}
 	return o.runPhaseAgent(ctx, rt, issue, attempt, phaseImplementer)
@@ -888,13 +891,29 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			noRetryNeeded = true
 			return codex.TurnPrompt{}, false, nil
 		}
-		if refreshed.State == "Human Review" || refreshed.State == "In Review" || refreshed.State == "AI Review" || refreshed.State == "Merging" {
+		if refreshed.State == "Human Review" || refreshed.State == "In Review" || refreshed.State == "AI Review" {
 			nextIssue = &refreshed
 			return codex.TurnPrompt{}, false, nil
 		}
 		if turn >= maxTurns {
 			maxTurnsReached = true
 			return codex.TurnPrompt{}, false, nil
+		}
+		if refreshed.State == "Merging" {
+			if phase != phaseReviewer {
+				nextIssue = &refreshed
+				return codex.TurnPrompt{}, false, nil
+			}
+			issue = refreshed
+			o.setRunning(observability.RunningEntry{
+				IssueID:         issue.ID,
+				IssueIdentifier: issue.Identifier,
+				State:           issue.State,
+				WorkspacePath:   workspacePath,
+				TurnCount:       turn + 1,
+				StartedAt:       time.Now(),
+			})
+			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true}, true, nil
 		}
 		issue = refreshed
 		o.setRunning(observability.RunningEntry{

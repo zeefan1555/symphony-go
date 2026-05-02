@@ -1465,7 +1465,7 @@ func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
 	}
 }
 
-func TestAIReviewStateStartsSeparateMergingRunWhenReviewerMovesToMerging(t *testing.T) {
+func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1476,9 +1476,7 @@ func TestAIReviewStateStartsSeparateMergingRunWhenReviewerMovesToMerging(t *test
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
-	reviewerRunner := &observingStateChangingRunner{tracker: tracker, state: "Merging"}
-	mergingRunner := &recordingRunner{}
-	runner := &sequenceRunner{runners: []AgentRunner{reviewerRunner, mergingRunner}}
+	runner := &reviewThenMergeRunner{tracker: tracker}
 	o := New(Options{
 		Workflow: &types.Workflow{
 			Config: types.Config{
@@ -1505,20 +1503,58 @@ func TestAIReviewStateStartsSeparateMergingRunWhenReviewerMovesToMerging(t *test
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if reviewerRunner.calls != 1 {
-		t.Fatalf("reviewer runner calls = %d, want 1", reviewerRunner.calls)
+	if runner.calls != 1 {
+		t.Fatalf("reviewer runner calls = %d, want 1", runner.calls)
 	}
-	if len(mergingRunner.requests) != 1 {
-		t.Fatalf("merging runner calls = %d, want 1", len(mergingRunner.requests))
+	if got, want := len(runner.prompts), 2; got != want {
+		t.Fatalf("prompts = %d, want %d", got, want)
 	}
-	if got := mergingRunner.requests[0].Issue.State; got != "Merging" {
-		t.Fatalf("merging runner issue state = %q, want Merging", got)
+	if got, want := runner.prompts[0].Text, "work on ZEE-REVIEWER-MERGE in AI Review"; got != want {
+		t.Fatalf("first prompt = %q, want %q", got, want)
 	}
-	if got, want := reviewerRunner.prompts, []string{"work on ZEE-REVIEWER-MERGE in AI Review"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("reviewer prompts = %#v, want %#v", got, want)
+	if got := runner.prompts[1]; got.Text != mergingContinuationPromptText || !got.Continuation {
+		t.Fatalf("merge continuation prompt = %#v, want continuation merge prompt", got)
 	}
-	if got, want := tracker.states, []string{"Merging"}; !reflect.DeepEqual(got, want) {
+	if got, want := tracker.states, []string{"Merging", "Done"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+}
+
+func TestReviewerMergingContinuationRespectsMaxTurns(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-REVIEWER-MERGE-STUCK",
+		Title:      "reviewer merge stuck smoke",
+		State:      "AI Review",
+	}
+	tracker := &recordingTracker{issue: issue}
+	runner := &stuckMergingRunner{tracker: tracker, maxPrompts: 2}
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Tracker: types.TrackerConfig{
+					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
+				},
+				Agent: types.AgentConfig{
+					MaxTurns: 2,
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }} in {{ issue.state }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	err := o.runAgent(ctx, issue, 0)
+	if err == nil || !strings.Contains(err.Error(), "reached max turns") {
+		t.Fatalf("runAgent error = %v, want reached max turns", err)
+	}
+	if got, want := len(runner.prompts), 2; got != want {
+		t.Fatalf("prompts = %d, want %d", got, want)
 	}
 }
 
@@ -2513,6 +2549,88 @@ func (r *observingStateChangingRunner) RunSession(ctx context.Context, request c
 	return completeFakeSession(ctx, request, func(prompt codex.TurnPrompt) {
 		r.prompts = append(r.prompts, prompt.Text)
 	})
+}
+
+type reviewThenMergeRunner struct {
+	tracker *recordingTracker
+	calls   int
+	prompts []codex.TurnPrompt
+}
+
+func (r *reviewThenMergeRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+	r.calls++
+	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
+	for turn := 0; turn < len(request.Prompts); turn++ {
+		r.prompts = append(r.prompts, request.Prompts[turn])
+		switch turn {
+		case 0:
+			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Merging"); err != nil {
+				return result, err
+			}
+		case 1:
+			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Done"); err != nil {
+				return result, err
+			}
+		}
+		turnResult := codex.Result{
+			SessionID: fmt.Sprintf("thread-1-turn-%d", turn+1),
+			ThreadID:  "thread-1",
+			TurnID:    fmt.Sprintf("turn-%d", turn+1),
+			PID:       123,
+		}
+		result.Turns = append(result.Turns, turnResult)
+		result.SessionID = turnResult.SessionID
+		result.PID = turnResult.PID
+		if request.AfterTurn == nil {
+			continue
+		}
+		next, ok, err := request.AfterTurn(ctx, turnResult, turn+1)
+		if err != nil {
+			return result, err
+		}
+		if !ok {
+			return result, nil
+		}
+		request.Prompts = append(request.Prompts, next)
+	}
+	return result, nil
+}
+
+type stuckMergingRunner struct {
+	tracker    *recordingTracker
+	maxPrompts int
+	prompts    []codex.TurnPrompt
+}
+
+func (r *stuckMergingRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
+	for turn := 0; turn < len(request.Prompts); turn++ {
+		if len(r.prompts) >= r.maxPrompts {
+			return result, fmt.Errorf("runner observed prompt %d, want at most %d", len(r.prompts)+1, r.maxPrompts)
+		}
+		r.prompts = append(r.prompts, request.Prompts[turn])
+		if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Merging"); err != nil {
+			return result, err
+		}
+		turnResult := codex.Result{
+			SessionID: fmt.Sprintf("thread-1-turn-%d", turn+1),
+			ThreadID:  "thread-1",
+			TurnID:    fmt.Sprintf("turn-%d", turn+1),
+			PID:       123,
+		}
+		result.Turns = append(result.Turns, turnResult)
+		result.SessionID = turnResult.SessionID
+		result.PID = turnResult.PID
+		next, ok, err := request.AfterTurn(ctx, turnResult, turn+1)
+		if err != nil {
+			return result, err
+		}
+		if !ok {
+			return result, nil
+		}
+		request.Prompts = append(request.Prompts, next)
+	}
+	return result, nil
 }
 
 func commitFile(ctx context.Context, workspacePath, name, contents, message string) error {
