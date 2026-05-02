@@ -40,6 +40,7 @@ agent:
     on_ai_fail: rework
 codex:
   command: codex --config shell_environment_policy.inherit=all --config 'model="gpt-5.5"' --config model_reasoning_effort=xhigh app-server
+  read_timeout_ms: 60000
   approval_policy: never
   thread_sandbox: workspace-write
   turn_sandbox_policy:

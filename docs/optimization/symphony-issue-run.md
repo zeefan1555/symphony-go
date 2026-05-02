@@ -3,6 +3,15 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-02 16:05 +08 - ZEE-41
+
+- Trigger: `ZEE-41` issue-scoped listener created the worktree but repeatedly failed before starting the Codex turn.
+- Evidence: `.symphony/logs/run-20260502-155913.human.log` recorded `response timeout waiting for id=2`; `internal/codex/runner.go:279` sends `thread/start` with id 2; `internal/config/config.go:94` defaulted `codex.read_timeout_ms` to 5000; current `WORKFLOW.md` did not override it.
+- Optimization: Set `codex.read_timeout_ms: 60000` in `WORKFLOW.md` so the app-server startup/thread handshake has enough room in real unattended runs.
+- Files: `WORKFLOW.md`, `docs/optimization/symphony-issue-run.md`.
+- Validation: `git diff --check`; `./test.sh ./internal/config ./internal/workflow`; `make build`.
+- Follow-up: none unless the retry still stalls after the wider handshake timeout.
+
 ## 2026-05-02 11:29 +08 - repo-only
 
 - Trigger: 用户希望 `symphony-issue-run` 不只是创建 issue 和启动 listener，而是让框架全自动跑到终态，并在每轮结束后复盘卡点、优化 Skill / Workflow / 代码、记录文档、再 commit 和 push。
