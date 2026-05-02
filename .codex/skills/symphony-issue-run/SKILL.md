@@ -1,6 +1,6 @@
 ---
 name: symphony-issue-run
-description: Use when operating this Symphony Go repository by creating a Linear issue and starting the local listener to process it.
+description: Use when this Symphony Go repo needs a Linear issue run, end-to-end listener execution, run review, or workflow/skill/code optimization from observed blockers.
 ---
 
 # Symphony Issue Run
@@ -9,37 +9,57 @@ description: Use when operating this Symphony Go repository by creating a Linear
 
 This skill is scoped to `/Users/bytedance/symphony-go`.
 
-Use it when the user wants an agent to create a Linear issue for this repo and
-then start the local Symphony Go listener so the workflow handles that issue.
+Use it when the user wants an agent to create a Linear issue for this repo,
+start the local Symphony Go listener, let the framework run the issue to a
+terminal state, review the run, and fold concrete improvements back into the
+repo.
+
 Do not use it for other repositories.
 
-## Preconditions
+## Operating Contract
 
-- Run from the repository root:
+- Default flow is fully automated: `Todo -> In Progress -> AI Review -> Merging -> Done`.
+- The listener, workflow, and orchestrator own state transitions; do not pause
+  for a human to move `Human Review` or `Merging` unless the user explicitly asks
+  for a manual gate.
+- `Human Review` is only an exceptional hold for real external blockers such as
+  missing auth, unavailable tools, or permissions that cannot be fixed in-session.
+- Linear writes from unattended runs must use `linear_graphql` inside the child
+  workflow or the local `linear` CLI from the supervising session. Do not use
+  Linear MCP/app tools in child agents.
+- Issue work happens in `.worktrees/<ISSUE>`. Post-run optimization of the repo
+  happens in the repo root after the target issue is terminal.
+- Every observed improvement must be recorded in
+  `docs/optimization/symphony-issue-run.md` before committing.
+- After verified optimization changes, create a local commit on `main` and push
+  `origin/main`.
+
+## Preflight
+
+Run from the repository root and confirm auth, branch, and workflow policy:
 
 ```sh
 git rev-parse --show-toplevel
 pwd
-```
-
-- Confirm tools and auth:
-
-```sh
 linear --version
 linear auth whoami
 git status --short --branch
+rg -n "review_policy:|mode:|on_ai_fail|active_states|terminal_states" WORKFLOW.md
 ```
 
-- Read `WORKFLOW.md` before creating the issue. The current workflow defines
-  the Linear project, active states, workspace root, review policy, and main
-  merge flow.
+Read `WORKFLOW.md` before creating the issue. The workflow is the source of
+truth for active states, AI review policy, worktree root, merge behavior, and
+the model command. Model changes belong in `codex.command`; this skill should
+not hardcode a model assumption.
+
+If `git status --short` shows unrelated local edits, do not overwrite them.
+Either finish the current repo optimization first or stop and report the
+conflict.
 
 ## Create The Issue
 
-Create the issue with `linear` CLI. Do not use Linear MCP/app tools for this
-workflow; unattended MCP writes can trigger approval prompts.
-
-Use a temporary Markdown file for the body:
+Create the issue with the `linear` CLI. Use a temporary Markdown file for the
+body:
 
 ```sh
 tmp_issue=$(mktemp)
@@ -57,9 +77,11 @@ cat > "$tmp_issue" <<'EOF'
 ## 约束
 - 只在 `/Users/bytedance/symphony-go` 仓库内工作。
 - 使用当前仓库的 `.worktrees/<ISSUE>` worktree。
-- Linear workpad 和可见说明默认使用中文。
-- 不创建 PR；当前 workflow 在 `Merging` 阶段把本地 issue worktree
-  分支合入本地 `main`，验证后 `git push origin main`。
+- 让 Symphony Go listener 按 `WORKFLOW.md` 全自动跑完：
+  `Todo -> In Progress -> AI Review -> Merging -> Done`。
+- Linear workpad、状态说明、commit message 和可见说明默认使用中文。
+- 不创建 PR；`Merging` 阶段把本地 issue worktree 分支合入本地 `main`，
+  验证后 `git push origin main`。
 EOF
 
 linear issue create \
@@ -71,18 +93,17 @@ linear issue create \
   --no-interactive
 ```
 
-After creation, capture the identifier from CLI output or query recent issues:
+Capture the identifier and URL:
 
 ```sh
 linear issue mine --team "ZEE" --project "symphony-test-c2a66ab0f2e7" --all-states --limit 10
 linear issue view <ISSUE> --json
 ```
 
-If the intended flow requires human-controlled start, create the issue in
-`Backlog` and let the user move it to `Todo`. If the goal is immediate
-processing, create it in `Todo`.
+Use `Backlog` only when the user explicitly wants a manual start. For the normal
+automation loop, create the issue directly in `Todo`.
 
-## Start The Listener Fast
+## Start One Issue-Scoped Listener
 
 First check whether a listener is already running. Do not start a duplicate
 service just because an old PID file exists:
@@ -90,21 +111,19 @@ service just because an old PID file exists:
 ```sh
 pgrep -fl 'bin/symphony-go run --workflow ./WORKFLOW.md' || true
 test -f .symphony/pids/symphony-go.pid && cat .symphony/pids/symphony-go.pid || true
+test -f ".symphony/pids/<ISSUE>.pid" && cat ".symphony/pids/<ISSUE>.pid" || true
 ```
 
-For the default issue-run lifecycle, start one issue-scoped listener from the
-repo root and stop it after the target issue reaches `Done` or another terminal
-state. Do not stop it merely because the issue is in `Human Review`; the user may
-move it to `Merging`, and the same listener should continue processing that
-state transition.
+For the default lifecycle, start one issue-scoped listener from the repo root and
+let it run until the target issue reaches `Done` or another terminal state:
 
 ```sh
+ISSUE=<ISSUE>
 make build
 mkdir -p .symphony/logs .symphony/pids
 ts=$(date +%Y%m%d-%H%M%S)
-log=".symphony/logs/${ISSUE:-issue}-$ts.out"
+log=".symphony/logs/${ISSUE}-$ts.out"
 python3 - "$ISSUE" "$log" <<'PY'
-import os
 import subprocess
 import sys
 
@@ -135,164 +154,83 @@ print(f"pid={p.pid} log={log} pid_file={pid_file}")
 PY
 ```
 
-This avoids tying the listener to the current terminal session. In the latest
-smoke run, a plain `nohup ... &` launch exited immediately with an empty daemon
-log, while the detached Python launcher stayed alive.
+This detached Python launcher is preferred over plain `nohup ... &`; previous
+smoke runs showed `nohup` could exit immediately with an empty daemon log.
 
-If the user explicitly wants a long-lived listener for all active issues, start
-one continuous listener instead:
-
-```sh
-WORKFLOW=./WORKFLOW.md MERGE_TARGET=main make run
-```
-
-For a non-TUI foreground listener:
-
-```sh
-make build
-./bin/symphony-go run --workflow ./WORKFLOW.md --no-tui --merge-target main
-```
-
-For debugging a single issue once:
+Use `run-once` only for diagnosis, not for the normal full automation loop:
 
 ```sh
 ISSUE=<ISSUE> WORKFLOW=./WORKFLOW.md MERGE_TARGET=main make run-once
 ```
 
-`run-once` is not the normal listener mode. Use it only to test one poll or
-diagnose a specific issue.
+## Monitor To Terminal
 
-## Merging Supervision
-
-Current `WORKFLOW.md` does not use PR land. In `Merging`, the listener should
-follow the injected Workflow prompt: merge the local issue branch into local
-`main`, validate, push `origin/main`, and move the issue to `Done`.
-
-When the user moves an issue to `Merging`, watch the latest human log:
+Watch the issue, human log, and daemon log until terminal. Do not stop at
+`AI Review`, `Rework`, or `Merging`.
 
 ```sh
-latest_log=$(ls -t .symphony/logs/run-*.human.log | head -1)
-tail -n 160 "$latest_log"
+ISSUE=<ISSUE>
+linear issue view "$ISSUE" --json
+latest_human=$(ls -t .symphony/logs/run-*.human.log | head -1)
+tail -n 160 "$latest_human"
+tail -n 120 "$log"
 ```
 
-Expected evidence:
+Expected healthy evidence:
 
-- The issue worktree branch has a local task commit.
-- Root checkout `main` has a merge commit that includes the issue branch.
-- `git push origin main` succeeds.
-- Root checkout is aligned: `git status --short --branch` prints
-  `## main...origin/main` with no changed files.
-- `git worktree list --porcelain` no longer lists `.worktrees/<ISSUE>`.
+- Issue moves `Todo -> In Progress`.
+- `.worktrees/<ISSUE>` is created.
+- Workpad receives `initial`, `handoff`, `ai_review`, and merge/terminal evidence.
+- AI Review passes or sends the issue to `Rework` with reasons.
+- Rework produces a new implementation commit and returns to `AI Review`.
+- `Merging` merges the local issue branch into local `main`, validates, and
+  pushes `origin/main`.
+- Issue reaches `Done`.
 
-Do not create a PR in `Merging`. This workflow is optimized for local personal
-testing and fast iteration.
+If the issue stalls, diagnose before restarting:
+
+```sh
+linear issue view "$ISSUE" --json
+git worktree list --porcelain | rg -n "$ISSUE|\\.worktrees/$ISSUE" || true
+rg -n "$ISSUE|state_changed|ai_review|rework|merge|blocked|error" "$latest_human"
+rg -n "$ISSUE|state_changed|ai_review|rework|merge|blocked|error" .symphony/logs/run-*.jsonl
+ps -ef | rg 'symphony-go|codex app-server' | rg -v rg
+```
+
+Treat repeated stalls as framework signal. Do not keep restarting blindly.
+
+## Merging Checks
+
+`Merging` must not create a PR. It merges the local issue branch into local
+`main`, validates, pushes `origin/main`, and moves the issue to `Done`.
 
 Do not pull the remote issue branch. Issue branches are local worktree branches
 by default, so `git pull origin <issue-branch>` is expected to fail when the
-branch was never pushed. Also do not pre-pull remote `main` on the normal path;
-merge the local issue branch into the current local `main`, validate, then push.
-Only handle remote synchronization if `git push origin main` fails because the
-remote advanced.
+branch was never pushed. Do not pre-pull remote `main` on the normal path; only
+handle remote synchronization if `git push origin main` fails because the remote
+advanced.
 
-If the first Merging attempt fails with `bufio.Scanner: token too long`, do not
-restart blindly. Confirm whether the listener retries and whether a second run
-continues. If it repeats, treat it as a runner/log-scanner bug and fix that
-separately from the issue work.
-
-If `git merge` reports `warning: unable to unlink '<path>': Operation not
-permitted`, verify whether the merge commit deleted that exact path but the file
-remains as untracked in the root checkout. It is safe to remove that residual
-untracked file only when all of these are true:
-
-- `git status --short` shows the same path as `??`.
-- `git show --name-status --oneline HEAD` shows that path as deleted.
-- The path is explicitly in the issue scope.
-
-After Merging, verify the local repo is aligned and no issue worktree remains:
+After terminal state, verify:
 
 ```sh
 git status --short --branch
 git rev-parse --short HEAD
 git rev-parse --short origin/main
 git worktree list --porcelain | rg -n "<ISSUE>|\\.worktrees/<ISSUE>" || true
-```
-
-If a background listener is running, keep it alive for future issues. If it was
-started only for this issue, stop that issue-scoped listener after the issue is
-`Done` or otherwise terminal:
-
-```sh
-pid_file=.symphony/pids/<ISSUE>.pid
-if [ -f "$pid_file" ]; then
-  kill "$(cat "$pid_file")"
-  rm "$pid_file"
-fi
-```
-
-## Background Listener
-
-When the user explicitly wants a background listener for all active issues,
-build first and write the PID under `.symphony/pids`:
-
-```sh
-make build
-mkdir -p .symphony/logs .symphony/pids
-ts=$(date +%Y%m%d-%H%M%S)
-log=".symphony/logs/daemon-$ts.out"
-python3 - "$log" <<'PY'
-import os
-import subprocess
-import sys
-
-log = sys.argv[1]
-f = open(log, "ab", buffering=0)
-p = subprocess.Popen(
-    ["./bin/symphony-go", "run", "--workflow", "./WORKFLOW.md", "--no-tui", "--merge-target", "main"],
-    stdin=subprocess.DEVNULL,
-    stdout=f,
-    stderr=subprocess.STDOUT,
-    start_new_session=True,
-)
-with open(".symphony/pids/symphony-go.pid", "w") as out:
-    out.write(str(p.pid))
-print(p.pid)
-PY
-echo "pid=$(cat .symphony/pids/symphony-go.pid) log=$log"
-```
-
-Verify it is alive:
-
-```sh
-pid=$(cat .symphony/pids/symphony-go.pid)
-ps -p "$pid" -o pid,ppid,etime,command
-tail -n 80 "$log"
-```
-
-If the process exits immediately, do not keep restarting blindly. Read the
-daemon log and the latest `.symphony/logs/run-*.human.log` first.
-
-## Verify Processing Started
-
-Check these signals before reporting success:
-
-```sh
 linear issue view <ISSUE> --json
-ls -la .worktrees
-ls -t .symphony/logs/run-*.human.log | head -1
-tail -n 120 "$(ls -t .symphony/logs/run-*.human.log | head -1)"
 ```
 
-Expected signs:
+If `git merge` reports `warning: unable to unlink '<path>': Operation not
+permitted`, remove a residual untracked file only when all are true:
 
-- issue moves from `Todo` to `In Progress`, or logs explain why it is skipped.
-- `.worktrees/<ISSUE>` exists after dispatch.
-- human log contains `state_changed`, `workpad_updated`, or `codex_session_started`
-  for the issue.
+- `git status --short` shows the same path as `??`.
+- `git show --name-status --oneline HEAD` shows that path as deleted.
+- The path is explicitly in the issue scope.
 
-## Stop And Review The Run
+## Stop The Issue Listener
 
-For the default issue-scoped lifecycle, stop the listener after the target issue
-is terminal, then perform a short review before reporting back:
+Stop only the issue-scoped listener after the target issue is terminal. Keep a
+long-lived all-issue listener alive only if the user explicitly asked for it.
 
 ```sh
 pid_file=.symphony/pids/<ISSUE>.pid
@@ -303,59 +241,100 @@ fi
 pgrep -fl 'symphony-go run --workflow ./WORKFLOW.md|bin/symphony-go run' || true
 ```
 
-Review and improve from the run:
+## Review The Run
 
-- Skill gaps: wrong team key, stale PR/land wording, fragile launch command, or
-  missing terminal verification.
-- Workflow gaps: instructions that caused unnecessary remote pulls, PR work, or
-  ambiguity between repo root and issue worktree.
-- Code gaps: behavior that should be handled by the orchestrator rather than by
-  human cleanup. Check these code anchors when relevant:
-  - `cmd/symphony-go/main.go`: run flags and listener lifecycle. A useful future
-    improvement is an issue-scoped mode that exits automatically once the target
-    issue reaches a terminal state.
-  - `internal/orchestrator/orchestrator.go`: `Merging` workflow prompt injection,
-    terminal cleanup, and workpad wording. Watch for delayed worktree cleanup
-    after terminal state and stale standalone-skill labels.
-  - `internal/workspace/workspace.go` and `scripts/symphony_before_remove.sh`:
-    worktree cleanup behavior and root checkout residue after merge.
+After terminal state and listener cleanup, always review the run before
+reporting back. Use the latest human log, JSONL log, Linear workpad, git status,
+and worktree cleanup evidence.
 
-Only make code changes when the root cause is clear and the change is small
-enough to verify immediately. Otherwise record a follow-up issue with concrete
-file anchors and reproduction evidence.
+Classify findings:
+
+- Skill gaps: instructions caused manual waiting, duplicate listeners, wrong
+  team/project/state, missing terminal checks, or unclear handoff.
+- Workflow gaps: prompt caused unnecessary remote pulls, PR work, wrong state
+  routing, weak AI Review/Rework loop, or ambiguous repo-root/worktree behavior.
+- Code gaps: behavior should be first-class in the orchestrator, workspace
+  manager, Linear adapter, runner, logs, or TUI instead of relying on humans.
+- Environment gaps: auth, git permissions, stale processes, or local filesystem
+  residue blocked automation.
+
+Optimize only when the root cause is clear and the change is small enough to
+verify immediately. Otherwise create a follow-up Linear issue in `Backlog` with
+file anchors, reproduction evidence, and acceptance criteria.
+
+## Record Optimization Notes
+
+Every retained optimization must be written to
+`docs/optimization/symphony-issue-run.md` before commit. Append an entry with:
+
+- Date/time and issue identifier.
+- What blocked or slowed the run.
+- Evidence: log path, workpad state, git commit, command output, or file anchor.
+- Decision: Skill, Workflow, code, or follow-up issue.
+- Files changed and validation commands.
+
+Use this template:
+
+```md
+## YYYY-MM-DD HH:MM - <ISSUE or repo-only>
+
+- Trigger:
+- Evidence:
+- Optimization:
+- Files:
+- Validation:
+- Follow-up:
+```
+
+## Commit And Push Optimizations
+
+After updating the skill, workflow, docs, or code, verify and publish from the
+repo root:
+
+```sh
+git status --short --branch
+rg -n "StateSkills|runStateSkill|agent\\.state_skills" internal WORKFLOW.md README.md docs || true
+git diff --check
+go test ./internal/config ./internal/orchestrator ./internal/workflow ./internal/types
+CGO_ENABLED=0 go test ./...
+git status --short --branch
+git add <changed files>
+git commit -m "<concise message>"
+git push origin main
+```
+
+If plain `go test ./cmd/symphony-go` fails with local `dyld missing LC_UUID load
+command`, record that environment-specific failure and use `CGO_ENABLED=0 go
+test ./...` as the publish gate.
+
+Do not commit unrelated local edits. If unrelated edits exist, stop and report
+the exact files.
 
 ## Common Mistakes
 
-- Do not create the issue in a state outside `WORKFLOW.md` active states unless
-  the user explicitly wants to hold it.
-- Do not run only `make run-once` when the user asked for a listener service.
-- Do not start a second listener when the first one is already polling; duplicate
-  listeners can dispatch the same issue twice.
-- Do not leave an issue-scoped listener running after the target issue reaches
-  `Done` or another terminal state.
+- Do not stop at `Human Review`; default flow should not go there.
+- Do not stop at `AI Review` or `Merging`; wait for terminal or a real blocker.
+- Do not run only `make run-once` when the user asked for a full framework run.
+- Do not start a second listener when one is already polling the same issue.
 - Do not use Linear MCP/app tools from unattended child agents.
-- Do not hardcode another repository path, remote, branch, or project.
-- Do not declare the listener healthy just because a PID file exists; confirm
-  with `ps` and logs.
+- Do not hardcode another repository path, remote, branch, project, or model.
+- Do not declare health from a PID file alone; confirm with `ps` and logs.
 - Do not delete `.worktrees/<ISSUE>` manually while the issue is active.
-- Do not declare Merging complete until root checkout, `origin/main`, Linear
-  state, and worktree cleanup have all been checked.
-- After the issue is complete and the listener is stopped, review the run logs
-  and update this skill or `WORKFLOW.md` with any concrete failure mode that
-  caused delay or manual recovery.
-- Include code-level optimization notes in the handoff when the run exposed
-  orchestrator behavior that should become first-class code.
+- Do not declare `Merging` complete until root checkout, `origin/main`, Linear
+  state, workpad evidence, and worktree cleanup have all been checked.
+- Do not leave optimization learnings only in chat; record them in the docs,
+  then commit and push verified changes.
 
 ## Handoff
 
 Report back with:
 
 - Linear issue identifier and URL.
-- Listener mode: foreground, background, or `run-once`.
-- PID and log path if background mode was used.
-- Current issue state.
-- Worktree path if created.
-- Merge commit and push evidence if Merging ran.
+- Listener mode, PID, daemon log, and human/JSONL log paths.
+- Final issue state.
+- Worktree path and cleanup result.
+- AI Review result and any Rework loop.
+- Merge commit and push evidence if `Merging` ran.
 - Root checkout status after merge.
-- Latest relevant log evidence.
-- Whether the issue-scoped listener was stopped.
+- Optimization notes recorded, files changed, validation commands, commit, and
+  push result.
