@@ -34,6 +34,13 @@ const continuationPromptText = "Continue working on the same issue. Re-check the
 
 var errNoRetryNeeded = errors.New("no retry needed")
 
+type agentPhase string
+
+const (
+	phaseImplementer agentPhase = "implementer"
+	phaseReviewer    agentPhase = "reviewer"
+)
+
 type WorkflowReloader interface {
 	Current() *types.Workflow
 	ReloadIfChanged() (*types.Workflow, bool, error)
@@ -810,7 +817,16 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 		o.logIssue(issue, "waiting_for_review", "issue is waiting for human review", nil)
 		return errNoRetryNeeded
 	case "AI Review":
-		return o.reviewIssueState(ctx, rt, issue)
+		return o.runPhaseAgent(ctx, rt, issue, attempt, phaseReviewer)
+	}
+	return o.runPhaseAgent(ctx, rt, issue, attempt, phaseImplementer)
+}
+
+func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, issue types.Issue, attempt int, phase agentPhase) error {
+	switch phase {
+	case phaseImplementer, phaseReviewer:
+	default:
+		return fmt.Errorf("unknown agent phase %q", phase)
 	}
 	o.setRunning(observability.RunningEntry{
 		IssueID:         issue.ID,
@@ -918,65 +934,15 @@ func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, iss
 	return nil
 }
 
-func (o *Orchestrator) reviewIssueState(ctx context.Context, rt runtimeSnapshot, issue types.Issue) error {
-	policy := effectiveReviewPolicy(rt.workflow.Config.Agent)
-	if !policy.allowsAIReviewState() {
-		o.logIssue(issue, "waiting_for_ai_review", "AI Review is disabled in workflow config", nil)
-		return errNoRetryNeeded
-	}
-	workspacePath, _, err := rt.workspace.Ensure(ctx, issue)
-	if err != nil {
-		return err
-	}
-	head, err := gitOutput(ctx, workspacePath, "rev-parse", "--short", "HEAD")
-	if err != nil {
-		return fmt.Errorf("read HEAD for AI Review: %w", err)
-	}
-	baseHead, err := gitOutput(ctx, workspacePath, "rev-parse", "--short", "HEAD~1")
-	if err != nil {
-		baseHead = ""
-	}
-	changedFiles, _ := gitOutput(ctx, workspacePath, "show", "--name-only", "--format=", "--no-renames", "HEAD")
-	status, _ := gitOutput(ctx, workspacePath, "status", "--short")
-	outcome := o.aiReviewAfterCommit(ctx, policy, issue, workspacePath, strings.TrimSpace(baseHead), strings.TrimSpace(head), changedFiles, status)
-	if outcome.Passed {
-		nextState := policy.stateAfterPassedAIReview()
-		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, nextState); err != nil {
-			return err
-		}
-		o.logIssue(issue, "ai_review_completed", "AI Review passed", map[string]any{"commit": strings.TrimSpace(head)})
-		o.logIssue(issue, "state_changed", "AI Review -> "+nextState, map[string]any{"commit": strings.TrimSpace(head)})
-		if nextState == "Merging" {
-			issue.State = "Merging"
-			return o.runAgentWith(ctx, rt, issue, 0)
-		}
-		return errNoRetryNeeded
-	}
-	if policy.reworkOnAIFail() {
-		if err := rt.tracker.UpdateIssueState(ctx, issue.ID, "Rework"); err != nil {
-			return err
-		}
-		o.logIssue(issue, "ai_review_failed", outcome.Summary, map[string]any{"reasons": outcome.Reasons})
-		o.logIssue(issue, "state_changed", "AI Review -> Rework", map[string]any{"commit": strings.TrimSpace(head)})
-		return errNoRetryNeeded
-	}
-	o.logIssue(issue, "ai_review_completed", outcome.Summary, map[string]any{"commit": strings.TrimSpace(head), "reasons": outcome.Reasons})
-	return errNoRetryNeeded
-}
-
 const (
 	reviewPolicyHuman = "human"
 	reviewPolicyAI    = "ai"
 	reviewPolicyAuto  = "auto"
-	aiFailRework      = "rework"
-	aiFailHold        = "hold"
 )
 
 type reviewPolicy struct {
-	mode                 string
-	allowManualAIReview  bool
-	onAIFail             string
-	expectedChangedFiles []string
+	mode                string
+	allowManualAIReview bool
 }
 
 func effectiveReviewPolicy(agent types.AgentConfig) reviewPolicy {
@@ -988,119 +954,27 @@ func effectiveReviewPolicy(agent types.AgentConfig) reviewPolicy {
 	if mode != reviewPolicyAI && mode != reviewPolicyAuto {
 		mode = reviewPolicyHuman
 	}
-	onFail := strings.ToLower(strings.TrimSpace(cfg.OnAIFail))
-	if onFail == "" {
-		onFail = aiFailRework
-	}
-	if onFail != aiFailRework {
-		onFail = aiFailHold
-	}
-	expected := cfg.ExpectedChangedFiles
-	if len(expected) == 0 {
-		expected = agent.AIReview.ExpectedChangedFiles
-	}
 	return reviewPolicy{
-		mode:                 mode,
-		allowManualAIReview:  cfg.AllowManualAIReview,
-		onAIFail:             onFail,
-		expectedChangedFiles: expected,
+		mode:                mode,
+		allowManualAIReview: cfg.AllowManualAIReview,
 	}
 }
 
 func legacyReviewPolicy(review types.AIReviewConfig) reviewPolicy {
 	policy := reviewPolicy{
-		mode:     reviewPolicyHuman,
-		onAIFail: aiFailRework,
+		mode: reviewPolicyHuman,
 	}
 	if review.Enabled {
 		policy.mode = reviewPolicyAI
 		if review.AutoMerge {
 			policy.mode = reviewPolicyAuto
 		}
-		if !review.ReworkOnFailure {
-			policy.onAIFail = aiFailHold
-		}
-		policy.expectedChangedFiles = review.ExpectedChangedFiles
 	}
 	return policy
 }
 
 func (p reviewPolicy) allowsAIReviewState() bool {
 	return p.mode == reviewPolicyAI || p.mode == reviewPolicyAuto || p.allowManualAIReview
-}
-
-func (p reviewPolicy) stateAfterPassedAIReview() string {
-	if p.mode == reviewPolicyAuto {
-		return "Merging"
-	}
-	return "Human Review"
-}
-
-func (p reviewPolicy) reworkOnAIFail() bool {
-	return p.onAIFail == aiFailRework
-}
-
-func nonEmptyLines(value string) []string {
-	lines := strings.Split(value, "\n")
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			out = append(out, line)
-		}
-	}
-	return out
-}
-
-type aiReviewOutcome struct {
-	Passed       bool
-	Summary      string
-	Reasons      []string
-	ChangedFiles []string
-}
-
-func (o *Orchestrator) aiReviewAfterCommit(ctx context.Context, policy reviewPolicy, issue types.Issue, workspacePath, baseHead, head, changedFiles, status string) aiReviewOutcome {
-	outcome := aiReviewOutcome{
-		Passed:       true,
-		Summary:      "AI Review 通过",
-		ChangedFiles: nonEmptyLines(changedFiles),
-	}
-	if strings.TrimSpace(status) != "" {
-		outcome.Passed = false
-		outcome.Reasons = append(outcome.Reasons, "worktree 仍有未提交变更")
-	}
-	if baseHead != "" && head != "" {
-		if _, err := gitOutput(ctx, workspacePath, "diff", "--check", baseHead+".."+head); err != nil {
-			outcome.Passed = false
-			outcome.Reasons = append(outcome.Reasons, "git diff --check 未通过: "+err.Error())
-		}
-	}
-	expected := policy.expectedChangedFiles
-	if len(expected) > 0 && !sameStringSet(outcome.ChangedFiles, expected) {
-		outcome.Passed = false
-		outcome.Reasons = append(outcome.Reasons, fmt.Sprintf("变更文件不符合预期: got %v want %v", outcome.ChangedFiles, expected))
-	}
-	if !outcome.Passed {
-		outcome.Summary = "AI Review 未通过"
-	}
-	return outcome
-}
-
-func sameStringSet(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	counts := map[string]int{}
-	for _, item := range left {
-		counts[item]++
-	}
-	for _, item := range right {
-		if counts[item] == 0 {
-			return false
-		}
-		counts[item]--
-	}
-	return true
 }
 
 func logPreview(value string, max int) string {

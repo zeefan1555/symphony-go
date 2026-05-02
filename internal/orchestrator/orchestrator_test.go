@@ -1383,7 +1383,7 @@ func TestRunAgentReviewPolicyHumanDoesNotMoveImplementationToHumanReview(t *test
 	}
 }
 
-func TestRunAgentProcessesManualAIReviewWhenPolicyAllows(t *testing.T) {
+func TestAIReviewStateDoesNotUseManualPolicyTransition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1394,10 +1394,12 @@ func TestRunAgentProcessesManualAIReviewWhenPolicyAllows(t *testing.T) {
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
+	runner := &recordingRunner{}
 	o := New(Options{
 		Workflow: &types.Workflow{
 			Config: types.Config{
 				Agent: types.AgentConfig{
+					MaxTurns: 1,
 					ReviewPolicy: types.ReviewPolicyConfig{
 						Mode:                "human",
 						AllowManualAIReview: true,
@@ -1409,13 +1411,113 @@ func TestRunAgentProcessesManualAIReviewWhenPolicyAllows(t *testing.T) {
 		},
 		Tracker:   tracker,
 		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    runner,
 	})
 
 	if err := o.runAgent(ctx, issue, 0); err != nil {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if got, want := tracker.states, []string{"Human Review"}; !reflect.DeepEqual(got, want) {
+	if len(runner.requests) != 1 {
+		t.Fatalf("runner calls = %d, want 1", len(runner.requests))
+	}
+	if len(tracker.states) != 0 {
+		t.Fatalf("state updates = %#v, want none", tracker.states)
+	}
+}
+
+func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-REVIEWER",
+		Title:      "reviewer agent smoke",
+		State:      "AI Review",
+	}
+	tracker := &recordingTracker{issue: issue}
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Agent: types.AgentConfig{
+					MaxTurns: 1,
+					ReviewPolicy: types.ReviewPolicyConfig{
+						Mode:                "human",
+						AllowManualAIReview: true,
+						OnAIFail:            "rework",
+					},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    stateChangingRunner{tracker: tracker, state: "Rework"},
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if got, want := tracker.states, []string{"Rework"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+}
+
+func TestAIReviewStateStartsSeparateMergingRunWhenReviewerMovesToMerging(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := types.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-REVIEWER-MERGE",
+		Title:      "reviewer to merge smoke",
+		State:      "AI Review",
+	}
+	tracker := &recordingTracker{issue: issue}
+	reviewerRunner := &observingStateChangingRunner{tracker: tracker, state: "Merging"}
+	mergingRunner := &recordingRunner{}
+	runner := &sequenceRunner{runners: []AgentRunner{reviewerRunner, mergingRunner}}
+	o := New(Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Tracker: types.TrackerConfig{
+					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
+				},
+				Agent: types.AgentConfig{
+					MaxTurns: 2,
+					ReviewPolicy: types.ReviewPolicyConfig{
+						Mode:                "human",
+						AllowManualAIReview: true,
+						OnAIFail:            "rework",
+					},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }} in {{ issue.state }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if reviewerRunner.calls != 1 {
+		t.Fatalf("reviewer runner calls = %d, want 1", reviewerRunner.calls)
+	}
+	if len(mergingRunner.requests) != 1 {
+		t.Fatalf("merging runner calls = %d, want 1", len(mergingRunner.requests))
+	}
+	if got := mergingRunner.requests[0].Issue.State; got != "Merging" {
+		t.Fatalf("merging runner issue state = %q, want Merging", got)
+	}
+	if got, want := reviewerRunner.prompts, []string{"work on ZEE-REVIEWER-MERGE in AI Review"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("reviewer prompts = %#v, want %#v", got, want)
+	}
+	if got, want := tracker.states, []string{"Merging"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
 }
@@ -2392,6 +2494,25 @@ func (r stateChangingRunner) RunSession(ctx context.Context, request codex.Sessi
 		}
 	}
 	return completeFakeSession(ctx, request, nil)
+}
+
+type observingStateChangingRunner struct {
+	tracker *recordingTracker
+	state   string
+	calls   int
+	prompts []string
+}
+
+func (r *observingStateChangingRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+	r.calls++
+	if r.state != "" {
+		if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, r.state); err != nil {
+			return codex.SessionResult{}, err
+		}
+	}
+	return completeFakeSession(ctx, request, func(prompt codex.TurnPrompt) {
+		r.prompts = append(r.prompts, prompt.Text)
+	})
 }
 
 func commitFile(ctx context.Context, workspacePath, name, contents, message string) error {
