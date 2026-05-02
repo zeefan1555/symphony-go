@@ -101,7 +101,7 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 	}
 	for turnIndex := 0; turnIndex < len(request.Prompts); turnIndex++ {
 		prompt := request.Prompts[turnIndex]
-		turnID, err := session.startTurn(turnStartID+turnIndex, request.WorkspacePath, prompt.Text, request.Issue, r.Config.ApprovalPolicy, r.turnSandboxPolicy(request.WorkspacePath))
+		turnID, err := session.startTurn(turnStartID+turnIndex, request.WorkspacePath, prompt.Text, request.Issue, r.Config.ApprovalPolicy, r.turnSandboxPolicy(request.WorkspacePath, request.Issue))
 		if err != nil {
 			return sessionResult, err
 		}
@@ -196,7 +196,7 @@ func (r *Runner) startSession(ctx context.Context, workspacePath string) (*sessi
 	return s, nil
 }
 
-func (r *Runner) turnSandboxPolicy(workspacePath string) map[string]any {
+func (r *Runner) turnSandboxPolicy(workspacePath string, issue types.Issue) map[string]any {
 	policy := map[string]any{}
 	for key, value := range r.Config.TurnSandboxPolicy {
 		policy[key] = value
@@ -213,6 +213,9 @@ func (r *Runner) turnSandboxPolicy(workspacePath string) map[string]any {
 		roots = appendUnique(roots, workspacePath)
 		for _, root := range gitMetadataRoots(workspacePath) {
 			roots = appendUnique(roots, root)
+		}
+		if strings.EqualFold(issue.State, "Merging") {
+			roots = appendUnique(roots, gitCommonWorktreeRoot(workspacePath))
 		}
 		values := make([]any, 0, len(roots))
 		for _, root := range roots {
@@ -459,16 +462,28 @@ func appendUnique(items []string, value string) []string {
 func gitMetadataRoots(workspacePath string) []string {
 	var roots []string
 	for _, flag := range []string{"--git-dir", "--git-common-dir"} {
-		cmd := exec.Command("git", "-C", workspacePath, "rev-parse", flag)
-		output, err := cmd.Output()
-		if err != nil {
-			continue
-		}
-		root := filepath.Clean(strings.TrimSpace(string(output)))
-		if !filepath.IsAbs(root) {
-			root = filepath.Join(workspacePath, root)
-		}
-		roots = appendUnique(roots, root)
+		roots = appendUnique(roots, gitRevParsePath(workspacePath, flag))
 	}
 	return roots
+}
+
+func gitCommonWorktreeRoot(workspacePath string) string {
+	commonDir := gitRevParsePath(workspacePath, "--git-common-dir")
+	if commonDir == "" || filepath.Base(commonDir) != ".git" {
+		return ""
+	}
+	return filepath.Dir(commonDir)
+}
+
+func gitRevParsePath(workspacePath, flag string) string {
+	cmd := exec.Command("git", "-C", workspacePath, "rev-parse", flag)
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	root := filepath.Clean(strings.TrimSpace(string(output)))
+	if !filepath.IsAbs(root) {
+		root = filepath.Join(workspacePath, root)
+	}
+	return root
 }

@@ -3,6 +3,28 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-02 16:36 +08 - ZEE-41
+
+- Trigger: 用户指出 `ZEE-41` 耗时过长，状态流经过 `Human Review`，且最终由父会话手工接管 `Merging`，不符合 `symphony-go` 全自动处理目标。
+- Evidence:
+  - `.symphony/logs/run-20260502-155913.human.log` 多次记录 `response timeout waiting for id=2`，导致第一轮 listener 在 Codex thread handshake 前反复失败。
+  - `.symphony/logs/run-20260502-161318.human.log` 记录 `16:23:43` child 在 `Merging` 执行 `git merge --no-ff` 时失败，错误为 `fatal: cannot create directory at 'docs/architecture': Operation not permitted`。
+  - 同一日志 `16:24:41` 记录 child 按 blocker 规则把 issue 移到 `Human Review`；`16:26:04` 后 orchestrator 又按 commit handoff 记录 `In Progress -> AI Review -> Merging`，造成 Linear 面板看起来像多段重复流转。
+  - `internal/codex/runner.go` 只把 issue worktree 和 git metadata 加进 `workspaceWrite.writableRoots`；`Merging` prompt 要写 repo root 的 `main` checkout，权限边界不匹配。
+- Optimization:
+  - 代码层：仅当 issue state 为 `Merging` 时，把 git common-dir 对应的主 checkout root 加入 Codex turn writable roots，让 child 可以自己完成 local main merge、验证和 push。
+  - 流程层：把这次用户纠正写入 `lesson.md`，后续 `symphony-issue-run` 不能把父会话手工 merge 当成正常成功路径；若需要人接管，必须先分类为 framework gap 并优化。
+- Files:
+  - `internal/codex/runner.go`
+  - `internal/codex/runner_test.go`
+  - `docs/optimization/symphony-issue-run.md`
+  - `lesson.md`
+- Validation:
+  - `git diff --check`
+  - `./test.sh ./internal/codex ./internal/orchestrator`
+  - `make build`
+- Follow-up: 下次用真实 issue-run 验证 `Merging` 不再进入 `Human Review`；如果仍出现 root merge 卡点，应把 local merge 下沉为 orchestrator first-class action，而不是继续依赖 prompt 执行。
+
 ## 2026-05-02 16:05 +08 - ZEE-41
 
 - Trigger: `ZEE-41` issue-scoped listener created the worktree but repeatedly failed before starting the Codex turn.

@@ -64,6 +64,35 @@ printf '%s\n' '{"method":"turn/completed"}'
 	}
 }
 
+func TestMergingTurnSandboxIncludesMainCheckoutRoot(t *testing.T) {
+	repoRoot := t.TempDir()
+	git(t, repoRoot, "init")
+	git(t, repoRoot, "config", "user.email", "test@example.com")
+	git(t, repoRoot, "config", "user.name", "Test User")
+	git(t, repoRoot, "commit", "--allow-empty", "-m", "initial")
+	canonicalRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worktreePath := filepath.Join(t.TempDir(), "ZEE-TEST")
+	git(t, repoRoot, "worktree", "add", "-b", "symphony-go/ZEE-TEST", worktreePath)
+
+	runner := New(types.CodexConfig{
+		TurnSandboxPolicy: map[string]any{"type": "workspaceWrite"},
+	})
+	implementationRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, types.Issue{State: "In Progress"})["writableRoots"])
+	if containsString(implementationRoots, canonicalRepoRoot) {
+		t.Fatalf("implementation roots unexpectedly include main checkout root %q: %#v", canonicalRepoRoot, implementationRoots)
+	}
+
+	mergingRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, types.Issue{State: "Merging"})["writableRoots"])
+	for _, want := range []string{worktreePath, filepath.Join(canonicalRepoRoot, ".git"), canonicalRepoRoot} {
+		if !containsString(mergingRoots, want) {
+			t.Fatalf("merging roots missing %q: %#v", want, mergingRoots)
+		}
+	}
+}
+
 func TestRunnerKeepsOneThreadForContinuationTurns(t *testing.T) {
 	workspacePath := t.TempDir()
 	fake := filepath.Join(t.TempDir(), "fake-codex")
@@ -134,4 +163,22 @@ printf '%s\n' '{"method":"turn/completed"}'
 			t.Fatalf("trace missing %q:\n%s", want, text)
 		}
 	}
+}
+
+func git(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, output)
+	}
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }

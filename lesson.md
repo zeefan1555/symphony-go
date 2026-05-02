@@ -1,5 +1,45 @@
 # Lessons
 
+## 2026-05-02: symphony-issue-run 必须看着框架自己跑完
+
+### 用户纠正
+
+- 用户指出：ZEE-41 处理太久，状态流转进了 `Human Review`，不符合 `Todo -> In Progress -> AI Review -> Merging -> Done` 的全自动目标。
+- 用户强调：`symphony-go` 应该由 listener / workflow / orchestrator 自己完成，不应该由父会话手工接管 `Merging`；我的职责是观察它完成并总结经验。
+
+### 错误模式
+
+- 这是流程错误：我把父会话手工 merge 当成完成任务的收口方式，弱化了 `symphony-go` 自动化框架本身的验收标准。
+- 这是技术判断错误：`Human Review` 虽然由 child 记录为权限 blocker，但根因是 runner 的 writable roots 没覆盖 `Merging` 所需的 repo root main checkout，属于框架可修复问题，不应该默认交给人。
+- 这是沟通错误：最终汇报只说已经完成，没有先指出“这次完成包含人工接管，不满足全自动闭环”的事实。
+
+### 防复犯规则
+
+- `symphony-issue-run` 的成功标准必须是 listener 自己把 issue 跑到 terminal；父会话只能监控、诊断和优化框架，不能把手工 merge 当作正常路径。
+- 任何进入 `Human Review` 的默认自动流程都要当成异常复盘：先查 `.human.log` / JSONL / workpad，分类为 Skill、Workflow、Code 或 Environment gap。
+- 如果 `Merging` 因写 repo root、git metadata、push 或 auth 卡住，优先修 workflow/runner/orchestrator 的自动化边界；只有真实外部 blocker 才允许停在人审。
+
+### 固定动作
+
+- 复盘状态流：
+
+```bash
+rg -n "state_changed|Human Review|AI Review|Merging|Done|blocked|error|Operation not permitted" .symphony/logs/run-*.human.log
+```
+
+- 复盘权限边界：
+
+```bash
+rg -n "writableRoots|workspaceWrite|gitMetadataRoots|Merging" internal/codex internal/orchestrator WORKFLOW.md
+```
+
+- 记录优化：
+
+```bash
+$EDITOR docs/optimization/symphony-issue-run.md
+$EDITOR lesson.md
+```
+
 ## 2026-05-02: macOS `missing LC_UUID load command`
 
 ### 用户纠正
