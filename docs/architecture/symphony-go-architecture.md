@@ -55,7 +55,7 @@ Linear client 通过 GraphQL 查询项目内指定状态的 issue，并把 label
 
 - `Todo` 会由 orchestrator 自动更新为 `In Progress`（`internal/orchestrator/orchestrator.go:800`、`internal/orchestrator/orchestrator.go:802`）。
 - `Human Review` / `In Review` 被视为人工等待状态，不启动 Codex worker（`internal/orchestrator/orchestrator.go:808`）。
-- `AI Review` 会走机器复核路径（`internal/orchestrator/orchestrator.go:812`、`internal/orchestrator/orchestrator.go:979`）。
+- `AI Review` 和 `Merging` 都会启动 reviewer phase agent；实现阶段 agent 需要自己把 tracker state 推进到 `AI Review`，reviewer agent 再根据 workflow SOP 复核并推进后续状态（`internal/orchestrator/phases.go:34`、`internal/orchestrator/phases.go:35`、`internal/orchestrator/agent_session.go:81`、`internal/orchestrator/agent_session.go:89`）。
 - 当前 `WORKFLOW.md` 把默认目标流程定义为 `In Progress -> AI Review -> Merging -> Done`，并明确 `Human Review` 只用于真实外部 blocker（`WORKFLOW.md:123`、`WORKFLOW.md:124`、`WORKFLOW.md:128`、`WORKFLOW.md:136`）。
 
 ## workspace 与 worktree 生命周期
@@ -80,19 +80,13 @@ Codex runner 从 `types.CodexConfig` 读取命令、approval policy、thread san
 
 ## AI Review、Rework 与 Merging
 
-worker 不再根据 git HEAD 变化自动 handoff。`runAgentWith` 的 `AfterTurn` 只记录 `turn_completed`，调用 `FetchIssue` 刷新 tracker state；如果刷新后仍是 active state，就更新 running entry 并追加 continuation prompt，否则停止本轮 session（`internal/orchestrator/orchestrator.go:865`、`internal/orchestrator/orchestrator.go:867`、`internal/orchestrator/orchestrator.go:871`、`internal/orchestrator/orchestrator.go:883`、`internal/orchestrator/orchestrator.go:892`）。
+worker 不再根据 git HEAD 变化自动 handoff。`runAgentWith` 只选择 phase：普通实现态进入 implementer phase，`AI Review` 和 `Merging` 进入 reviewer phase（`internal/orchestrator/phases.go:18`、`internal/orchestrator/phases.go:30`、`internal/orchestrator/phases.go:34`、`internal/orchestrator/phases.go:37`）。`runPhaseAgent` 的 `AfterTurn` 只记录 `turn_completed`，调用 `FetchIssue` 刷新 tracker state，并把状态所有权交给 agent/workflow：如果刷新到 `Human Review`、`In Review` 或 `AI Review`，当前 session 停止并等待后续调度；如果刷新后仍是普通 active state，则追加 continuation prompt（`internal/orchestrator/agent_session.go:71`、`internal/orchestrator/agent_session.go:73`、`internal/orchestrator/agent_session.go:81`、`internal/orchestrator/agent_session.go:106`、`internal/orchestrator/agent_session.go:115`）。
 
-review policy 的唯一语义入口是 `agent.review_policy.mode`。实现里 `effectiveReviewPolicy` 把空 mode 兼容到 legacy `ai_review`，非 `ai|auto` 的 mode 会降到 human；`mode=auto` 时，AI Review 通过后的 next state 是 `Merging`（`internal/orchestrator/orchestrator.go:982`、`internal/orchestrator/orchestrator.go:988`、`internal/orchestrator/orchestrator.go:1032`、`internal/orchestrator/orchestrator.go:1033`）。当前 workflow 配置为 `mode: auto`、`on_ai_fail: rework`（`WORKFLOW.md:37`、`WORKFLOW.md:40`）。
+AI Review 的实际复核由 reviewer agent 在真实 Codex session 里执行，不再由 orchestrator 用固定 git diff 门禁替代。实现阶段 agent 需要自己把 tracker state 移到 `AI Review`；下一次调度会以 reviewer phase 重新渲染同一份 workflow prompt，让 reviewer agent 按 `WORKFLOW.md` 的中文 SOP 检查改动、验证证据，并把 issue 推进到 `Rework`、`Human Review` 或 `Merging`（`internal/orchestrator/phases.go:34`、`internal/orchestrator/phases.go:35`、`WORKFLOW.md:123`、`WORKFLOW.md:128`、`WORKFLOW.md:136`）。
 
-AI Review 的实际检查是轻量机器门禁：
+reviewer agent 如果在同一个 session 的第一个 turn 后把 issue 刷新到 `Merging`，orchestrator 不会再启动新的 agent；`AfterTurn` 会更新 running state，并追加专用 merge continuation prompt。这个 continuation prompt 携带刷新后的 `types.Issue`，Codex runner 每个 turn 都优先使用 `TurnPrompt.Issue` 计算 turn title 和 sandbox policy，因此第二个 Merging turn 会把 repo root main checkout 加入 writable roots（`internal/orchestrator/agent_session.go:89`、`internal/orchestrator/agent_session.go:94`、`internal/orchestrator/agent_session.go:103`、`internal/orchestrator/agent_session.go:104`、`internal/codex/runner.go:50`、`internal/codex/runner.go:105`、`internal/codex/runner.go:109`、`internal/codex/runner.go:222`）。
 
-- worktree 必须没有未提交变更（`internal/orchestrator/orchestrator.go:1068`）。
-- 如果能拿到 base/head，运行 `git diff --check base..head`（`internal/orchestrator/orchestrator.go:1072`）。
-- 如果 policy 配了 expected files，则 HEAD 变更文件必须完全匹配（`internal/orchestrator/orchestrator.go:1078`）。
-
-实现阶段的 agent 需要自己把 tracker state 移到 `AI Review`。`AfterTurn` 刷新到 `Human Review`、`In Review`、`AI Review` 或 `Merging` 时，会停止当前 worker session 并把后续调度交回 orchestrator；当前 Task 2 中，`nextIssue` 是 `AI Review` 或 `Rework` 时仍返回 `errNoRetryNeeded`，后续 reviewer/merge 调度留给下一阶段实现（`internal/orchestrator/orchestrator.go:875`、`internal/orchestrator/orchestrator.go:902`、`internal/orchestrator/orchestrator.go:907`）。如果 issue 本来就在 `AI Review`，`reviewIssueState` 会基于 `HEAD~1..HEAD` 重新复核，通过后进入 next state；当 next state 是 `Merging` 时，会立即以 `Merging` 状态再次调用 `runAgentWith`（`internal/orchestrator/orchestrator.go:923`、`internal/orchestrator/orchestrator.go:933`、`internal/orchestrator/orchestrator.go:943`、`internal/orchestrator/orchestrator.go:951`）。
-
-Merging 阶段没有硬编码 PR land 或独立 merge skill；代码会继续用同一份 workflow prompt 让 agent 执行阶段 SOP。测试明确覆盖了 `Merging` 状态使用 workflow prompt，且不应注入 `.codex/skills/land/SKILL.md`（`internal/orchestrator/orchestrator_test.go:1479`、`internal/orchestrator/orchestrator_test.go:1501`、`internal/orchestrator/orchestrator_test.go:1507`、`internal/orchestrator/orchestrator_test.go:1510`）。当前 `WORKFLOW.md` 的 Merging 协议要求直接把 issue worktree 分支合入 repo root 的本地 `main`，验证后 `git push origin main`，不创建 PR（`WORKFLOW.md:198`、`WORKFLOW.md:207`、`WORKFLOW.md:208`、`WORKFLOW.md:210`、`WORKFLOW.md:211`、`WORKFLOW.md:219`）。
+Merging 阶段没有硬编码 PR land 或独立 merge skill；代码会继续用 workflow prompt 让 reviewer agent 执行阶段 SOP。测试覆盖了 `Merging` 状态使用 workflow prompt，reviewer phase 在同一 session 追加 merge continuation prompt，并且 continuation prompt 的 issue state 是 `Merging`（`internal/orchestrator/orchestrator_test.go:1479`、`internal/orchestrator/orchestrator_test.go:1515`、`internal/orchestrator/orchestrator_test.go:1518`）。当前 `WORKFLOW.md` 的 Merging 协议要求直接把 issue worktree 分支合入 repo root 的本地 `main`，验证后 `git push origin main`，不创建 PR（`WORKFLOW.md:198`、`WORKFLOW.md:207`、`WORKFLOW.md:208`、`WORKFLOW.md:210`、`WORKFLOW.md:211`、`WORKFLOW.md:219`）。
 
 ## 日志、TUI 与验证路径
 

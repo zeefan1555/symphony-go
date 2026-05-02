@@ -1515,6 +1515,9 @@ func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 	if got := runner.prompts[1]; got.Text != mergingContinuationPromptText || !got.Continuation {
 		t.Fatalf("merge continuation prompt = %#v, want continuation merge prompt", got)
 	}
+	if got := runner.prompts[1].Issue; got == nil || got.State != "Merging" {
+		t.Fatalf("merge continuation issue = %#v, want Merging", got)
+	}
 	if got, want := tracker.states, []string{"Merging", "Done"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}

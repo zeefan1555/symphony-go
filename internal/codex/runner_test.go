@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,6 +94,76 @@ func TestMergingTurnSandboxIncludesMainCheckoutRoot(t *testing.T) {
 	}
 }
 
+func TestContinuationPromptIssueControlsTurnSandbox(t *testing.T) {
+	repoRoot := t.TempDir()
+	git(t, repoRoot, "init")
+	git(t, repoRoot, "config", "user.email", "test@example.com")
+	git(t, repoRoot, "config", "user.name", "Test User")
+	git(t, repoRoot, "commit", "--allow-empty", "-m", "initial")
+	canonicalRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worktreePath := filepath.Join(t.TempDir(), "ZEE-CONTINUE")
+	git(t, repoRoot, "worktree", "add", "-b", "symphony-go/ZEE-CONTINUE", worktreePath)
+
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	trace := filepath.Join(t.TempDir(), "trace.jsonl")
+	script := `#!/bin/sh
+trace="$TRACE_FILE"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-1"}}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1"}}}'
+printf '%s\n' '{"method":"turn/completed"}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":4,"result":{"turn":{"id":"turn-2"}}}'
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TRACE_FILE", trace)
+	runner := New(types.CodexConfig{
+		Command:           fake,
+		ApprovalPolicy:    "never",
+		ThreadSandbox:     "workspace-write",
+		TurnSandboxPolicy: map[string]any{"type": "workspaceWrite"},
+		TurnTimeoutMS:     5000,
+		ReadTimeoutMS:     5000,
+	})
+	mergingIssue := types.Issue{Identifier: "ZEE-CONTINUE", Title: "merge continuation", State: "Merging"}
+	_, err = runner.RunSession(context.Background(), SessionRequest{
+		WorkspacePath: worktreePath,
+		Issue:         types.Issue{Identifier: "ZEE-CONTINUE", Title: "review continuation", State: "AI Review"},
+		Prompts: []TurnPrompt{
+			{Text: "review prompt"},
+			{Text: "merge prompt", Continuation: true, Issue: &mergingIssue},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	turnRoots := turnWritableRoots(t, trace)
+	if got, want := len(turnRoots), 2; got != want {
+		t.Fatalf("turn/start count = %d, want %d", got, want)
+	}
+	if containsString(turnRoots[0], canonicalRepoRoot) {
+		t.Fatalf("review turn roots unexpectedly include main checkout root %q: %#v", canonicalRepoRoot, turnRoots[0])
+	}
+	if !containsString(turnRoots[1], canonicalRepoRoot) {
+		t.Fatalf("merge continuation roots missing main checkout root %q: %#v", canonicalRepoRoot, turnRoots[1])
+	}
+}
+
 func TestRunnerKeepsOneThreadForContinuationTurns(t *testing.T) {
 	workspacePath := t.TempDir()
 	fake := filepath.Join(t.TempDir(), "fake-codex")
@@ -181,4 +252,26 @@ func containsString(items []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func turnWritableRoots(t *testing.T, tracePath string) [][]string {
+	t.Helper()
+	raw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roots [][]string
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			t.Fatalf("invalid trace line %q: %v", line, err)
+		}
+		if payload["method"] != "turn/start" {
+			continue
+		}
+		params, _ := payload["params"].(map[string]any)
+		sandboxPolicy, _ := params["sandboxPolicy"].(map[string]any)
+		roots = append(roots, toStringSlice(sandboxPolicy["writableRoots"]))
+	}
+	return roots
 }

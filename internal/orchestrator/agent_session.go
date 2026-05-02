@@ -100,7 +100,8 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 				TurnCount:       turn + 1,
 				StartedAt:       time.Now(),
 			})
-			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true}, true, nil
+			next := issue
+			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
 		}
 		issue = refreshed
 		o.setRunning(observability.RunningEntry{

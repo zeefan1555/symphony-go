@@ -51,6 +51,7 @@ type TurnPrompt struct {
 	Text         string
 	Continuation bool
 	Attempt      *int
+	Issue        *types.Issue
 }
 
 type SessionResult struct {
@@ -101,7 +102,11 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 	}
 	for turnIndex := 0; turnIndex < len(request.Prompts); turnIndex++ {
 		prompt := request.Prompts[turnIndex]
-		turnID, err := session.startTurn(turnStartID+turnIndex, request.WorkspacePath, prompt.Text, request.Issue, r.Config.ApprovalPolicy, r.turnSandboxPolicy(request.WorkspacePath, request.Issue))
+		turnIssue := request.Issue
+		if prompt.Issue != nil {
+			turnIssue = *prompt.Issue
+		}
+		turnID, err := session.startTurn(turnStartID+turnIndex, request.WorkspacePath, prompt.Text, turnIssue, r.Config.ApprovalPolicy, r.turnSandboxPolicy(request.WorkspacePath, turnIssue))
 		if err != nil {
 			return sessionResult, err
 		}
