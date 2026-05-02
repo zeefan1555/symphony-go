@@ -37,6 +37,7 @@ type Config struct {
 	Polling   PollingConfig   `yaml:"polling"`
 	Workspace WorkspaceConfig `yaml:"workspace"`
 	Hooks     HooksConfig     `yaml:"hooks"`
+	Merge     MergeConfig     `yaml:"merge"`
 	Agent     AgentConfig     `yaml:"agent"`
 	Codex     CodexConfig     `yaml:"codex"`
 }
@@ -64,6 +65,10 @@ type HooksConfig struct {
 	AfterRun     string `yaml:"after_run"`
 	BeforeRemove string `yaml:"before_remove"`
 	TimeoutMS    int    `yaml:"timeout_ms"`
+}
+
+type MergeConfig struct {
+	Target string `yaml:"target"`
 }
 
 type AgentConfig struct {

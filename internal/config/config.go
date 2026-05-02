@@ -44,6 +44,7 @@ func Resolve(raw types.Config, workflowPath string) (types.Config, error) {
 	applyDefaults(&cfg)
 	resolveEnv(&cfg)
 	normalizeStates(&cfg)
+	normalizeMerge(&cfg)
 	if err := normalizeWorkspaceRoot(&cfg, workflowPath); err != nil {
 		return types.Config{}, err
 	}
@@ -71,6 +72,9 @@ func applyDefaults(cfg *types.Config) {
 	}
 	if cfg.Hooks.TimeoutMS == 0 {
 		cfg.Hooks.TimeoutMS = 60000
+	}
+	if strings.TrimSpace(cfg.Merge.Target) == "" {
+		cfg.Merge.Target = "main"
 	}
 	if cfg.Agent.MaxConcurrentAgents == 0 {
 		cfg.Agent.MaxConcurrentAgents = 10
@@ -107,6 +111,7 @@ func resolveEnv(cfg *types.Config) {
 		cfg.Tracker.APIKey = os.Getenv("LINEAR_API_KEY")
 	}
 	cfg.Workspace.Root = resolveDollar(cfg.Workspace.Root)
+	cfg.Merge.Target = resolveDollar(cfg.Merge.Target)
 }
 
 func resolveDollar(value string) string {
@@ -124,6 +129,13 @@ func normalizeStates(cfg *types.Config) {
 		}
 	}
 	cfg.Agent.MaxConcurrentAgentsByState = normalized
+}
+
+func normalizeMerge(cfg *types.Config) {
+	cfg.Merge.Target = strings.TrimSpace(cfg.Merge.Target)
+	if cfg.Merge.Target == "" {
+		cfg.Merge.Target = "main"
+	}
 }
 
 func normalizeWorkspaceRoot(cfg *types.Config, workflowPath string) error {

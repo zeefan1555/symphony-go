@@ -1512,6 +1512,24 @@ func TestMergingStateUsesWorkflowPrompt(t *testing.T) {
 	}
 }
 
+func TestEffectiveMergeTargetUsesWorkflowUnlessOverridden(t *testing.T) {
+	opts := Options{
+		Workflow: &types.Workflow{
+			Config: types.Config{
+				Merge: types.MergeConfig{Target: "release"},
+			},
+		},
+	}
+	if got := effectiveMergeTarget(opts); got != "release" {
+		t.Fatalf("merge target = %q, want release", got)
+	}
+
+	opts.MergeTarget = "main"
+	if got := effectiveMergeTarget(opts); got != "main" {
+		t.Fatalf("merge target override = %q, want main", got)
+	}
+}
+
 func TestRunAgentDoesNotMoveToReviewWithoutCommit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

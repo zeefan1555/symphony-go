@@ -3,8 +3,8 @@ BINARY := bin/symphony-go
 WORKFLOW ?= ./WORKFLOW.md
 ZH_SMOKE_WORKFLOW ?= ./WORKFLOW.zh-smoke.md
 ISSUE ?=
-CURRENT_BRANCH := $(shell git branch --show-current 2>/dev/null)
-MERGE_TARGET ?= $(if $(CURRENT_BRANCH),$(CURRENT_BRANCH),feat_zff)
+MERGE_TARGET ?=
+MERGE_TARGET_FLAG := $(if $(strip $(MERGE_TARGET)),--merge-target $(MERGE_TARGET),)
 LOG ?=
 RESULTS ?= ../.codex/skills/zh-smoke-harness/experiments/results.tsv
 RESULTS_MD ?= ../.codex/skills/zh-smoke-harness/experiments/rounds.md
@@ -25,17 +25,17 @@ test:
 	GO=$(GO) SYMPHONY_GO_TEST_LDFLAGS="$(LDFLAGS)" ./test.sh ./...
 
 run: build
-	$(BINARY) run --workflow $(WORKFLOW) --tui --merge-target $(MERGE_TARGET)
+	$(BINARY) run --workflow $(WORKFLOW) --tui $(MERGE_TARGET_FLAG)
 
 # Debug helper for a single poll. Production usage should prefer `make run`.
 run-once: build
-	$(BINARY) run --workflow $(WORKFLOW) --once --no-tui $(if $(ISSUE),--issue $(ISSUE),) --merge-target $(MERGE_TARGET)
+	$(BINARY) run --workflow $(WORKFLOW) --once --no-tui $(if $(ISSUE),--issue $(ISSUE),) $(MERGE_TARGET_FLAG)
 
 zh-smoke-run: build
-	$(BINARY) run --workflow $(ZH_SMOKE_WORKFLOW) --tui --merge-target $(MERGE_TARGET)
+	$(BINARY) run --workflow $(ZH_SMOKE_WORKFLOW) --tui $(MERGE_TARGET_FLAG)
 
 zh-smoke-once: build
-	$(BINARY) run --workflow $(ZH_SMOKE_WORKFLOW) --once --no-tui $(if $(ISSUE),--issue $(ISSUE),) --merge-target $(MERGE_TARGET)
+	$(BINARY) run --workflow $(ZH_SMOKE_WORKFLOW) --once --no-tui $(if $(ISSUE),--issue $(ISSUE),) $(MERGE_TARGET_FLAG)
 
 zh-smoke-stop:
 	-pkill -f "$(ZH_SMOKE_PROCESS_PATTERN)"
@@ -44,7 +44,7 @@ zh-smoke-metrics:
 	python3 scripts/smoke_metrics.py $(if $(LOG),--log $(LOG),) $(if $(ISSUE),--issue $(ISSUE),) --append $(RESULTS) --markdown-append $(RESULTS_MD) $(if $(CHANGE_NOTE),--change-note "$(CHANGE_NOTE)",)
 
 zh-smoke-round:
-	python3 scripts/zh_smoke_round.py --team $(TEAM) --workflow $(ZH_SMOKE_WORKFLOW) --merge-target $(MERGE_TARGET) --results $(RESULTS) --markdown $(RESULTS_MD) $(if $(CHANGE_NOTE),--change-note "$(CHANGE_NOTE)",)
+	python3 scripts/zh_smoke_round.py --team $(TEAM) --workflow $(ZH_SMOKE_WORKFLOW) $(if $(MERGE_TARGET),--merge-target $(MERGE_TARGET),) --results $(RESULTS) --markdown $(RESULTS_MD) $(if $(CHANGE_NOTE),--change-note "$(CHANGE_NOTE)",)
 
 clean:
 	rm -rf bin

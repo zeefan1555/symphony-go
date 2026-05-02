@@ -27,22 +27,12 @@ ISSUE_TEMPLATE = """中文冒烟测试：固定时间戳任务
 - 所有 Workpad、状态说明和最终回复使用中文
 """
 
-
-def current_branch() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "branch", "--show-current"], text=True, stderr=subprocess.DEVNULL
-        ).strip()
-    except (OSError, subprocess.CalledProcessError):
-        return ""
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run one zh-smoke benchmark round.")
     parser.add_argument("--workflow", default="./WORKFLOW.zh-smoke.md")
     parser.add_argument("--team", default=os.environ.get("ZH_SMOKE_TEAM", "Zeefan"))
     parser.add_argument("--state", default="Todo")
-    parser.add_argument("--merge-target", default=os.environ.get("MERGE_TARGET") or current_branch() or "feat_zff")
+    parser.add_argument("--merge-target", default=os.environ.get("MERGE_TARGET", ""))
     parser.add_argument("--title", default="中文冒烟测试：固定时间戳任务")
     parser.add_argument("--results", default="../.codex/skills/zh-smoke-harness/experiments/results.tsv")
     parser.add_argument("--markdown", default="../.codex/skills/zh-smoke-harness/experiments/rounds.md")
@@ -186,7 +176,7 @@ def main() -> None:
 
     targets = resolve_targets(endpoint, api_key, project_slug, args.team, args.state)
     if args.dry_run:
-        print(json.dumps({"project_slug": project_slug, "team": args.team, "state": args.state, "merge_target": args.merge_target, **targets}, ensure_ascii=False))
+        print(json.dumps({"project_slug": project_slug, "team": args.team, "state": args.state, "merge_target": args.merge_target or "(workflow default)", **targets}, ensure_ascii=False))
         return
 
     issue = create_issue(endpoint, api_key, targets, args.title)
@@ -196,7 +186,10 @@ def main() -> None:
 
     run_command(["make", "zh-smoke-stop"])
     before_logs = log_snapshot()
-    run_command(["make", "zh-smoke-once", f"ISSUE={issue['identifier']}", f"MERGE_TARGET={args.merge_target}"])
+    make_args = ["make", "zh-smoke-once", f"ISSUE={issue['identifier']}"]
+    if args.merge_target:
+        make_args.append(f"MERGE_TARGET={args.merge_target}")
+    run_command(make_args)
     log_path = new_log_after(before_logs)
     run_command(
         [

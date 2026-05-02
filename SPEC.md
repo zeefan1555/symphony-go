@@ -331,6 +331,7 @@ Top-level keys:
 - `polling`
 - `workspace`
 - `hooks`
+- `merge`
 - `agent`
 - `codex`
 
@@ -405,7 +406,16 @@ Fields:
   - Invalid values fail configuration validation.
   - Changes SHOULD be re-applied at runtime for future hook executions.
 
-#### 5.3.5 `agent` (object)
+#### 5.3.5 `merge` (object)
+
+Fields:
+
+- `target` (string)
+  - Local branch that receives work during workflow-defined `Merging` behavior.
+  - Default: `main`.
+  - MAY be overridden by an explicit runtime flag such as `--merge-target`.
+
+#### 5.3.6 `agent` (object)
 
 Fields:
 
@@ -424,7 +434,7 @@ Fields:
   - State keys are normalized (`lowercase`) for lookup.
   - Invalid entries (non-positive or non-numeric) are ignored.
 
-#### 5.3.6 `codex` (object)
+#### 5.3.7 `codex` (object)
 
 Fields:
 

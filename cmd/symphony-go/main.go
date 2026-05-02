@@ -23,12 +23,13 @@ import (
 )
 
 type runOptions struct {
-	WorkflowPath string
-	Once         bool
-	Issue        string
-	MergeTarget  string
-	TUI          bool
-	tuiExplicit  bool
+	WorkflowPath  string
+	Once          bool
+	Issue         string
+	MergeTarget   string
+	mergeExplicit bool
+	TUI           bool
+	tuiExplicit   bool
 }
 
 func defaultRunOptions() runOptions {
@@ -51,6 +52,11 @@ func parseRunOptions(args []string) (runOptions, error) {
 	if err := runFlags.Parse(args); err != nil {
 		return runOptions{}, err
 	}
+	runFlags.Visit(func(f *flag.Flag) {
+		if f.Name == "merge-target" {
+			opts.mergeExplicit = true
+		}
+	})
 	opts.ApplyDefaults()
 	return opts, nil
 }
@@ -152,7 +158,7 @@ func main() {
 		Once:        opts.Once,
 		IssueFilter: opts.Issue,
 		RepoRoot:    repoRoot,
-		MergeTarget: orchestrator.NormalizeMergeTarget(opts.MergeTarget),
+		MergeTarget: mergeTargetOverride(opts),
 	})
 	service.StartupCleanup(ctx)
 	if opts.TUI {
@@ -165,6 +171,13 @@ func main() {
 	if err := service.Run(ctx); err != nil && err != context.Canceled {
 		fatal(err)
 	}
+}
+
+func mergeTargetOverride(opts runOptions) string {
+	if opts.mergeExplicit {
+		return orchestrator.NormalizeMergeTarget(opts.MergeTarget)
+	}
+	return ""
 }
 
 func renderTUI(ctx context.Context, service *orchestrator.Orchestrator, opts tui.Options) {

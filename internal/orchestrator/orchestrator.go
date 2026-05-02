@@ -466,7 +466,7 @@ func (o *Orchestrator) currentRuntime() runtimeSnapshot {
 		workspace:   o.opts.Workspace,
 		runner:      o.opts.Runner,
 		repoRoot:    o.opts.RepoRoot,
-		mergeTarget: o.opts.MergeTarget,
+		mergeTarget: effectiveMergeTarget(o.opts),
 	}
 }
 
@@ -597,7 +597,7 @@ func (o *Orchestrator) dispatchIssueDone(ctx context.Context, issue types.Issue,
 		workspace:   o.opts.Workspace,
 		runner:      o.opts.Runner,
 		repoRoot:    o.opts.RepoRoot,
-		mergeTarget: o.opts.MergeTarget,
+		mergeTarget: effectiveMergeTarget(o.opts),
 	}
 	o.claimed[issue.ID] = true
 	o.runningCancel[issue.ID] = cancel
@@ -1481,6 +1481,17 @@ func RepoRootFromWorkflow(workflowPath string) string {
 
 func NormalizeMergeTarget(target string) string {
 	return strings.TrimSpace(target)
+}
+
+func effectiveMergeTarget(opts Options) string {
+	target := NormalizeMergeTarget(opts.MergeTarget)
+	if target == "" && opts.Workflow != nil {
+		target = NormalizeMergeTarget(opts.Workflow.Config.Merge.Target)
+	}
+	if target == "" {
+		return "main"
+	}
+	return target
 }
 
 func shellQuote(value string) string {

@@ -29,6 +29,8 @@ hooks:
     workspace="$(pwd -P)"
     go_root="$(cd "$workspace/../.." && pwd -P)"
     "$go_root/scripts/symphony_before_remove.sh" "$workspace"
+merge:
+  target: main
 agent:
   max_concurrent_agents: 10
   max_turns: 20

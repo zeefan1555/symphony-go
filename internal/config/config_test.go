@@ -47,6 +47,9 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 	if resolved.Hooks.TimeoutMS != 60000 {
 		t.Fatalf("hook timeout = %d", resolved.Hooks.TimeoutMS)
 	}
+	if resolved.Merge.Target != "main" {
+		t.Fatalf("merge target = %q, want main", resolved.Merge.Target)
+	}
 	if resolved.Agent.MaxConcurrentAgents != 10 {
 		t.Fatalf("max agents = %d", resolved.Agent.MaxConcurrentAgents)
 	}
@@ -73,6 +76,20 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 	}
 	if resolved.Codex.ThreadSandbox != "workspace-write" {
 		t.Fatalf("thread sandbox = %q", resolved.Codex.ThreadSandbox)
+	}
+}
+
+func TestResolvePreservesExplicitMergeTarget(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	resolved, err := Resolve(types.Config{
+		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Merge:   types.MergeConfig{Target: "release"},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Merge.Target != "release" {
+		t.Fatalf("merge target = %q, want release", resolved.Merge.Target)
 	}
 }
 

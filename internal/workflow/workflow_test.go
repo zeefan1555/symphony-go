@@ -22,6 +22,8 @@ tracker:
     - Todo
 workspace:
   root: .worktrees
+merge:
+  target: release
 ---
 你正在处理 {{ issue.identifier }}：{{ issue.title }}
 {% if attempt %}
@@ -41,6 +43,9 @@ workspace:
 	}
 	if loaded.Config.Codex.StallTimeoutMS != 300000 {
 		t.Fatalf("stall timeout = %d", loaded.Config.Codex.StallTimeoutMS)
+	}
+	if loaded.Config.Merge.Target != "release" {
+		t.Fatalf("merge target = %q", loaded.Config.Merge.Target)
 	}
 	attempt := 2
 	rendered, err := Render(loaded.PromptTemplate, types.Issue{
