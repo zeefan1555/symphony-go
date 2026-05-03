@@ -34,12 +34,29 @@ type Workflow struct {
 
 type Config struct {
 	Tracker   TrackerConfig   `yaml:"tracker"`
+	Server    ServerConfig    `yaml:"server"`
 	Polling   PollingConfig   `yaml:"polling"`
 	Workspace WorkspaceConfig `yaml:"workspace"`
 	Hooks     HooksConfig     `yaml:"hooks"`
 	Merge     MergeConfig     `yaml:"merge"`
 	Agent     AgentConfig     `yaml:"agent"`
 	Codex     CodexConfig     `yaml:"codex"`
+}
+
+type ServerConfig struct {
+	Port    int  `yaml:"port"`
+	PortSet bool `yaml:"-"`
+}
+
+func (c *ServerConfig) UnmarshalYAML(value *yaml.Node) error {
+	type raw ServerConfig
+	var decoded raw
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*c = ServerConfig(decoded)
+	c.PortSet = yamlMappingHasNonNullKey(value, "port")
+	return nil
 }
 
 type TrackerConfig struct {
