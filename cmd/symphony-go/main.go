@@ -10,13 +10,15 @@ import (
 )
 
 type runOptions struct {
-	WorkflowPath  string
-	Once          bool
-	Issue         string
-	MergeTarget   string
-	mergeExplicit bool
-	TUI           bool
-	tuiExplicit   bool
+	WorkflowPath       string
+	Once               bool
+	Issue              string
+	MergeTarget        string
+	mergeExplicit      bool
+	ServerPort         int
+	serverPortExplicit bool
+	TUI                bool
+	tuiExplicit        bool
 }
 
 func defaultRunOptions() runOptions {
@@ -34,6 +36,7 @@ func parseRunOptions(args []string) (runOptions, error) {
 	runFlags.BoolVar(&opts.Once, "once", opts.Once, "poll once and exit")
 	runFlags.StringVar(&opts.Issue, "issue", opts.Issue, "optional issue identifier or id filter")
 	runFlags.StringVar(&opts.MergeTarget, "merge-target", opts.MergeTarget, "local branch receiving Merging-state work")
+	runFlags.IntVar(&opts.ServerPort, "port", opts.ServerPort, "start local HTTP control plane on this port")
 	runFlags.Var(tuiFlag{opts: &opts, enabled: true}, "tui", "render terminal TUI")
 	runFlags.Var(tuiFlag{opts: &opts, enabled: false}, "no-tui", "disable terminal TUI")
 	if err := runFlags.Parse(args); err != nil {
@@ -43,7 +46,13 @@ func parseRunOptions(args []string) (runOptions, error) {
 		if f.Name == "merge-target" {
 			opts.mergeExplicit = true
 		}
+		if f.Name == "port" {
+			opts.serverPortExplicit = true
+		}
 	})
+	if opts.serverPortExplicit && opts.ServerPort < 0 {
+		return runOptions{}, fmt.Errorf("port must be zero or positive")
+	}
 	opts.ApplyDefaults()
 	return opts, nil
 }
@@ -86,7 +95,7 @@ func (f tuiFlag) IsBoolFlag() bool {
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "run" {
-		fmt.Fprintln(os.Stderr, "usage: symphony-go run --workflow ./WORKFLOW.md [--once] [--issue ZEE-8] [--tui|--no-tui]")
+		fmt.Fprintln(os.Stderr, "usage: symphony-go run --workflow ./WORKFLOW.md [--once] [--issue ZEE-8] [--port 0] [--tui|--no-tui]")
 		os.Exit(2)
 	}
 	opts, err := parseRunOptions(os.Args[2:])
@@ -110,9 +119,13 @@ func (o runOptions) AppOptions() app.Options {
 		Issue:         o.Issue,
 		MergeTarget:   o.MergeTarget,
 		MergeExplicit: o.mergeExplicit,
-		TUI:           o.TUI,
-		Stdout:        os.Stdout,
-		Stderr:        os.Stderr,
+		Server: app.ServerOptions{
+			Port:         o.ServerPort,
+			PortExplicit: o.serverPortExplicit,
+		},
+		TUI:    o.TUI,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
 	}
 }
 

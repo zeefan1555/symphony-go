@@ -19,6 +19,7 @@ const (
 	ErrInvalidMaxTurns           = "invalid_max_turns"
 	ErrInvalidMaxRetryBackoff    = "invalid_max_retry_backoff"
 	ErrInvalidPollingInterval    = "invalid_polling_interval"
+	ErrInvalidServerPort         = "invalid_server_port"
 	ErrInvalidReviewPolicy       = "invalid_review_policy"
 )
 
@@ -184,6 +185,9 @@ func validate(cfg types.Config) error {
 	}
 	if cfg.Polling.IntervalMS <= 0 {
 		return &Error{Code: ErrInvalidPollingInterval, Message: "polling.interval_ms must be positive"}
+	}
+	if cfg.Server.PortSet && cfg.Server.Port < 0 {
+		return &Error{Code: ErrInvalidServerPort, Message: "server.port must be zero or positive"}
 	}
 	if cfg.Hooks.TimeoutMS <= 0 {
 		return &Error{Code: ErrInvalidHookTimeout, Message: "hooks.timeout_ms must be positive"}

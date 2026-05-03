@@ -77,6 +77,9 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 	if resolved.Codex.ThreadSandbox != "workspace-write" {
 		t.Fatalf("thread sandbox = %q", resolved.Codex.ThreadSandbox)
 	}
+	if resolved.Server.PortSet {
+		t.Fatal("server.port should be disabled by default")
+	}
 }
 
 func TestResolvePreservesExplicitMergeTarget(t *testing.T) {
@@ -90,6 +93,23 @@ func TestResolvePreservesExplicitMergeTarget(t *testing.T) {
 	}
 	if resolved.Merge.Target != "release" {
 		t.Fatalf("merge target = %q, want release", resolved.Merge.Target)
+	}
+}
+
+func TestResolvePreservesExplicitServerPortZero(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	resolved, err := Resolve(types.Config{
+		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Server:  types.ServerConfig{Port: 0, PortSet: true},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Server.PortSet {
+		t.Fatal("server.port presence should be preserved")
+	}
+	if resolved.Server.Port != 0 {
+		t.Fatalf("server port = %d, want 0", resolved.Server.Port)
 	}
 }
 

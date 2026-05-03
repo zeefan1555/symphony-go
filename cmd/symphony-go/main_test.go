@@ -30,6 +30,30 @@ func TestParseRunOptionsMarksExplicitMergeTarget(t *testing.T) {
 	}
 }
 
+func TestParseRunOptionsMarksExplicitHTTPPort(t *testing.T) {
+	opts, err := parseRunOptions([]string{"--port", "0"})
+	if err != nil {
+		t.Fatalf("parseRunOptions() error = %v", err)
+	}
+	if opts.ServerPort != 0 {
+		t.Fatalf("server port = %d, want 0", opts.ServerPort)
+	}
+	if !opts.serverPortExplicit {
+		t.Fatal("server port flag should be marked explicit")
+	}
+	appOpts := opts.AppOptions()
+	if appOpts.Server.Port != 0 || !appOpts.Server.PortExplicit {
+		t.Fatalf("app server options = %#v, want explicit port 0", appOpts.Server)
+	}
+}
+
+func TestParseRunOptionsRejectsNegativeHTTPPort(t *testing.T) {
+	_, err := parseRunOptions([]string{"--port", "-1"})
+	if err == nil {
+		t.Fatal("parseRunOptions() error = nil, want negative port error")
+	}
+}
+
 func TestMergeTargetOverrideOnlyWhenExplicit(t *testing.T) {
 	implicit := defaultRunOptions()
 	if got := mergeTargetOverride(implicit); got != "" {
