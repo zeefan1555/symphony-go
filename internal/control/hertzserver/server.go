@@ -9,9 +9,9 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app/server"
 	controlplane "github.com/zeefan1555/symphony-go/internal/control"
-	controlhttp "github.com/zeefan1555/symphony-go/internal/control/hertzgen/handler/control/http"
-	controlmodel "github.com/zeefan1555/symphony-go/internal/control/hertzgen/model/control/model"
-	"github.com/zeefan1555/symphony-go/internal/control/hertzgen/router"
+	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
+	controlmodel "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/model"
+	"github.com/zeefan1555/symphony-go/internal/generated/hertz/control/router"
 )
 
 type Control = controlplane.ControlService
@@ -33,7 +33,7 @@ func New(control Control) *Server {
 
 func (s *Server) Serve(listener net.Listener) error {
 	h := server.New(server.WithListener(listener))
-	restore := controlhttp.SetControlService(controlAdapter{control: s.control})
+	restore := hertzhook.SetControlService(controlAdapter{control: s.control})
 	router.GeneratedRegister(h)
 
 	s.mu.Lock()
@@ -65,12 +65,12 @@ type controlAdapter struct {
 	control Control
 }
 
-func (a controlAdapter) GetScaffold(ctx context.Context) (controlhttp.ScaffoldStatus, error) {
+func (a controlAdapter) GetScaffold(ctx context.Context) (hertzhook.ScaffoldStatus, error) {
 	status, err := a.control.GetScaffold(ctx)
 	if err != nil {
-		return controlhttp.ScaffoldStatus{}, err
+		return hertzhook.ScaffoldStatus{}, err
 	}
-	return controlhttp.ScaffoldStatus{Status: status.Status}, nil
+	return hertzhook.ScaffoldStatus{Status: status.Status}, nil
 }
 
 func (a controlAdapter) GetState(ctx context.Context) (*controlmodel.RuntimeState, error) {
@@ -100,9 +100,9 @@ func (a controlAdapter) Refresh(ctx context.Context) (*controlmodel.RefreshResul
 func controlHTTPError(err error) error {
 	switch {
 	case errors.Is(err, controlplane.ErrInvalidIssueIdentifier):
-		return controlhttp.NewError(400, "invalid_issue_identifier", "issue identifier is required")
+		return hertzhook.NewError(400, "invalid_issue_identifier", "issue identifier is required")
 	case errors.Is(err, controlplane.ErrIssueNotFound):
-		return controlhttp.NewError(404, "issue_not_found", "issue not found")
+		return hertzhook.NewError(404, "issue_not_found", "issue not found")
 	default:
 		return err
 	}
@@ -111,9 +111,9 @@ func controlHTTPError(err error) error {
 func controlRefreshHTTPError(err error) error {
 	switch {
 	case errors.Is(err, controlplane.ErrRefreshTriggerRequired):
-		return controlhttp.NewError(503, "refresh_unavailable", "refresh trigger is unavailable")
+		return hertzhook.NewError(503, "refresh_unavailable", "refresh trigger is unavailable")
 	default:
-		return controlhttp.NewError(500, "refresh_failed", err.Error())
+		return hertzhook.NewError(500, "refresh_failed", err.Error())
 	}
 }
 

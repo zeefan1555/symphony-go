@@ -14,14 +14,14 @@ if ! command -v thriftgo >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p "$repo_root/internal/control/hertzgen"
-cd "$repo_root/internal/control/hertzgen"
+mkdir -p "$repo_root/internal/generated/hertz/control"
+cd "$repo_root/internal/generated/hertz/control"
 
 hz new \
   --force \
   --handler_dir handler \
   --model_dir model \
   --router_dir router \
-  --idl ../../../idl/control/http.thrift
+  --idl "$repo_root/idl/control/http.thrift"
 
 perl -pi -e 's/[ \t]+$//' .gitignore

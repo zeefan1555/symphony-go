@@ -29,7 +29,7 @@ func TestRepositoryDocumentsHertzGenerationCommand(t *testing.T) {
 	for _, want := range []string{
 		"hz new",
 		"idl/control/http.thrift",
-		"internal/control/hertzgen",
+		"internal/generated/hertz/control",
 	} {
 		if !strings.Contains(scriptText, want) {
 			t.Fatalf("hertz generation script missing %q", want)
@@ -47,7 +47,7 @@ func TestMaintainerWorkflowDocumentsIDLBoundariesAndGeneration(t *testing.T) {
 	for _, want := range []string{
 		"`idl/control/common.thrift`",
 		"`idl/control/http.thrift`",
-		"`internal/control/hertzgen/`",
+		"`internal/generated/hertz/control/`",
 		"`internal/control/hertzserver/`",
 		"`internal/control/service.go`",
 		"`make hertz-generate`",
@@ -100,7 +100,7 @@ func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
 func TestHertzScaffoldDoesNotOwnOrchestratorState(t *testing.T) {
 	forbiddenImport := "internal/" + "orchestrator"
 	for _, root := range []string{
-		"../../../internal/control/hertzgen",
+		"../../../internal/generated/hertz/control",
 		"../../../internal/control/hertzserver",
 	} {
 		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
@@ -117,6 +117,36 @@ func TestHertzScaffoldDoesNotOwnOrchestratorState(t *testing.T) {
 			}
 			if strings.Contains(string(content), forbiddenImport) {
 				t.Fatalf("%s imports orchestrator internals; Hertz scaffold must stay an adapter", path)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+}
+
+func TestProductionCodeDoesNotImportOldHertzgenPath(t *testing.T) {
+	oldGeneratedPath := "internal/control/" + "hertzgen"
+	for _, root := range []string{
+		"../../../cmd",
+		"../../../internal",
+		"../../../scripts",
+	} {
+		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() || filepath.Ext(path) != ".go" {
+				return nil
+			}
+
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if strings.Contains(string(content), oldGeneratedPath) {
+				t.Fatalf("%s imports old generated Hertz path", path)
 			}
 			return nil
 		})

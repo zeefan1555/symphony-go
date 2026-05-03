@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
-	"github.com/zeefan1555/symphony-go/internal/control/hertzgen/model/control/model"
+	"github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/model"
 )
 
 type IssueRequest struct {

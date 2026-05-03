@@ -1,11 +1,11 @@
-package http
+package hertzhook
 
 import (
 	"context"
 	"errors"
 	"sync"
 
-	model "github.com/zeefan1555/symphony-go/internal/control/hertzgen/model/control/model"
+	model "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/model"
 )
 
 type ScaffoldStatus struct {
@@ -65,7 +65,7 @@ func SetControlService(service ControlService) func() {
 	}
 }
 
-func getControlService() ControlService {
+func CurrentService() ControlService {
 	controlService.RLock()
 	defer controlService.RUnlock()
 	return controlService.current
