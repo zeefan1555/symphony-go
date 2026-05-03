@@ -16,13 +16,16 @@ ZH_SMOKE_PROCESS_PATTERN ?= symphony-go.*run.*WORKFLOW.zh-smoke.md
 # some `go run` temporary executables with a missing LC_UUID load command.
 LDFLAGS := -linkmode=external
 
-.PHONY: build test run run-once zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
+.PHONY: build test hertz-generate run run-once zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
 
 build:
 	GO=$(GO) SYMPHONY_GO_BUILD_LDFLAGS="$(LDFLAGS)" SYMPHONY_GO_BINARY="$(BINARY)" ./build.sh
 
 test:
 	GO=$(GO) SYMPHONY_GO_TEST_LDFLAGS="$(LDFLAGS)" ./test.sh ./...
+
+hertz-generate:
+	scripts/hertz_generate.sh
 
 run: build
 	$(BINARY) run --workflow $(WORKFLOW) --tui $(MERGE_TARGET_FLAG)
