@@ -22,6 +22,7 @@ func Register(r *server.Hertz) {
 		{
 			_v1 := _api.Group("/v1", _v1Mw()...)
 			_v1.GET("/scaffold", append(_getscaffoldMw(), http.GetScaffold)...)
+			_v1.GET("/state", append(_getstateMw(), http.GetState)...)
 		}
 	}
 }

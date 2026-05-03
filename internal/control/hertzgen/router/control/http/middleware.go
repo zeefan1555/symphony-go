@@ -25,3 +25,8 @@ func _getscaffoldMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getstateMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
