@@ -12,3 +12,6 @@ struct IssueRunProjection {
     3: required string runtime_state
 }
 
+service OrchestratorScaffold {
+    IssueRunProjection ProjectIssueRun(1: required IssueRunProjectionRequest request)
+}
