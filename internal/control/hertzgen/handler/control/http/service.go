@@ -16,6 +16,7 @@ type ControlService interface {
 	GetScaffold(context.Context) (ScaffoldStatus, error)
 	GetState(context.Context) (*model.RuntimeState, error)
 	GetIssue(context.Context, string) (*model.IssueDetail, error)
+	Refresh(context.Context) (*model.RefreshResult, error)
 }
 
 type ControlFunc func(context.Context) (ScaffoldStatus, error)
@@ -30,6 +31,10 @@ func (f ControlFunc) GetState(context.Context) (*model.RuntimeState, error) {
 
 func (f ControlFunc) GetIssue(context.Context, string) (*model.IssueDetail, error) {
 	return nil, NewError(404, "issue_not_found", "issue not found")
+}
+
+func (f ControlFunc) Refresh(context.Context) (*model.RefreshResult, error) {
+	return nil, NewError(503, "refresh_unavailable", "refresh trigger is unavailable")
 }
 
 var controlService = struct {

@@ -3,8 +3,10 @@ package hertzserver_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,8 +19,35 @@ type snapshotProvider struct {
 	snapshot observability.Snapshot
 }
 
+type refreshSnapshotProvider struct {
+	snapshot observability.Snapshot
+	results  []bool
+	err      error
+	calls    int
+}
+
 func (p snapshotProvider) Snapshot() observability.Snapshot {
 	return p.snapshot
+}
+
+func (p *refreshSnapshotProvider) Snapshot() observability.Snapshot {
+	return p.snapshot
+}
+
+func (p *refreshSnapshotProvider) RequestRefresh(ctx context.Context) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	p.calls++
+	if p.err != nil {
+		return false, p.err
+	}
+	if len(p.results) == 0 {
+		return false, nil
+	}
+	result := p.results[0]
+	p.results = p.results[1:]
+	return result, nil
 }
 
 func TestStateRouteReturnsEmptyRuntimeState(t *testing.T) {
@@ -398,6 +427,131 @@ func TestIssueRouteReturnsInvalidIdentifierEnvelope(t *testing.T) {
 	}
 	if body.Error.Code != "invalid_issue_identifier" || body.Error.Message == "" {
 		t.Fatalf("error envelope = %#v, want invalid_issue_identifier", body.Error)
+	}
+}
+
+func TestRefreshRouteQueuesPoll(t *testing.T) {
+	provider := &refreshSnapshotProvider{results: []bool{true}}
+	service := control.NewService(provider)
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp, err := http.Post(baseURL+"/api/v1/refresh", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST /api/v1/refresh: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
+	}
+
+	var body struct {
+		Accepted bool   `json:"accepted"`
+		Status   string `json:"status"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !body.Accepted || body.Status != "queued" {
+		t.Fatalf("refresh response = %#v, want queued accepted result", body)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("refresh calls = %d, want 1", provider.calls)
+	}
+}
+
+func TestRefreshRouteReturnsAlreadyPending(t *testing.T) {
+	provider := &refreshSnapshotProvider{results: []bool{false}}
+	service := control.NewService(provider)
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp, err := http.Post(baseURL+"/api/v1/refresh", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST /api/v1/refresh: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
+	}
+
+	var body struct {
+		Accepted bool   `json:"accepted"`
+		Status   string `json:"status"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !body.Accepted || body.Status != "already_pending" {
+		t.Fatalf("refresh response = %#v, want already pending accepted result", body)
+	}
+}
+
+func TestRefreshRouteReturnsErrorEnvelope(t *testing.T) {
+	tests := []struct {
+		name       string
+		service    *control.Service
+		method     string
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "unsupported method",
+			service:    control.NewService(&refreshSnapshotProvider{}),
+			method:     http.MethodGet,
+			wantStatus: http.StatusMethodNotAllowed,
+			wantCode:   "unsupported_method",
+		},
+		{
+			name:       "refresh unavailable",
+			service:    control.NewService(snapshotProvider{snapshot: observability.NewSnapshot()}),
+			method:     http.MethodPost,
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   "refresh_unavailable",
+		},
+		{
+			name:       "refresh failed",
+			service:    control.NewService(&refreshSnapshotProvider{err: errors.New("poll queue closed")}),
+			method:     http.MethodPost,
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "refresh_failed",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := hertzserver.New(tt.service)
+			baseURL := startTestServer(t, server)
+
+			req, err := http.NewRequest(tt.method, baseURL+"/api/v1/refresh", strings.NewReader("{}"))
+			if err != nil {
+				t.Fatalf("new request: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("%s /api/v1/refresh: %v", tt.method, err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tt.wantStatus)
+			}
+
+			var body struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.Error.Code != tt.wantCode || body.Error.Message == "" {
+				t.Fatalf("error envelope = %#v, want code %q", body.Error, tt.wantCode)
+			}
+		})
 	}
 }
 

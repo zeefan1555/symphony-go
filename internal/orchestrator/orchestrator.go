@@ -775,9 +775,21 @@ func (o *Orchestrator) retryIssue(issueID string) (types.Issue, int, bool) {
 }
 
 func (o *Orchestrator) signalPollNow() {
+	_, _ = o.RequestRefresh(context.Background())
+}
+
+func (o *Orchestrator) RequestRefresh(ctx context.Context) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if o == nil {
+		return false, nil
+	}
 	select {
 	case o.pollNow <- struct{}{}:
+		return true, nil
 	default:
+		return false, nil
 	}
 }
 

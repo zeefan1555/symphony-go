@@ -89,6 +89,14 @@ func (a controlAdapter) GetIssue(ctx context.Context, issueIdentifier string) (*
 	return issueDetailModel(detail), nil
 }
 
+func (a controlAdapter) Refresh(ctx context.Context) (*controlmodel.RefreshResult, error) {
+	result, err := a.control.Refresh(ctx)
+	if err != nil {
+		return nil, controlRefreshHTTPError(err)
+	}
+	return &controlmodel.RefreshResult{Accepted: result.Accepted, Status: result.Status}, nil
+}
+
 func controlHTTPError(err error) error {
 	switch {
 	case errors.Is(err, controlplane.ErrInvalidIssueIdentifier):
@@ -97,6 +105,15 @@ func controlHTTPError(err error) error {
 		return controlhttp.NewError(404, "issue_not_found", "issue not found")
 	default:
 		return err
+	}
+}
+
+func controlRefreshHTTPError(err error) error {
+	switch {
+	case errors.Is(err, controlplane.ErrRefreshTriggerRequired):
+		return controlhttp.NewError(503, "refresh_unavailable", "refresh trigger is unavailable")
+	default:
+		return controlhttp.NewError(500, "refresh_failed", err.Error())
 	}
 }
 

@@ -14,6 +14,12 @@ type fakeSnapshotProvider struct {
 	snapshot observability.Snapshot
 }
 
+type fakeRefreshProvider struct {
+	snapshot observability.Snapshot
+	results  []bool
+	calls    int
+}
+
 func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
 	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
 	dueAt := generatedAt.Add(30 * time.Second)
@@ -78,6 +84,56 @@ func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
 
 func (p fakeSnapshotProvider) Snapshot() observability.Snapshot {
 	return p.snapshot
+}
+
+func (p *fakeRefreshProvider) Snapshot() observability.Snapshot {
+	return p.snapshot
+}
+
+func (p *fakeRefreshProvider) RequestRefresh(ctx context.Context) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	p.calls++
+	if len(p.results) == 0 {
+		return false, nil
+	}
+	result := p.results[0]
+	p.results = p.results[1:]
+	return result, nil
+}
+
+func TestServiceRefreshRequestsProviderPoll(t *testing.T) {
+	provider := &fakeRefreshProvider{results: []bool{true, false}}
+	service := control.NewService(provider)
+
+	first, err := service.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh first returned error: %v", err)
+	}
+	if !first.Accepted || first.Status != control.RefreshStatusQueued {
+		t.Fatalf("first refresh = %#v, want queued accepted result", first)
+	}
+
+	second, err := service.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh second returned error: %v", err)
+	}
+	if !second.Accepted || second.Status != control.RefreshStatusAlreadyPending {
+		t.Fatalf("second refresh = %#v, want already pending accepted result", second)
+	}
+	if provider.calls != 2 {
+		t.Fatalf("refresh calls = %d, want 2", provider.calls)
+	}
+}
+
+func TestServiceRefreshRequiresTrigger(t *testing.T) {
+	service := control.NewService(fakeSnapshotProvider{snapshot: observability.NewSnapshot()})
+
+	_, err := service.Refresh(context.Background())
+	if !errors.Is(err, control.ErrRefreshTriggerRequired) {
+		t.Fatalf("Refresh error = %v, want ErrRefreshTriggerRequired", err)
+	}
 }
 
 func TestServiceReadsRuntimeStateFromSnapshotProvider(t *testing.T) {
