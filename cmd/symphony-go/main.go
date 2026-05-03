@@ -1,25 +1,12 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
-	"os/signal"
-	"path/filepath"
 	"strconv"
-	"syscall"
-	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/codex"
-	"github.com/zeefan1555/symphony-go/internal/linear"
-	"github.com/zeefan1555/symphony-go/internal/logging"
-	"github.com/zeefan1555/symphony-go/internal/orchestrator"
-	"github.com/zeefan1555/symphony-go/internal/tui"
-	"github.com/zeefan1555/symphony-go/internal/types"
-	"github.com/zeefan1555/symphony-go/internal/workflow"
-	"github.com/zeefan1555/symphony-go/internal/workspace"
+	"github.com/zeefan1555/symphony-go/internal/app"
 )
 
 type runOptions struct {
@@ -107,91 +94,25 @@ func main() {
 		os.Exit(2)
 	}
 
-	reloader, err := workflow.NewReloader(opts.WorkflowPath)
-	if err != nil {
-		fatal(err)
-	}
-	loaded := reloader.Current()
-	tracker, err := linear.New(loaded.Config.Tracker)
-	if err != nil {
-		fatal(err)
-	}
-	absWorkflow, err := filepath.Abs(opts.WorkflowPath)
-	if err != nil {
-		fatal(err)
-	}
-	repoRoot := orchestrator.RepoRootFromWorkflow(absWorkflow)
-	logPath := logging.LogPath(filepath.Dir(absWorkflow))
-	logOptions := []logging.Option{
-		logging.WithHumanFile(logging.HumanLogPath(logPath), false),
-		logging.WithHumanFileMinLevel(slog.LevelDebug),
-	}
-	if !opts.TUI {
-		logOptions = append(logOptions, logging.WithConsole(os.Stderr, true))
-	}
-	log, err := logging.New(logPath, logOptions...)
-	if err != nil {
-		fatal(err)
-	}
-	defer log.Close()
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	manager := workspace.New(loaded.Config.Workspace.Root, loaded.Config.Hooks)
-	runner := codex.New(loaded.Config.Codex)
-	service := orchestrator.New(orchestrator.Options{
-		Workflow:  loaded,
-		Tracker:   tracker,
-		Workspace: manager,
-		Runner:    runner,
-		TrackerFactory: func(cfg types.TrackerConfig) (orchestrator.Tracker, error) {
-			return linear.New(cfg)
-		},
-		WorkspaceFactory: func(cfg types.WorkspaceConfig, hooks types.HooksConfig) *workspace.Manager {
-			return workspace.New(cfg.Root, hooks)
-		},
-		RunnerFactory: func(cfg types.CodexConfig) orchestrator.AgentRunner {
-			return codex.New(cfg)
-		},
-		Logger:      log,
-		Reloader:    reloader,
-		Once:        opts.Once,
-		IssueFilter: opts.Issue,
-		RepoRoot:    repoRoot,
-		MergeTarget: mergeTargetOverride(opts),
-	})
-	service.StartupCleanup(ctx)
-	if opts.TUI {
-		go renderTUI(ctx, service, tui.Options{
-			MaxAgents:   loaded.Config.Agent.MaxConcurrentAgents,
-			ProjectSlug: loaded.Config.Tracker.ProjectSlug,
-			Color:       true,
-		})
-	}
-	if err := service.Run(ctx); err != nil && err != context.Canceled {
+	if err := app.RunWithSignals(opts.AppOptions()); err != nil {
 		fatal(err)
 	}
 }
 
 func mergeTargetOverride(opts runOptions) string {
-	if opts.mergeExplicit {
-		return orchestrator.NormalizeMergeTarget(opts.MergeTarget)
-	}
-	return ""
+	return app.MergeTargetOverride(opts.MergeTarget, opts.mergeExplicit)
 }
 
-func renderTUI(ctx context.Context, service *orchestrator.Orchestrator, opts tui.Options) {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			frame := tui.Render(service.Snapshot(), opts)
-			fmt.Print(tui.ClearAndRender(frame))
-		}
+func (o runOptions) AppOptions() app.Options {
+	return app.Options{
+		WorkflowPath:  o.WorkflowPath,
+		Once:          o.Once,
+		Issue:         o.Issue,
+		MergeTarget:   o.MergeTarget,
+		MergeExplicit: o.mergeExplicit,
+		TUI:           o.TUI,
+		Stdout:        os.Stdout,
+		Stderr:        os.Stderr,
 	}
 }
 
