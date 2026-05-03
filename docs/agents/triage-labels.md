@@ -6,8 +6,6 @@
 | -------------------------- | -------------------- | ---- |
 | `needs-triage`             | `needs-triage`       | 需要维护者评估 |
 | `needs-info`               | `needs-info`         | 等待反馈者补充信息 |
-| `ready-for-agent`          | `ready-for-agent`    | 信息完整，可交给无人值守 agent 处理 |
+| `ready-for-agent`          | `ready-for-agent`    | 信息完整，可交给无人值守 agent 处理，把state 流转为 :`Todo` |
 | `ready-for-human`          | `ready-for-human`    | 需要人类实现 |
 | `wontfix`                  | `wontfix`            | 不会处理 |
-
-这些是 triage 标签，不是 Linear 执行状态。不要把它们映射到 `Todo`、`In Progress`、`AI Review`、`Merging`、`Rework` 或 `Done` 这类 workflow 状态。

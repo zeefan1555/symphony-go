@@ -4,8 +4,7 @@
 
 ## 约定
 
-- 无人值守的 Linear 读写优先使用 `linear_graphql`。
-- 如果 `linear_graphql` 不可用，先阅读 `.codex/skills/linear-cli/SKILL.md`，再使用 `linear` CLI。
+- Linear 读写优先使用 linear-cli，先阅读 `.codex/skills/linear-cli/SKILL.md`，再使用 `linear` CLI。
 - 无人值守工作流运行不要使用 Linear MCP/app 工具；这类工具可能需要交互式审批。
 - 对外可见文本默认使用中文，包括 Linear workpad 和交接记录。
 - 工作流执行类任务使用一个标题为 `## Codex Workpad` 的持久 Linear 评论作为进度事实源。
