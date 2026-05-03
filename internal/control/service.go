@@ -3,12 +3,22 @@ package control
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/zeefan1555/symphony-go/internal/observability"
 )
 
-var ErrSnapshotProviderRequired = errors.New("control snapshot provider required")
+var (
+	ErrSnapshotProviderRequired = errors.New("control snapshot provider required")
+	ErrInvalidIssueIdentifier   = errors.New("issue identifier is required")
+	ErrIssueNotFound            = errors.New("issue not found")
+)
+
+const (
+	IssueStatusRunning  = "running"
+	IssueStatusRetrying = "retrying"
+)
 
 type SnapshotProvider interface {
 	Snapshot() observability.Snapshot
@@ -17,6 +27,7 @@ type SnapshotProvider interface {
 type ControlService interface {
 	GetScaffold(context.Context) (ScaffoldStatus, error)
 	RuntimeState(context.Context) (RuntimeState, error)
+	IssueDetail(context.Context, string) (IssueDetail, error)
 }
 
 type Service struct {
@@ -45,6 +56,19 @@ func (s *Service) RuntimeState(ctx context.Context) (RuntimeState, error) {
 		return RuntimeState{}, ErrSnapshotProviderRequired
 	}
 	return ProjectSnapshot(s.provider.Snapshot()), nil
+}
+
+func (s *Service) IssueDetail(ctx context.Context, issueIdentifier string) (IssueDetail, error) {
+	if err := ctx.Err(); err != nil {
+		return IssueDetail{}, err
+	}
+	if strings.TrimSpace(issueIdentifier) == "" {
+		return IssueDetail{}, ErrInvalidIssueIdentifier
+	}
+	if s == nil || s.provider == nil {
+		return IssueDetail{}, ErrSnapshotProviderRequired
+	}
+	return FindIssueDetail(ProjectSnapshot(s.provider.Snapshot()), issueIdentifier)
 }
 
 func ProjectSnapshot(snapshot observability.Snapshot) RuntimeState {
@@ -108,6 +132,35 @@ func ProjectSnapshot(snapshot observability.Snapshot) RuntimeState {
 	}
 }
 
+func FindIssueDetail(state RuntimeState, issueIdentifier string) (IssueDetail, error) {
+	if strings.TrimSpace(issueIdentifier) == "" {
+		return IssueDetail{}, ErrInvalidIssueIdentifier
+	}
+	for _, entry := range state.Running {
+		if entry.IssueIdentifier == issueIdentifier {
+			running := entry
+			return IssueDetail{
+				IssueID:         entry.IssueID,
+				IssueIdentifier: entry.IssueIdentifier,
+				Status:          IssueStatusRunning,
+				Running:         &running,
+			}, nil
+		}
+	}
+	for _, entry := range state.Retrying {
+		if entry.IssueIdentifier == issueIdentifier {
+			retry := entry
+			return IssueDetail{
+				IssueID:         entry.IssueID,
+				IssueIdentifier: entry.IssueIdentifier,
+				Status:          IssueStatusRetrying,
+				Retry:           &retry,
+			}, nil
+		}
+	}
+	return IssueDetail{}, ErrIssueNotFound
+}
+
 type ScaffoldStatus struct {
 	Status string `json:"status"`
 }
@@ -120,6 +173,14 @@ type RuntimeState struct {
 	CodexTotals CodexTotals `json:"codex_totals"`
 	Polling     Polling     `json:"polling"`
 	LastError   string      `json:"last_error,omitempty"`
+}
+
+type IssueDetail struct {
+	IssueID         string    `json:"issue_id"`
+	IssueIdentifier string    `json:"issue_identifier"`
+	Status          string    `json:"status"`
+	Running         *IssueRun `json:"running,omitempty"`
+	Retry           *Retry    `json:"retry,omitempty"`
 }
 
 type Counts struct {

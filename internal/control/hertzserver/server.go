@@ -2,6 +2,7 @@ package hertzserver
 
 import (
 	"context"
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -80,61 +81,34 @@ func (a controlAdapter) GetState(ctx context.Context) (*controlmodel.RuntimeStat
 	return runtimeStateModel(state), nil
 }
 
+func (a controlAdapter) GetIssue(ctx context.Context, issueIdentifier string) (*controlmodel.IssueDetail, error) {
+	detail, err := a.control.IssueDetail(ctx, issueIdentifier)
+	if err != nil {
+		return nil, controlHTTPError(err)
+	}
+	return issueDetailModel(detail), nil
+}
+
+func controlHTTPError(err error) error {
+	switch {
+	case errors.Is(err, controlplane.ErrInvalidIssueIdentifier):
+		return controlhttp.NewError(400, "invalid_issue_identifier", "issue identifier is required")
+	case errors.Is(err, controlplane.ErrIssueNotFound):
+		return controlhttp.NewError(404, "issue_not_found", "issue not found")
+	default:
+		return err
+	}
+}
+
 func runtimeStateModel(state controlplane.RuntimeState) *controlmodel.RuntimeState {
 	running := make([]*controlmodel.IssueRun, 0, len(state.Running))
 	for _, entry := range state.Running {
-		modelEntry := &controlmodel.IssueRun{
-			IssueID:         entry.IssueID,
-			IssueIdentifier: entry.IssueIdentifier,
-			State:           entry.State,
-			TurnCount:       int32(entry.TurnCount),
-			Tokens: &controlmodel.TokenUsage{
-				InputTokens:  int32(entry.Tokens.InputTokens),
-				OutputTokens: int32(entry.Tokens.OutputTokens),
-				TotalTokens:  int32(entry.Tokens.TotalTokens),
-			},
-			RuntimeSeconds: entry.RuntimeSeconds,
-		}
-		if entry.WorkspacePath != "" {
-			modelEntry.WorkspacePath = stringPtr(entry.WorkspacePath)
-		}
-		if entry.SessionID != "" {
-			modelEntry.SessionID = stringPtr(entry.SessionID)
-		}
-		if entry.PID != 0 {
-			pid := int32(entry.PID)
-			modelEntry.Pid = &pid
-		}
-		if entry.LastEvent != "" {
-			modelEntry.LastEvent = stringPtr(entry.LastEvent)
-		}
-		if entry.LastMessage != "" {
-			modelEntry.LastMessage = stringPtr(entry.LastMessage)
-		}
-		if value := formatControlTime(entry.StartedAt); value != "" {
-			modelEntry.StartedAt = stringPtr(value)
-		}
-		if value := formatControlTime(entry.LastEventAt); value != "" {
-			modelEntry.LastEventAt = stringPtr(value)
-		}
-		running = append(running, modelEntry)
+		running = append(running, issueRunModel(entry))
 	}
 
 	retrying := make([]*controlmodel.RetryRun, 0, len(state.Retrying))
 	for _, entry := range state.Retrying {
-		modelEntry := &controlmodel.RetryRun{
-			IssueID:         entry.IssueID,
-			IssueIdentifier: entry.IssueIdentifier,
-			Attempt:         int32(entry.Attempt),
-			DueAt:           formatControlTime(entry.DueAt),
-		}
-		if entry.Error != "" {
-			modelEntry.Error = stringPtr(entry.Error)
-		}
-		if entry.WorkspacePath != "" {
-			modelEntry.WorkspacePath = stringPtr(entry.WorkspacePath)
-		}
-		retrying = append(retrying, modelEntry)
+		retrying = append(retrying, retryRunModel(entry))
 	}
 
 	modelState := &controlmodel.RuntimeState{
@@ -167,6 +141,75 @@ func runtimeStateModel(state controlplane.RuntimeState) *controlmodel.RuntimeSta
 		modelState.LastError = stringPtr(state.LastError)
 	}
 	return modelState
+}
+
+func issueDetailModel(detail controlplane.IssueDetail) *controlmodel.IssueDetail {
+	modelDetail := &controlmodel.IssueDetail{
+		IssueID:         detail.IssueID,
+		IssueIdentifier: detail.IssueIdentifier,
+		Status:          detail.Status,
+	}
+	if detail.Running != nil {
+		modelDetail.Running = issueRunModel(*detail.Running)
+	}
+	if detail.Retry != nil {
+		modelDetail.Retry = retryRunModel(*detail.Retry)
+	}
+	return modelDetail
+}
+
+func issueRunModel(entry controlplane.IssueRun) *controlmodel.IssueRun {
+	modelEntry := &controlmodel.IssueRun{
+		IssueID:         entry.IssueID,
+		IssueIdentifier: entry.IssueIdentifier,
+		State:           entry.State,
+		TurnCount:       int32(entry.TurnCount),
+		Tokens: &controlmodel.TokenUsage{
+			InputTokens:  int32(entry.Tokens.InputTokens),
+			OutputTokens: int32(entry.Tokens.OutputTokens),
+			TotalTokens:  int32(entry.Tokens.TotalTokens),
+		},
+		RuntimeSeconds: entry.RuntimeSeconds,
+	}
+	if entry.WorkspacePath != "" {
+		modelEntry.WorkspacePath = stringPtr(entry.WorkspacePath)
+	}
+	if entry.SessionID != "" {
+		modelEntry.SessionID = stringPtr(entry.SessionID)
+	}
+	if entry.PID != 0 {
+		pid := int32(entry.PID)
+		modelEntry.Pid = &pid
+	}
+	if entry.LastEvent != "" {
+		modelEntry.LastEvent = stringPtr(entry.LastEvent)
+	}
+	if entry.LastMessage != "" {
+		modelEntry.LastMessage = stringPtr(entry.LastMessage)
+	}
+	if value := formatControlTime(entry.StartedAt); value != "" {
+		modelEntry.StartedAt = stringPtr(value)
+	}
+	if value := formatControlTime(entry.LastEventAt); value != "" {
+		modelEntry.LastEventAt = stringPtr(value)
+	}
+	return modelEntry
+}
+
+func retryRunModel(entry controlplane.Retry) *controlmodel.RetryRun {
+	modelEntry := &controlmodel.RetryRun{
+		IssueID:         entry.IssueID,
+		IssueIdentifier: entry.IssueIdentifier,
+		Attempt:         int32(entry.Attempt),
+		DueAt:           formatControlTime(entry.DueAt),
+	}
+	if entry.Error != "" {
+		modelEntry.Error = stringPtr(entry.Error)
+	}
+	if entry.WorkspacePath != "" {
+		modelEntry.WorkspacePath = stringPtr(entry.WorkspacePath)
+	}
+	return modelEntry
 }
 
 func formatControlTime(value time.Time) string {

@@ -67,3 +67,20 @@ struct RuntimeState {
     6: required PollingStatus polling
     7: optional string last_error
 }
+
+struct IssueDetail {
+    1: required string issue_id
+    2: required string issue_identifier
+    3: required string status
+    4: optional IssueRun running
+    5: optional RetryRun retry
+}
+
+struct ErrorDetail {
+    1: required string code
+    2: required string message
+}
+
+struct ErrorEnvelope {
+    1: required ErrorDetail error
+}

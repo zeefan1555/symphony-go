@@ -2,6 +2,7 @@ package control_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,6 +12,68 @@ import (
 
 type fakeSnapshotProvider struct {
 	snapshot observability.Snapshot
+}
+
+func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
+	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
+	dueAt := generatedAt.Add(30 * time.Second)
+	provider := fakeSnapshotProvider{snapshot: observability.Snapshot{
+		Running: []observability.RunningEntry{{
+			IssueID:         "running-id",
+			IssueIdentifier: "ZEE-48",
+			State:           "In Progress",
+			WorkspacePath:   "/tmp/ZEE-48",
+			SessionID:       "session-id",
+			TurnCount:       2,
+			StartedAt:       generatedAt,
+			Tokens:          observability.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+			RuntimeSeconds:  120,
+		}},
+		Retrying: []observability.RetryEntry{{
+			IssueID:         "retry-id",
+			IssueIdentifier: "ZEE-49",
+			Attempt:         3,
+			DueAt:           dueAt,
+			Error:           "rate limited",
+			WorkspacePath:   "/tmp/ZEE-49",
+		}},
+	}}
+
+	service := control.NewService(provider)
+	running, err := service.IssueDetail(context.Background(), "ZEE-48")
+	if err != nil {
+		t.Fatalf("IssueDetail running returned error: %v", err)
+	}
+	if running.Status != control.IssueStatusRunning || running.IssueID != "running-id" || running.Running == nil {
+		t.Fatalf("running detail = %#v, want running projection", running)
+	}
+	if running.Running.SessionID != "session-id" || running.Running.Tokens.TotalTokens != 15 {
+		t.Fatalf("running fields = %#v, want session and token projection", running.Running)
+	}
+
+	retrying, err := service.IssueDetail(context.Background(), "ZEE-49")
+	if err != nil {
+		t.Fatalf("IssueDetail retrying returned error: %v", err)
+	}
+	if retrying.Status != control.IssueStatusRetrying || retrying.IssueID != "retry-id" || retrying.Retry == nil {
+		t.Fatalf("retrying detail = %#v, want retry projection", retrying)
+	}
+	if retrying.Retry.Attempt != 3 || retrying.Retry.Error != "rate limited" {
+		t.Fatalf("retry fields = %#v, want attempt and error projection", retrying.Retry)
+	}
+
+	_, err = service.IssueDetail(context.Background(), "ZEE-404")
+	if !errors.Is(err, control.ErrIssueNotFound) {
+		t.Fatalf("IssueDetail unknown error = %v, want ErrIssueNotFound", err)
+	}
+	_, err = service.IssueDetail(context.Background(), "")
+	if !errors.Is(err, control.ErrInvalidIssueIdentifier) {
+		t.Fatalf("IssueDetail empty identifier error = %v, want ErrInvalidIssueIdentifier", err)
+	}
+	_, err = service.IssueDetail(context.Background(), "  ")
+	if !errors.Is(err, control.ErrInvalidIssueIdentifier) {
+		t.Fatalf("IssueDetail blank identifier error = %v, want ErrInvalidIssueIdentifier", err)
+	}
 }
 
 func (p fakeSnapshotProvider) Snapshot() observability.Snapshot {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	httpmodel "github.com/zeefan1555/symphony-go/internal/control/hertzgen/model/control/http"
 	model "github.com/zeefan1555/symphony-go/internal/control/hertzgen/model/control/model"
 )
 
@@ -45,6 +46,30 @@ func GetState(ctx context.Context, c *app.RequestContext) {
 	resp, err := getControlService().GetState(ctx)
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetIssue .
+// @router /api/v1/:issue_identifier [GET]
+func GetIssue(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req httpmodel.IssueRequest
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &model.ErrorEnvelope{Error: &model.ErrorDetail{
+			Code:    "invalid_issue_identifier",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := getControlService().GetIssue(ctx, req.IssueIdentifier)
+	if err != nil {
+		envelope, status := ErrorEnvelope(err)
+		c.JSON(status, envelope)
 		return
 	}
 

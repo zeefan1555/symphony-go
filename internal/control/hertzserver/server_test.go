@@ -234,6 +234,173 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 	}
 }
 
+func TestIssueRouteReturnsRunningDetail(t *testing.T) {
+	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
+	service := control.NewService(snapshotProvider{snapshot: observability.Snapshot{
+		Running: []observability.RunningEntry{{
+			IssueID:         "issue-id",
+			IssueIdentifier: "ZEE-48",
+			State:           "In Progress",
+			WorkspacePath:   "/tmp/ZEE-48",
+			SessionID:       "thread-1",
+			PID:             1234,
+			TurnCount:       3,
+			LastEvent:       "turn_completed",
+			LastMessage:     "done",
+			StartedAt:       generatedAt.Add(-2 * time.Minute),
+			LastEventAt:     generatedAt.Add(-30 * time.Second),
+			Tokens:          observability.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+			RuntimeSeconds:  120.5,
+		}},
+	}})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp, err := http.Get(baseURL + "/api/v1/ZEE-48")
+	if err != nil {
+		t.Fatalf("GET /api/v1/ZEE-48: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		IssueID         string `json:"issue_id"`
+		IssueIdentifier string `json:"issue_identifier"`
+		Status          string `json:"status"`
+		Running         struct {
+			SessionID      string  `json:"session_id"`
+			TurnCount      int     `json:"turn_count"`
+			LastEvent      string  `json:"last_event"`
+			StartedAt      string  `json:"started_at"`
+			RuntimeSeconds float64 `json:"runtime_seconds"`
+			Tokens         struct {
+				TotalTokens int `json:"total_tokens"`
+			} `json:"tokens"`
+		} `json:"running"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if body.IssueID != "issue-id" || body.IssueIdentifier != "ZEE-48" || body.Status != "running" {
+		t.Fatalf("issue detail = %#v, want running ZEE-48", body)
+	}
+	if body.Running.SessionID != "thread-1" || body.Running.TurnCount != 3 {
+		t.Fatalf("running detail = %#v, want session and turn count", body.Running)
+	}
+	if body.Running.StartedAt != "2026-05-04T01:00:03Z" || body.Running.Tokens.TotalTokens != 15 {
+		t.Fatalf("running metrics = %#v, want timestamp and tokens", body.Running)
+	}
+}
+
+func TestIssueRouteReturnsRetryingDetail(t *testing.T) {
+	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
+	service := control.NewService(snapshotProvider{snapshot: observability.Snapshot{
+		Retrying: []observability.RetryEntry{{
+			IssueID:         "retry-id",
+			IssueIdentifier: "ZEE-49",
+			Attempt:         2,
+			DueAt:           generatedAt.Add(45 * time.Second),
+			Error:           "rate limited",
+			WorkspacePath:   "/tmp/ZEE-49",
+		}},
+	}})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp, err := http.Get(baseURL + "/api/v1/ZEE-49")
+	if err != nil {
+		t.Fatalf("GET /api/v1/ZEE-49: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		IssueIdentifier string `json:"issue_identifier"`
+		Status          string `json:"status"`
+		Retry           struct {
+			Attempt       int    `json:"attempt"`
+			DueAt         string `json:"due_at"`
+			Error         string `json:"error"`
+			WorkspacePath string `json:"workspace_path"`
+		} `json:"retry"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if body.IssueIdentifier != "ZEE-49" || body.Status != "retrying" {
+		t.Fatalf("issue detail = %#v, want retrying ZEE-49", body)
+	}
+	if body.Retry.Attempt != 2 || body.Retry.DueAt != "2026-05-04T01:02:48Z" || body.Retry.Error != "rate limited" {
+		t.Fatalf("retry detail = %#v, want retry projection", body.Retry)
+	}
+}
+
+func TestIssueRouteReturnsErrorEnvelope(t *testing.T) {
+	service := control.NewService(snapshotProvider{snapshot: observability.NewSnapshot()})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp, err := http.Get(baseURL + "/api/v1/ZEE-404")
+	if err != nil {
+		t.Fatalf("GET /api/v1/ZEE-404: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Error.Code != "issue_not_found" || body.Error.Message == "" {
+		t.Fatalf("error envelope = %#v, want issue_not_found", body.Error)
+	}
+}
+
+func TestIssueRouteReturnsInvalidIdentifierEnvelope(t *testing.T) {
+	service := control.NewService(snapshotProvider{snapshot: observability.NewSnapshot()})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp, err := http.Get(baseURL + "/api/v1/%20")
+	if err != nil {
+		t.Fatalf("GET /api/v1/%%20: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Error.Code != "invalid_issue_identifier" || body.Error.Message == "" {
+		t.Fatalf("error envelope = %#v, want invalid_issue_identifier", body.Error)
+	}
+}
+
 func TestScaffoldRouteCallsAuthoredControlService(t *testing.T) {
 	service := control.NewService(snapshotProvider{snapshot: observability.NewSnapshot()})
 	server := hertzserver.New(service)
