@@ -3,6 +3,7 @@
 package workspace
 
 import (
+	"context"
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
 	"github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/model"
@@ -466,5 +467,2391 @@ func (p *WorkspacePreparation) String() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("WorkspacePreparation(%+v)", *p)
+
+}
+
+type WorkspacePathValidationRequest struct {
+	WorkspacePath string `thrift:"workspace_path,1,required" form:"workspace_path,required" json:"workspace_path,required" query:"workspace_path,required"`
+}
+
+func NewWorkspacePathValidationRequest() *WorkspacePathValidationRequest {
+	return &WorkspacePathValidationRequest{}
+}
+
+func (p *WorkspacePathValidationRequest) InitDefault() {
+}
+
+func (p *WorkspacePathValidationRequest) GetWorkspacePath() (v string) {
+	return p.WorkspacePath
+}
+
+var fieldIDToName_WorkspacePathValidationRequest = map[int16]string{
+	1: "workspace_path",
+}
+
+func (p *WorkspacePathValidationRequest) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetWorkspacePath bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRING {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetWorkspacePath = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetWorkspacePath {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspacePathValidationRequest[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_WorkspacePathValidationRequest[fieldId]))
+}
+
+func (p *WorkspacePathValidationRequest) ReadField1(iprot thrift.TProtocol) error {
+
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.WorkspacePath = _field
+	return nil
+}
+
+func (p *WorkspacePathValidationRequest) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("WorkspacePathValidationRequest"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspacePathValidationRequest) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("workspace_path", thrift.STRING, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteString(p.WorkspacePath); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *WorkspacePathValidationRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspacePathValidationRequest(%+v)", *p)
+
+}
+
+type WorkspacePathValidation struct {
+	Boundary        *model.CapabilityBoundary `thrift:"boundary,1,required" form:"boundary,required" json:"boundary,required" query:"boundary,required"`
+	WorkspacePath   string                    `thrift:"workspace_path,2,required" form:"workspace_path,required" json:"workspace_path,required" query:"workspace_path,required"`
+	ContainedInRoot bool                      `thrift:"contained_in_root,3,required" form:"contained_in_root,required" json:"contained_in_root,required" query:"contained_in_root,required"`
+}
+
+func NewWorkspacePathValidation() *WorkspacePathValidation {
+	return &WorkspacePathValidation{}
+}
+
+func (p *WorkspacePathValidation) InitDefault() {
+}
+
+var WorkspacePathValidation_Boundary_DEFAULT *model.CapabilityBoundary
+
+func (p *WorkspacePathValidation) GetBoundary() (v *model.CapabilityBoundary) {
+	if !p.IsSetBoundary() {
+		return WorkspacePathValidation_Boundary_DEFAULT
+	}
+	return p.Boundary
+}
+
+func (p *WorkspacePathValidation) GetWorkspacePath() (v string) {
+	return p.WorkspacePath
+}
+
+func (p *WorkspacePathValidation) GetContainedInRoot() (v bool) {
+	return p.ContainedInRoot
+}
+
+var fieldIDToName_WorkspacePathValidation = map[int16]string{
+	1: "boundary",
+	2: "workspace_path",
+	3: "contained_in_root",
+}
+
+func (p *WorkspacePathValidation) IsSetBoundary() bool {
+	return p.Boundary != nil
+}
+
+func (p *WorkspacePathValidation) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetBoundary bool = false
+	var issetWorkspacePath bool = false
+	var issetContainedInRoot bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetBoundary = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 2:
+			if fieldTypeId == thrift.STRING {
+				if err = p.ReadField2(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetWorkspacePath = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 3:
+			if fieldTypeId == thrift.BOOL {
+				if err = p.ReadField3(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetContainedInRoot = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetBoundary {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetWorkspacePath {
+		fieldId = 2
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetContainedInRoot {
+		fieldId = 3
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspacePathValidation[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_WorkspacePathValidation[fieldId]))
+}
+
+func (p *WorkspacePathValidation) ReadField1(iprot thrift.TProtocol) error {
+	_field := model.NewCapabilityBoundary()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Boundary = _field
+	return nil
+}
+func (p *WorkspacePathValidation) ReadField2(iprot thrift.TProtocol) error {
+
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.WorkspacePath = _field
+	return nil
+}
+func (p *WorkspacePathValidation) ReadField3(iprot thrift.TProtocol) error {
+
+	var _field bool
+	if v, err := iprot.ReadBool(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.ContainedInRoot = _field
+	return nil
+}
+
+func (p *WorkspacePathValidation) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("WorkspacePathValidation"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+		if err = p.writeField2(oprot); err != nil {
+			fieldId = 2
+			goto WriteFieldError
+		}
+		if err = p.writeField3(oprot); err != nil {
+			fieldId = 3
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspacePathValidation) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("boundary", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Boundary.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *WorkspacePathValidation) writeField2(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("workspace_path", thrift.STRING, 2); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteString(p.WorkspacePath); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 2 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 2 end error: ", p), err)
+}
+
+func (p *WorkspacePathValidation) writeField3(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("contained_in_root", thrift.BOOL, 3); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteBool(p.ContainedInRoot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 3 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 3 end error: ", p), err)
+}
+
+func (p *WorkspacePathValidation) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspacePathValidation(%+v)", *p)
+
+}
+
+type WorkspaceCleanupRequest struct {
+	WorkspacePath string `thrift:"workspace_path,1,required" form:"workspace_path,required" json:"workspace_path,required" query:"workspace_path,required"`
+}
+
+func NewWorkspaceCleanupRequest() *WorkspaceCleanupRequest {
+	return &WorkspaceCleanupRequest{}
+}
+
+func (p *WorkspaceCleanupRequest) InitDefault() {
+}
+
+func (p *WorkspaceCleanupRequest) GetWorkspacePath() (v string) {
+	return p.WorkspacePath
+}
+
+var fieldIDToName_WorkspaceCleanupRequest = map[int16]string{
+	1: "workspace_path",
+}
+
+func (p *WorkspaceCleanupRequest) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetWorkspacePath bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRING {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetWorkspacePath = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetWorkspacePath {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceCleanupRequest[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_WorkspaceCleanupRequest[fieldId]))
+}
+
+func (p *WorkspaceCleanupRequest) ReadField1(iprot thrift.TProtocol) error {
+
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.WorkspacePath = _field
+	return nil
+}
+
+func (p *WorkspaceCleanupRequest) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("WorkspaceCleanupRequest"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceCleanupRequest) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("workspace_path", thrift.STRING, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteString(p.WorkspacePath); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *WorkspaceCleanupRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceCleanupRequest(%+v)", *p)
+
+}
+
+type WorkspaceCleanupResult struct {
+	Boundary        *model.CapabilityBoundary `thrift:"boundary,1,required" form:"boundary,required" json:"boundary,required" query:"boundary,required"`
+	WorkspacePath   string                    `thrift:"workspace_path,2,required" form:"workspace_path,required" json:"workspace_path,required" query:"workspace_path,required"`
+	Removed         bool                      `thrift:"removed,3,required" form:"removed,required" json:"removed,required" query:"removed,required"`
+	ContainedInRoot bool                      `thrift:"contained_in_root,4,required" form:"contained_in_root,required" json:"contained_in_root,required" query:"contained_in_root,required"`
+}
+
+func NewWorkspaceCleanupResult() *WorkspaceCleanupResult {
+	return &WorkspaceCleanupResult{}
+}
+
+func (p *WorkspaceCleanupResult) InitDefault() {
+}
+
+var WorkspaceCleanupResult_Boundary_DEFAULT *model.CapabilityBoundary
+
+func (p *WorkspaceCleanupResult) GetBoundary() (v *model.CapabilityBoundary) {
+	if !p.IsSetBoundary() {
+		return WorkspaceCleanupResult_Boundary_DEFAULT
+	}
+	return p.Boundary
+}
+
+func (p *WorkspaceCleanupResult) GetWorkspacePath() (v string) {
+	return p.WorkspacePath
+}
+
+func (p *WorkspaceCleanupResult) GetRemoved() (v bool) {
+	return p.Removed
+}
+
+func (p *WorkspaceCleanupResult) GetContainedInRoot() (v bool) {
+	return p.ContainedInRoot
+}
+
+var fieldIDToName_WorkspaceCleanupResult = map[int16]string{
+	1: "boundary",
+	2: "workspace_path",
+	3: "removed",
+	4: "contained_in_root",
+}
+
+func (p *WorkspaceCleanupResult) IsSetBoundary() bool {
+	return p.Boundary != nil
+}
+
+func (p *WorkspaceCleanupResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetBoundary bool = false
+	var issetWorkspacePath bool = false
+	var issetRemoved bool = false
+	var issetContainedInRoot bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetBoundary = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 2:
+			if fieldTypeId == thrift.STRING {
+				if err = p.ReadField2(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetWorkspacePath = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 3:
+			if fieldTypeId == thrift.BOOL {
+				if err = p.ReadField3(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetRemoved = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 4:
+			if fieldTypeId == thrift.BOOL {
+				if err = p.ReadField4(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetContainedInRoot = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetBoundary {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetWorkspacePath {
+		fieldId = 2
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetRemoved {
+		fieldId = 3
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetContainedInRoot {
+		fieldId = 4
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceCleanupResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_WorkspaceCleanupResult[fieldId]))
+}
+
+func (p *WorkspaceCleanupResult) ReadField1(iprot thrift.TProtocol) error {
+	_field := model.NewCapabilityBoundary()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Boundary = _field
+	return nil
+}
+func (p *WorkspaceCleanupResult) ReadField2(iprot thrift.TProtocol) error {
+
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.WorkspacePath = _field
+	return nil
+}
+func (p *WorkspaceCleanupResult) ReadField3(iprot thrift.TProtocol) error {
+
+	var _field bool
+	if v, err := iprot.ReadBool(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.Removed = _field
+	return nil
+}
+func (p *WorkspaceCleanupResult) ReadField4(iprot thrift.TProtocol) error {
+
+	var _field bool
+	if v, err := iprot.ReadBool(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.ContainedInRoot = _field
+	return nil
+}
+
+func (p *WorkspaceCleanupResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("WorkspaceCleanupResult"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+		if err = p.writeField2(oprot); err != nil {
+			fieldId = 2
+			goto WriteFieldError
+		}
+		if err = p.writeField3(oprot); err != nil {
+			fieldId = 3
+			goto WriteFieldError
+		}
+		if err = p.writeField4(oprot); err != nil {
+			fieldId = 4
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceCleanupResult) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("boundary", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Boundary.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *WorkspaceCleanupResult) writeField2(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("workspace_path", thrift.STRING, 2); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteString(p.WorkspacePath); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 2 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 2 end error: ", p), err)
+}
+
+func (p *WorkspaceCleanupResult) writeField3(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("removed", thrift.BOOL, 3); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteBool(p.Removed); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 3 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 3 end error: ", p), err)
+}
+
+func (p *WorkspaceCleanupResult) writeField4(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("contained_in_root", thrift.BOOL, 4); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteBool(p.ContainedInRoot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 4 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 4 end error: ", p), err)
+}
+
+func (p *WorkspaceCleanupResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceCleanupResult(%+v)", *p)
+
+}
+
+type WorkspaceScaffold interface {
+	ResolveWorkspacePath(ctx context.Context, request *WorkspacePrepareRequest) (r *WorkspacePreparation, err error)
+
+	ValidateWorkspacePath(ctx context.Context, request *WorkspacePathValidationRequest) (r *WorkspacePathValidation, err error)
+
+	PrepareWorkspace(ctx context.Context, request *WorkspacePrepareRequest) (r *WorkspacePreparation, err error)
+
+	CleanupWorkspace(ctx context.Context, request *WorkspaceCleanupRequest) (r *WorkspaceCleanupResult, err error)
+}
+
+type WorkspaceScaffoldClient struct {
+	c thrift.TClient
+}
+
+func NewWorkspaceScaffoldClientFactory(t thrift.TTransport, f thrift.TProtocolFactory) *WorkspaceScaffoldClient {
+	return &WorkspaceScaffoldClient{
+		c: thrift.NewTStandardClient(f.GetProtocol(t), f.GetProtocol(t)),
+	}
+}
+
+func NewWorkspaceScaffoldClientProtocol(t thrift.TTransport, iprot thrift.TProtocol, oprot thrift.TProtocol) *WorkspaceScaffoldClient {
+	return &WorkspaceScaffoldClient{
+		c: thrift.NewTStandardClient(iprot, oprot),
+	}
+}
+
+func NewWorkspaceScaffoldClient(c thrift.TClient) *WorkspaceScaffoldClient {
+	return &WorkspaceScaffoldClient{
+		c: c,
+	}
+}
+
+func (p *WorkspaceScaffoldClient) Client_() thrift.TClient {
+	return p.c
+}
+
+func (p *WorkspaceScaffoldClient) ResolveWorkspacePath(ctx context.Context, request *WorkspacePrepareRequest) (r *WorkspacePreparation, err error) {
+	var _args WorkspaceScaffoldResolveWorkspacePathArgs
+	_args.Request = request
+	var _result WorkspaceScaffoldResolveWorkspacePathResult
+	if err = p.Client_().Call(ctx, "ResolveWorkspacePath", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+func (p *WorkspaceScaffoldClient) ValidateWorkspacePath(ctx context.Context, request *WorkspacePathValidationRequest) (r *WorkspacePathValidation, err error) {
+	var _args WorkspaceScaffoldValidateWorkspacePathArgs
+	_args.Request = request
+	var _result WorkspaceScaffoldValidateWorkspacePathResult
+	if err = p.Client_().Call(ctx, "ValidateWorkspacePath", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+func (p *WorkspaceScaffoldClient) PrepareWorkspace(ctx context.Context, request *WorkspacePrepareRequest) (r *WorkspacePreparation, err error) {
+	var _args WorkspaceScaffoldPrepareWorkspaceArgs
+	_args.Request = request
+	var _result WorkspaceScaffoldPrepareWorkspaceResult
+	if err = p.Client_().Call(ctx, "PrepareWorkspace", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+func (p *WorkspaceScaffoldClient) CleanupWorkspace(ctx context.Context, request *WorkspaceCleanupRequest) (r *WorkspaceCleanupResult, err error) {
+	var _args WorkspaceScaffoldCleanupWorkspaceArgs
+	_args.Request = request
+	var _result WorkspaceScaffoldCleanupWorkspaceResult
+	if err = p.Client_().Call(ctx, "CleanupWorkspace", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+type WorkspaceScaffoldProcessor struct {
+	processorMap map[string]thrift.TProcessorFunction
+	handler      WorkspaceScaffold
+}
+
+func (p *WorkspaceScaffoldProcessor) AddToProcessorMap(key string, processor thrift.TProcessorFunction) {
+	p.processorMap[key] = processor
+}
+
+func (p *WorkspaceScaffoldProcessor) GetProcessorFunction(key string) (processor thrift.TProcessorFunction, ok bool) {
+	processor, ok = p.processorMap[key]
+	return processor, ok
+}
+
+func (p *WorkspaceScaffoldProcessor) ProcessorMap() map[string]thrift.TProcessorFunction {
+	return p.processorMap
+}
+
+func NewWorkspaceScaffoldProcessor(handler WorkspaceScaffold) *WorkspaceScaffoldProcessor {
+	self := &WorkspaceScaffoldProcessor{handler: handler, processorMap: make(map[string]thrift.TProcessorFunction)}
+	self.AddToProcessorMap("ResolveWorkspacePath", &workspaceScaffoldProcessorResolveWorkspacePath{handler: handler})
+	self.AddToProcessorMap("ValidateWorkspacePath", &workspaceScaffoldProcessorValidateWorkspacePath{handler: handler})
+	self.AddToProcessorMap("PrepareWorkspace", &workspaceScaffoldProcessorPrepareWorkspace{handler: handler})
+	self.AddToProcessorMap("CleanupWorkspace", &workspaceScaffoldProcessorCleanupWorkspace{handler: handler})
+	return self
+}
+func (p *WorkspaceScaffoldProcessor) Process(ctx context.Context, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	name, _, seqId, err := iprot.ReadMessageBegin()
+	if err != nil {
+		return false, err
+	}
+	if processor, ok := p.GetProcessorFunction(name); ok {
+		return processor.Process(ctx, seqId, iprot, oprot)
+	}
+	iprot.Skip(thrift.STRUCT)
+	iprot.ReadMessageEnd()
+	x := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function "+name)
+	oprot.WriteMessageBegin(name, thrift.EXCEPTION, seqId)
+	x.Write(oprot)
+	oprot.WriteMessageEnd()
+	oprot.Flush(ctx)
+	return false, x
+}
+
+type workspaceScaffoldProcessorResolveWorkspacePath struct {
+	handler WorkspaceScaffold
+}
+
+func (p *workspaceScaffoldProcessorResolveWorkspacePath) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := WorkspaceScaffoldResolveWorkspacePathArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("ResolveWorkspacePath", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := WorkspaceScaffoldResolveWorkspacePathResult{}
+	var retval *WorkspacePreparation
+	if retval, err2 = p.handler.ResolveWorkspacePath(ctx, args.Request); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing ResolveWorkspacePath: "+err2.Error())
+		oprot.WriteMessageBegin("ResolveWorkspacePath", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("ResolveWorkspacePath", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type workspaceScaffoldProcessorValidateWorkspacePath struct {
+	handler WorkspaceScaffold
+}
+
+func (p *workspaceScaffoldProcessorValidateWorkspacePath) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := WorkspaceScaffoldValidateWorkspacePathArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("ValidateWorkspacePath", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := WorkspaceScaffoldValidateWorkspacePathResult{}
+	var retval *WorkspacePathValidation
+	if retval, err2 = p.handler.ValidateWorkspacePath(ctx, args.Request); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing ValidateWorkspacePath: "+err2.Error())
+		oprot.WriteMessageBegin("ValidateWorkspacePath", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("ValidateWorkspacePath", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type workspaceScaffoldProcessorPrepareWorkspace struct {
+	handler WorkspaceScaffold
+}
+
+func (p *workspaceScaffoldProcessorPrepareWorkspace) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := WorkspaceScaffoldPrepareWorkspaceArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("PrepareWorkspace", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := WorkspaceScaffoldPrepareWorkspaceResult{}
+	var retval *WorkspacePreparation
+	if retval, err2 = p.handler.PrepareWorkspace(ctx, args.Request); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing PrepareWorkspace: "+err2.Error())
+		oprot.WriteMessageBegin("PrepareWorkspace", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("PrepareWorkspace", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type workspaceScaffoldProcessorCleanupWorkspace struct {
+	handler WorkspaceScaffold
+}
+
+func (p *workspaceScaffoldProcessorCleanupWorkspace) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := WorkspaceScaffoldCleanupWorkspaceArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("CleanupWorkspace", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := WorkspaceScaffoldCleanupWorkspaceResult{}
+	var retval *WorkspaceCleanupResult
+	if retval, err2 = p.handler.CleanupWorkspace(ctx, args.Request); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing CleanupWorkspace: "+err2.Error())
+		oprot.WriteMessageBegin("CleanupWorkspace", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("CleanupWorkspace", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type WorkspaceScaffoldResolveWorkspacePathArgs struct {
+	Request *WorkspacePrepareRequest `thrift:"request,1,required"`
+}
+
+func NewWorkspaceScaffoldResolveWorkspacePathArgs() *WorkspaceScaffoldResolveWorkspacePathArgs {
+	return &WorkspaceScaffoldResolveWorkspacePathArgs{}
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathArgs) InitDefault() {
+}
+
+var WorkspaceScaffoldResolveWorkspacePathArgs_Request_DEFAULT *WorkspacePrepareRequest
+
+func (p *WorkspaceScaffoldResolveWorkspacePathArgs) GetRequest() (v *WorkspacePrepareRequest) {
+	if !p.IsSetRequest() {
+		return WorkspaceScaffoldResolveWorkspacePathArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+
+var fieldIDToName_WorkspaceScaffoldResolveWorkspacePathArgs = map[int16]string{
+	1: "request",
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetRequest bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetRequest = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetRequest {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceScaffoldResolveWorkspacePathArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_WorkspaceScaffoldResolveWorkspacePathArgs[fieldId]))
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := NewWorkspacePrepareRequest()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Request = _field
+	return nil
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("ResolveWorkspacePath_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("request", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Request.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceScaffoldResolveWorkspacePathArgs(%+v)", *p)
+
+}
+
+type WorkspaceScaffoldResolveWorkspacePathResult struct {
+	Success *WorkspacePreparation `thrift:"success,0,optional"`
+}
+
+func NewWorkspaceScaffoldResolveWorkspacePathResult() *WorkspaceScaffoldResolveWorkspacePathResult {
+	return &WorkspaceScaffoldResolveWorkspacePathResult{}
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathResult) InitDefault() {
+}
+
+var WorkspaceScaffoldResolveWorkspacePathResult_Success_DEFAULT *WorkspacePreparation
+
+func (p *WorkspaceScaffoldResolveWorkspacePathResult) GetSuccess() (v *WorkspacePreparation) {
+	if !p.IsSetSuccess() {
+		return WorkspaceScaffoldResolveWorkspacePathResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_WorkspaceScaffoldResolveWorkspacePathResult = map[int16]string{
+	0: "success",
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceScaffoldResolveWorkspacePathResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := NewWorkspacePreparation()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("ResolveWorkspacePath_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldResolveWorkspacePathResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceScaffoldResolveWorkspacePathResult(%+v)", *p)
+
+}
+
+type WorkspaceScaffoldValidateWorkspacePathArgs struct {
+	Request *WorkspacePathValidationRequest `thrift:"request,1,required"`
+}
+
+func NewWorkspaceScaffoldValidateWorkspacePathArgs() *WorkspaceScaffoldValidateWorkspacePathArgs {
+	return &WorkspaceScaffoldValidateWorkspacePathArgs{}
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathArgs) InitDefault() {
+}
+
+var WorkspaceScaffoldValidateWorkspacePathArgs_Request_DEFAULT *WorkspacePathValidationRequest
+
+func (p *WorkspaceScaffoldValidateWorkspacePathArgs) GetRequest() (v *WorkspacePathValidationRequest) {
+	if !p.IsSetRequest() {
+		return WorkspaceScaffoldValidateWorkspacePathArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+
+var fieldIDToName_WorkspaceScaffoldValidateWorkspacePathArgs = map[int16]string{
+	1: "request",
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetRequest bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetRequest = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetRequest {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceScaffoldValidateWorkspacePathArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_WorkspaceScaffoldValidateWorkspacePathArgs[fieldId]))
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := NewWorkspacePathValidationRequest()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Request = _field
+	return nil
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("ValidateWorkspacePath_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("request", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Request.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceScaffoldValidateWorkspacePathArgs(%+v)", *p)
+
+}
+
+type WorkspaceScaffoldValidateWorkspacePathResult struct {
+	Success *WorkspacePathValidation `thrift:"success,0,optional"`
+}
+
+func NewWorkspaceScaffoldValidateWorkspacePathResult() *WorkspaceScaffoldValidateWorkspacePathResult {
+	return &WorkspaceScaffoldValidateWorkspacePathResult{}
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathResult) InitDefault() {
+}
+
+var WorkspaceScaffoldValidateWorkspacePathResult_Success_DEFAULT *WorkspacePathValidation
+
+func (p *WorkspaceScaffoldValidateWorkspacePathResult) GetSuccess() (v *WorkspacePathValidation) {
+	if !p.IsSetSuccess() {
+		return WorkspaceScaffoldValidateWorkspacePathResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_WorkspaceScaffoldValidateWorkspacePathResult = map[int16]string{
+	0: "success",
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceScaffoldValidateWorkspacePathResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := NewWorkspacePathValidation()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("ValidateWorkspacePath_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldValidateWorkspacePathResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceScaffoldValidateWorkspacePathResult(%+v)", *p)
+
+}
+
+type WorkspaceScaffoldPrepareWorkspaceArgs struct {
+	Request *WorkspacePrepareRequest `thrift:"request,1,required"`
+}
+
+func NewWorkspaceScaffoldPrepareWorkspaceArgs() *WorkspaceScaffoldPrepareWorkspaceArgs {
+	return &WorkspaceScaffoldPrepareWorkspaceArgs{}
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceArgs) InitDefault() {
+}
+
+var WorkspaceScaffoldPrepareWorkspaceArgs_Request_DEFAULT *WorkspacePrepareRequest
+
+func (p *WorkspaceScaffoldPrepareWorkspaceArgs) GetRequest() (v *WorkspacePrepareRequest) {
+	if !p.IsSetRequest() {
+		return WorkspaceScaffoldPrepareWorkspaceArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+
+var fieldIDToName_WorkspaceScaffoldPrepareWorkspaceArgs = map[int16]string{
+	1: "request",
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetRequest bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetRequest = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetRequest {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceScaffoldPrepareWorkspaceArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_WorkspaceScaffoldPrepareWorkspaceArgs[fieldId]))
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := NewWorkspacePrepareRequest()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Request = _field
+	return nil
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("PrepareWorkspace_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("request", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Request.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceScaffoldPrepareWorkspaceArgs(%+v)", *p)
+
+}
+
+type WorkspaceScaffoldPrepareWorkspaceResult struct {
+	Success *WorkspacePreparation `thrift:"success,0,optional"`
+}
+
+func NewWorkspaceScaffoldPrepareWorkspaceResult() *WorkspaceScaffoldPrepareWorkspaceResult {
+	return &WorkspaceScaffoldPrepareWorkspaceResult{}
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceResult) InitDefault() {
+}
+
+var WorkspaceScaffoldPrepareWorkspaceResult_Success_DEFAULT *WorkspacePreparation
+
+func (p *WorkspaceScaffoldPrepareWorkspaceResult) GetSuccess() (v *WorkspacePreparation) {
+	if !p.IsSetSuccess() {
+		return WorkspaceScaffoldPrepareWorkspaceResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_WorkspaceScaffoldPrepareWorkspaceResult = map[int16]string{
+	0: "success",
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceScaffoldPrepareWorkspaceResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := NewWorkspacePreparation()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("PrepareWorkspace_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldPrepareWorkspaceResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceScaffoldPrepareWorkspaceResult(%+v)", *p)
+
+}
+
+type WorkspaceScaffoldCleanupWorkspaceArgs struct {
+	Request *WorkspaceCleanupRequest `thrift:"request,1,required"`
+}
+
+func NewWorkspaceScaffoldCleanupWorkspaceArgs() *WorkspaceScaffoldCleanupWorkspaceArgs {
+	return &WorkspaceScaffoldCleanupWorkspaceArgs{}
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceArgs) InitDefault() {
+}
+
+var WorkspaceScaffoldCleanupWorkspaceArgs_Request_DEFAULT *WorkspaceCleanupRequest
+
+func (p *WorkspaceScaffoldCleanupWorkspaceArgs) GetRequest() (v *WorkspaceCleanupRequest) {
+	if !p.IsSetRequest() {
+		return WorkspaceScaffoldCleanupWorkspaceArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+
+var fieldIDToName_WorkspaceScaffoldCleanupWorkspaceArgs = map[int16]string{
+	1: "request",
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetRequest bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetRequest = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetRequest {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceScaffoldCleanupWorkspaceArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_WorkspaceScaffoldCleanupWorkspaceArgs[fieldId]))
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := NewWorkspaceCleanupRequest()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Request = _field
+	return nil
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("CleanupWorkspace_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("request", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Request.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceScaffoldCleanupWorkspaceArgs(%+v)", *p)
+
+}
+
+type WorkspaceScaffoldCleanupWorkspaceResult struct {
+	Success *WorkspaceCleanupResult `thrift:"success,0,optional"`
+}
+
+func NewWorkspaceScaffoldCleanupWorkspaceResult() *WorkspaceScaffoldCleanupWorkspaceResult {
+	return &WorkspaceScaffoldCleanupWorkspaceResult{}
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceResult) InitDefault() {
+}
+
+var WorkspaceScaffoldCleanupWorkspaceResult_Success_DEFAULT *WorkspaceCleanupResult
+
+func (p *WorkspaceScaffoldCleanupWorkspaceResult) GetSuccess() (v *WorkspaceCleanupResult) {
+	if !p.IsSetSuccess() {
+		return WorkspaceScaffoldCleanupWorkspaceResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_WorkspaceScaffoldCleanupWorkspaceResult = map[int16]string{
+	0: "success",
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_WorkspaceScaffoldCleanupWorkspaceResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := NewWorkspaceCleanupResult()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("CleanupWorkspace_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *WorkspaceScaffoldCleanupWorkspaceResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WorkspaceScaffoldCleanupWorkspaceResult(%+v)", *p)
 
 }

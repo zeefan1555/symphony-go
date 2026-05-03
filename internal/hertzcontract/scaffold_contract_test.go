@@ -79,6 +79,38 @@ func TestOrchestratorScaffoldIsNotExternalControlRoute(t *testing.T) {
 	}
 }
 
+func TestWorkspaceScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
+	text := readFile(t, "../../idl/scaffold/workspace.thrift")
+
+	for _, want := range []string{
+		"service WorkspaceScaffold",
+		"ResolveWorkspacePath",
+		"ValidateWorkspacePath",
+		"PrepareWorkspace",
+		"CleanupWorkspace",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("workspace scaffold IDL missing %q", want)
+		}
+	}
+}
+
+func TestWorkspaceScaffoldIsNotExternalControlRoute(t *testing.T) {
+	repo := "../../"
+	controlRoute := readFile(t, filepath.Join(repo, "internal/generated/hertz/control/router/control/http/http.go"))
+
+	for _, forbidden := range []string{
+		"WorkspaceScaffold",
+		"PrepareWorkspace",
+		"CleanupWorkspace",
+		"workspace",
+	} {
+		if strings.Contains(controlRoute, forbidden) {
+			t.Fatalf("external control route exposes internal workspace scaffold %q", forbidden)
+		}
+	}
+}
+
 func TestInternalScaffoldDocumentation(t *testing.T) {
 	doc := readFile(t, "../../docs/internal-scaffold-hertz-idl.md")
 
