@@ -111,6 +111,49 @@ func TestWorkspaceScaffoldIsNotExternalControlRoute(t *testing.T) {
 	}
 }
 
+func TestCodexSessionScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
+	text := readFile(t, "../../idl/scaffold/codex_session.thrift")
+
+	for _, want := range []string{
+		"service CodexSessionScaffold",
+		"RunTurn",
+		"CodexTurnRequest",
+		"CodexTurnSummary",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("codex session scaffold IDL missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"callback",
+		"func",
+		"app-server",
+		"jsonrpc",
+		"thread/start",
+		"turn/start",
+	} {
+		if strings.Contains(strings.ToLower(text), forbidden) {
+			t.Fatalf("codex session scaffold IDL exposes protocol detail %q", forbidden)
+		}
+	}
+}
+
+func TestCodexSessionScaffoldIsNotExternalControlRoute(t *testing.T) {
+	repo := "../../"
+	controlRoute := readFile(t, filepath.Join(repo, "internal/generated/hertz/control/router/control/http/http.go"))
+
+	for _, forbidden := range []string{
+		"CodexSessionScaffold",
+		"RunTurn",
+		"codexsession",
+		"codex",
+	} {
+		if strings.Contains(strings.ToLower(controlRoute), strings.ToLower(forbidden)) {
+			t.Fatalf("external control route exposes internal codex session scaffold %q", forbidden)
+		}
+	}
+}
+
 func TestInternalScaffoldDocumentation(t *testing.T) {
 	doc := readFile(t, "../../docs/internal-scaffold-hertz-idl.md")
 
