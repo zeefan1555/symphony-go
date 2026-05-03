@@ -3,6 +3,7 @@
 package orchestrator
 
 import (
+	"context"
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
 	"github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/model"
@@ -413,5 +414,436 @@ func (p *IssueRunProjection) String() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("IssueRunProjection(%+v)", *p)
+
+}
+
+type OrchestratorScaffold interface {
+	ProjectIssueRun(ctx context.Context, request *IssueRunProjectionRequest) (r *IssueRunProjection, err error)
+}
+
+type OrchestratorScaffoldClient struct {
+	c thrift.TClient
+}
+
+func NewOrchestratorScaffoldClientFactory(t thrift.TTransport, f thrift.TProtocolFactory) *OrchestratorScaffoldClient {
+	return &OrchestratorScaffoldClient{
+		c: thrift.NewTStandardClient(f.GetProtocol(t), f.GetProtocol(t)),
+	}
+}
+
+func NewOrchestratorScaffoldClientProtocol(t thrift.TTransport, iprot thrift.TProtocol, oprot thrift.TProtocol) *OrchestratorScaffoldClient {
+	return &OrchestratorScaffoldClient{
+		c: thrift.NewTStandardClient(iprot, oprot),
+	}
+}
+
+func NewOrchestratorScaffoldClient(c thrift.TClient) *OrchestratorScaffoldClient {
+	return &OrchestratorScaffoldClient{
+		c: c,
+	}
+}
+
+func (p *OrchestratorScaffoldClient) Client_() thrift.TClient {
+	return p.c
+}
+
+func (p *OrchestratorScaffoldClient) ProjectIssueRun(ctx context.Context, request *IssueRunProjectionRequest) (r *IssueRunProjection, err error) {
+	var _args OrchestratorScaffoldProjectIssueRunArgs
+	_args.Request = request
+	var _result OrchestratorScaffoldProjectIssueRunResult
+	if err = p.Client_().Call(ctx, "ProjectIssueRun", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+type OrchestratorScaffoldProcessor struct {
+	processorMap map[string]thrift.TProcessorFunction
+	handler      OrchestratorScaffold
+}
+
+func (p *OrchestratorScaffoldProcessor) AddToProcessorMap(key string, processor thrift.TProcessorFunction) {
+	p.processorMap[key] = processor
+}
+
+func (p *OrchestratorScaffoldProcessor) GetProcessorFunction(key string) (processor thrift.TProcessorFunction, ok bool) {
+	processor, ok = p.processorMap[key]
+	return processor, ok
+}
+
+func (p *OrchestratorScaffoldProcessor) ProcessorMap() map[string]thrift.TProcessorFunction {
+	return p.processorMap
+}
+
+func NewOrchestratorScaffoldProcessor(handler OrchestratorScaffold) *OrchestratorScaffoldProcessor {
+	self := &OrchestratorScaffoldProcessor{handler: handler, processorMap: make(map[string]thrift.TProcessorFunction)}
+	self.AddToProcessorMap("ProjectIssueRun", &orchestratorScaffoldProcessorProjectIssueRun{handler: handler})
+	return self
+}
+func (p *OrchestratorScaffoldProcessor) Process(ctx context.Context, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	name, _, seqId, err := iprot.ReadMessageBegin()
+	if err != nil {
+		return false, err
+	}
+	if processor, ok := p.GetProcessorFunction(name); ok {
+		return processor.Process(ctx, seqId, iprot, oprot)
+	}
+	iprot.Skip(thrift.STRUCT)
+	iprot.ReadMessageEnd()
+	x := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function "+name)
+	oprot.WriteMessageBegin(name, thrift.EXCEPTION, seqId)
+	x.Write(oprot)
+	oprot.WriteMessageEnd()
+	oprot.Flush(ctx)
+	return false, x
+}
+
+type orchestratorScaffoldProcessorProjectIssueRun struct {
+	handler OrchestratorScaffold
+}
+
+func (p *orchestratorScaffoldProcessorProjectIssueRun) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := OrchestratorScaffoldProjectIssueRunArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("ProjectIssueRun", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := OrchestratorScaffoldProjectIssueRunResult{}
+	var retval *IssueRunProjection
+	if retval, err2 = p.handler.ProjectIssueRun(ctx, args.Request); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing ProjectIssueRun: "+err2.Error())
+		oprot.WriteMessageBegin("ProjectIssueRun", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("ProjectIssueRun", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type OrchestratorScaffoldProjectIssueRunArgs struct {
+	Request *IssueRunProjectionRequest `thrift:"request,1,required"`
+}
+
+func NewOrchestratorScaffoldProjectIssueRunArgs() *OrchestratorScaffoldProjectIssueRunArgs {
+	return &OrchestratorScaffoldProjectIssueRunArgs{}
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunArgs) InitDefault() {
+}
+
+var OrchestratorScaffoldProjectIssueRunArgs_Request_DEFAULT *IssueRunProjectionRequest
+
+func (p *OrchestratorScaffoldProjectIssueRunArgs) GetRequest() (v *IssueRunProjectionRequest) {
+	if !p.IsSetRequest() {
+		return OrchestratorScaffoldProjectIssueRunArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+
+var fieldIDToName_OrchestratorScaffoldProjectIssueRunArgs = map[int16]string{
+	1: "request",
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetRequest bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetRequest = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetRequest {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_OrchestratorScaffoldProjectIssueRunArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_OrchestratorScaffoldProjectIssueRunArgs[fieldId]))
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := NewIssueRunProjectionRequest()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Request = _field
+	return nil
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("ProjectIssueRun_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("request", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Request.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("OrchestratorScaffoldProjectIssueRunArgs(%+v)", *p)
+
+}
+
+type OrchestratorScaffoldProjectIssueRunResult struct {
+	Success *IssueRunProjection `thrift:"success,0,optional"`
+}
+
+func NewOrchestratorScaffoldProjectIssueRunResult() *OrchestratorScaffoldProjectIssueRunResult {
+	return &OrchestratorScaffoldProjectIssueRunResult{}
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunResult) InitDefault() {
+}
+
+var OrchestratorScaffoldProjectIssueRunResult_Success_DEFAULT *IssueRunProjection
+
+func (p *OrchestratorScaffoldProjectIssueRunResult) GetSuccess() (v *IssueRunProjection) {
+	if !p.IsSetSuccess() {
+		return OrchestratorScaffoldProjectIssueRunResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_OrchestratorScaffoldProjectIssueRunResult = map[int16]string{
+	0: "success",
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_OrchestratorScaffoldProjectIssueRunResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := NewIssueRunProjection()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("ProjectIssueRun_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *OrchestratorScaffoldProjectIssueRunResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("OrchestratorScaffoldProjectIssueRunResult(%+v)", *p)
 
 }
