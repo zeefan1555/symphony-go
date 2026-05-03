@@ -8,14 +8,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zeefan1555/symphony-go/internal/control"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzserver"
+	"github.com/zeefan1555/symphony-go/internal/observability"
 )
 
+type snapshotProvider struct {
+	snapshot observability.Snapshot
+}
+
+func (p snapshotProvider) Snapshot() observability.Snapshot {
+	return p.snapshot
+}
+
 func TestScaffoldRouteCallsAuthoredControlService(t *testing.T) {
-	control := hertzserver.ControlFunc(func(context.Context) (hertzserver.ScaffoldStatus, error) {
-		return hertzserver.ScaffoldStatus{Status: "ok"}, nil
-	})
-	server := hertzserver.New(control)
+	service := control.NewService(snapshotProvider{snapshot: observability.NewSnapshot()})
+	server := hertzserver.New(service)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

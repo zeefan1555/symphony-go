@@ -6,23 +6,12 @@ import (
 	"sync"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
+	controlplane "github.com/zeefan1555/symphony-go/internal/control"
 	controlhttp "github.com/zeefan1555/symphony-go/internal/control/hertzgen/handler/control/http"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzgen/router"
 )
 
-type ScaffoldStatus struct {
-	Status string
-}
-
-type Control interface {
-	GetScaffold(context.Context) (ScaffoldStatus, error)
-}
-
-type ControlFunc func(context.Context) (ScaffoldStatus, error)
-
-func (f ControlFunc) GetScaffold(ctx context.Context) (ScaffoldStatus, error) {
-	return f(ctx)
-}
+type Control = controlplane.ControlService
 
 type Server struct {
 	control Control
@@ -34,9 +23,7 @@ type Server struct {
 
 func New(control Control) *Server {
 	if control == nil {
-		control = ControlFunc(func(context.Context) (ScaffoldStatus, error) {
-			return ScaffoldStatus{Status: "unconfigured"}, nil
-		})
+		control = controlplane.NewService(nil)
 	}
 	return &Server{control: control}
 }
