@@ -37,6 +37,48 @@ func TestRepositoryDocumentsHertzGenerationCommand(t *testing.T) {
 	}
 }
 
+func TestMaintainerWorkflowDocumentsIDLBoundariesAndGeneration(t *testing.T) {
+	doc, err := os.ReadFile("../../../docs/control-plane-hertz-idl.md")
+	if err != nil {
+		t.Fatalf("read maintainer workflow doc: %v", err)
+	}
+	text := string(doc)
+
+	for _, want := range []string{
+		"`idl/control/common.thrift`",
+		"`idl/control/http.thrift`",
+		"`internal/control/hertzgen/`",
+		"`internal/control/hertzserver/`",
+		"`internal/control/service.go`",
+		"`make hertz-generate`",
+		"`scripts/hertz_generate.sh`",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("maintainer workflow doc missing %q", want)
+		}
+	}
+}
+
+func TestMaintainerWorkflowDocumentsReviewAndTransportBoundaries(t *testing.T) {
+	doc, err := os.ReadFile("../../../docs/control-plane-hertz-idl.md")
+	if err != nil {
+		t.Fatalf("read maintainer workflow doc: %v", err)
+	}
+	text := string(doc)
+
+	for _, want := range []string{
+		"优先 review IDL 契约和手写 adapter",
+		"公共模型 IDL 不能依赖 Hertz route annotations",
+		"未来 Kitex 只能新增专用 adapter/IDL 层",
+		"第一版不实现 Kitex runtime",
+		"不把 `run --once --issue` 变成产品 API",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("maintainer workflow doc missing %q", want)
+		}
+	}
+}
+
 func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
 	commonIDL, err := os.ReadFile("../../../idl/control/common.thrift")
 	if err != nil {
