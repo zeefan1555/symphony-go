@@ -30,3 +30,23 @@ func GetScaffold(ctx context.Context, c *app.RequestContext) {
 
 	c.JSON(consts.StatusOK, resp)
 }
+
+// GetState .
+// @router /api/v1/state [GET]
+func GetState(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req model.Empty
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp, err := getControlService().GetState(ctx)
+	if err != nil {
+		c.String(consts.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
