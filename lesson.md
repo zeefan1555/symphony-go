@@ -121,3 +121,27 @@ make run-once ISSUE=<issue>
 ```bash
 make run-once ISSUE=<issue> MERGE_TARGET=<branch>
 ```
+
+## 2026-05-03: 实验架构文档不能作为权威参考
+
+### 用户纠正
+
+- 用户指出：`docs/architecture/symphony-go-architecture.md` 是之前做实验用的文档，不要作为参考。
+
+### 错误模式
+
+- 这是事实错误：我把历史实验文档当成维护中的架构参考源。
+- 这是流程错误：配置 domain docs 时没有先区分权威契约、纠错记录和实验记录。
+
+### 防复犯规则
+
+- 配置或消费 domain docs 时，默认以 `SPEC.md`、`WORKFLOW.md`、`AGENTS.md`、`lesson.md` 和必要 ADR 为准。
+- `docs/architecture/symphony-go-architecture.md` 不作为本仓默认参考源；只有用户明确要求回看实验记录时才打开，并标注其可能过期。
+
+### 固定动作
+
+- 检查默认参考源是否误引用实验架构文档：
+
+```bash
+rg -n "symphony-go-architecture|docs/architecture|架构文档" AGENTS.md docs/agents lesson.md
+```

@@ -131,6 +131,20 @@
 - 修改前先看 `git status --short --branch`，理解当前脏区。
 - 遇到不属于本任务的改动，保持原样；如果它阻塞当前任务，先说明冲突和可选处理方式。
 
+## Agent skills
+
+### Issue tracker（任务跟踪）
+
+本仓的任务和 PRD 记录在 Linear，使用仓库工作流配置的 Linear 项目以及 CLI/GraphQL 约定。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels（分诊标签）
+
+五个标准 triage 角色使用默认标签名。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs（领域文档）
+
+本仓是单上下文仓库（single-context repo）；技能应读取根目录领域文档、工作流契约和纠错记录。详见 `docs/agents/domain.md`。
+
 ## 输出要求
 
 - 默认使用中文。
