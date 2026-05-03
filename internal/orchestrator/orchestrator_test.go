@@ -34,6 +34,40 @@ func TestSnapshotStartsWithEmptyCollections(t *testing.T) {
 	}
 }
 
+func TestRequestRefreshSignalsPollWithoutBlocking(t *testing.T) {
+	o := New(Options{Workflow: &types.Workflow{Config: types.Config{}}})
+
+	queued, err := o.RequestRefresh(context.Background())
+	if err != nil {
+		t.Fatalf("RequestRefresh returned error: %v", err)
+	}
+	if !queued {
+		t.Fatal("first RequestRefresh queued = false, want true")
+	}
+
+	queued, err = o.RequestRefresh(context.Background())
+	if err != nil {
+		t.Fatalf("second RequestRefresh returned error: %v", err)
+	}
+	if queued {
+		t.Fatal("second RequestRefresh queued = true, want false while pending")
+	}
+
+	select {
+	case <-o.pollNow:
+	default:
+		t.Fatal("pollNow was not signaled")
+	}
+
+	queued, err = o.RequestRefresh(context.Background())
+	if err != nil {
+		t.Fatalf("third RequestRefresh returned error: %v", err)
+	}
+	if !queued {
+		t.Fatal("third RequestRefresh queued = false, want true after signal is consumed")
+	}
+}
+
 func TestSnapshotTracksCodexEventTokens(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

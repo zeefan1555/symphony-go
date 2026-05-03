@@ -22,6 +22,8 @@ func Register(r *server.Hertz) {
 		{
 			_v1 := _api.Group("/v1", _v1Mw()...)
 			_v1.GET("/:issue_identifier", append(_getissueMw(), http.GetIssue)...)
+			_v1.GET("/refresh", append(_getrefreshunsupportedMw(), http.GetRefreshUnsupported)...)
+			_v1.POST("/refresh", append(_postrefreshMw(), http.PostRefresh)...)
 			_v1.GET("/scaffold", append(_getscaffoldMw(), http.GetScaffold)...)
 			_v1.GET("/state", append(_getstateMw(), http.GetState)...)
 		}

@@ -162,6 +162,10 @@ type ControlPlane interface {
 
 	GetState(ctx context.Context, request *model.Empty) (r *model.RuntimeState, err error)
 
+	GetRefreshUnsupported(ctx context.Context, request *model.Empty) (r *model.ErrorEnvelope, err error)
+
+	PostRefresh(ctx context.Context, request *model.Empty) (r *model.RefreshResult, err error)
+
 	GetIssue(ctx context.Context, request *IssueRequest) (r *model.IssueDetail, err error)
 }
 
@@ -209,6 +213,24 @@ func (p *ControlPlaneClient) GetState(ctx context.Context, request *model.Empty)
 	}
 	return _result.GetSuccess(), nil
 }
+func (p *ControlPlaneClient) GetRefreshUnsupported(ctx context.Context, request *model.Empty) (r *model.ErrorEnvelope, err error) {
+	var _args ControlPlaneGetRefreshUnsupportedArgs
+	_args.Request = request
+	var _result ControlPlaneGetRefreshUnsupportedResult
+	if err = p.Client_().Call(ctx, "GetRefreshUnsupported", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+func (p *ControlPlaneClient) PostRefresh(ctx context.Context, request *model.Empty) (r *model.RefreshResult, err error) {
+	var _args ControlPlanePostRefreshArgs
+	_args.Request = request
+	var _result ControlPlanePostRefreshResult
+	if err = p.Client_().Call(ctx, "PostRefresh", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
 func (p *ControlPlaneClient) GetIssue(ctx context.Context, request *IssueRequest) (r *model.IssueDetail, err error) {
 	var _args ControlPlaneGetIssueArgs
 	_args.Request = request
@@ -241,6 +263,8 @@ func NewControlPlaneProcessor(handler ControlPlane) *ControlPlaneProcessor {
 	self := &ControlPlaneProcessor{handler: handler, processorMap: make(map[string]thrift.TProcessorFunction)}
 	self.AddToProcessorMap("GetScaffold", &controlPlaneProcessorGetScaffold{handler: handler})
 	self.AddToProcessorMap("GetState", &controlPlaneProcessorGetState{handler: handler})
+	self.AddToProcessorMap("GetRefreshUnsupported", &controlPlaneProcessorGetRefreshUnsupported{handler: handler})
+	self.AddToProcessorMap("PostRefresh", &controlPlaneProcessorPostRefresh{handler: handler})
 	self.AddToProcessorMap("GetIssue", &controlPlaneProcessorGetIssue{handler: handler})
 	return self
 }
@@ -341,6 +365,102 @@ func (p *controlPlaneProcessorGetState) Process(ctx context.Context, seqId int32
 		result.Success = retval
 	}
 	if err2 = oprot.WriteMessageBegin("GetState", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type controlPlaneProcessorGetRefreshUnsupported struct {
+	handler ControlPlane
+}
+
+func (p *controlPlaneProcessorGetRefreshUnsupported) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := ControlPlaneGetRefreshUnsupportedArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("GetRefreshUnsupported", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := ControlPlaneGetRefreshUnsupportedResult{}
+	var retval *model.ErrorEnvelope
+	if retval, err2 = p.handler.GetRefreshUnsupported(ctx, args.Request); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing GetRefreshUnsupported: "+err2.Error())
+		oprot.WriteMessageBegin("GetRefreshUnsupported", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("GetRefreshUnsupported", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type controlPlaneProcessorPostRefresh struct {
+	handler ControlPlane
+}
+
+func (p *controlPlaneProcessorPostRefresh) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := ControlPlanePostRefreshArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("PostRefresh", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := ControlPlanePostRefreshResult{}
+	var retval *model.RefreshResult
+	if retval, err2 = p.handler.PostRefresh(ctx, args.Request); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing PostRefresh: "+err2.Error())
+		oprot.WriteMessageBegin("PostRefresh", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("PostRefresh", thrift.REPLY, seqId); err2 != nil {
 		err = err2
 	}
 	if err2 = result.Write(oprot); err == nil && err2 != nil {
@@ -991,6 +1111,594 @@ func (p *ControlPlaneGetStateResult) String() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("ControlPlaneGetStateResult(%+v)", *p)
+
+}
+
+type ControlPlaneGetRefreshUnsupportedArgs struct {
+	Request *model.Empty `thrift:"request,1"`
+}
+
+func NewControlPlaneGetRefreshUnsupportedArgs() *ControlPlaneGetRefreshUnsupportedArgs {
+	return &ControlPlaneGetRefreshUnsupportedArgs{}
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedArgs) InitDefault() {
+}
+
+var ControlPlaneGetRefreshUnsupportedArgs_Request_DEFAULT *model.Empty
+
+func (p *ControlPlaneGetRefreshUnsupportedArgs) GetRequest() (v *model.Empty) {
+	if !p.IsSetRequest() {
+		return ControlPlaneGetRefreshUnsupportedArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+
+var fieldIDToName_ControlPlaneGetRefreshUnsupportedArgs = map[int16]string{
+	1: "request",
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_ControlPlaneGetRefreshUnsupportedArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := model.NewEmpty()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Request = _field
+	return nil
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("GetRefreshUnsupported_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("request", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Request.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlPlaneGetRefreshUnsupportedArgs(%+v)", *p)
+
+}
+
+type ControlPlaneGetRefreshUnsupportedResult struct {
+	Success *model.ErrorEnvelope `thrift:"success,0,optional"`
+}
+
+func NewControlPlaneGetRefreshUnsupportedResult() *ControlPlaneGetRefreshUnsupportedResult {
+	return &ControlPlaneGetRefreshUnsupportedResult{}
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedResult) InitDefault() {
+}
+
+var ControlPlaneGetRefreshUnsupportedResult_Success_DEFAULT *model.ErrorEnvelope
+
+func (p *ControlPlaneGetRefreshUnsupportedResult) GetSuccess() (v *model.ErrorEnvelope) {
+	if !p.IsSetSuccess() {
+		return ControlPlaneGetRefreshUnsupportedResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_ControlPlaneGetRefreshUnsupportedResult = map[int16]string{
+	0: "success",
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_ControlPlaneGetRefreshUnsupportedResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := model.NewErrorEnvelope()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("GetRefreshUnsupported_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *ControlPlaneGetRefreshUnsupportedResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlPlaneGetRefreshUnsupportedResult(%+v)", *p)
+
+}
+
+type ControlPlanePostRefreshArgs struct {
+	Request *model.Empty `thrift:"request,1"`
+}
+
+func NewControlPlanePostRefreshArgs() *ControlPlanePostRefreshArgs {
+	return &ControlPlanePostRefreshArgs{}
+}
+
+func (p *ControlPlanePostRefreshArgs) InitDefault() {
+}
+
+var ControlPlanePostRefreshArgs_Request_DEFAULT *model.Empty
+
+func (p *ControlPlanePostRefreshArgs) GetRequest() (v *model.Empty) {
+	if !p.IsSetRequest() {
+		return ControlPlanePostRefreshArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+
+var fieldIDToName_ControlPlanePostRefreshArgs = map[int16]string{
+	1: "request",
+}
+
+func (p *ControlPlanePostRefreshArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *ControlPlanePostRefreshArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_ControlPlanePostRefreshArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *ControlPlanePostRefreshArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := model.NewEmpty()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Request = _field
+	return nil
+}
+
+func (p *ControlPlanePostRefreshArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("PostRefresh_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *ControlPlanePostRefreshArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("request", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Request.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *ControlPlanePostRefreshArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlPlanePostRefreshArgs(%+v)", *p)
+
+}
+
+type ControlPlanePostRefreshResult struct {
+	Success *model.RefreshResult `thrift:"success,0,optional"`
+}
+
+func NewControlPlanePostRefreshResult() *ControlPlanePostRefreshResult {
+	return &ControlPlanePostRefreshResult{}
+}
+
+func (p *ControlPlanePostRefreshResult) InitDefault() {
+}
+
+var ControlPlanePostRefreshResult_Success_DEFAULT *model.RefreshResult
+
+func (p *ControlPlanePostRefreshResult) GetSuccess() (v *model.RefreshResult) {
+	if !p.IsSetSuccess() {
+		return ControlPlanePostRefreshResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_ControlPlanePostRefreshResult = map[int16]string{
+	0: "success",
+}
+
+func (p *ControlPlanePostRefreshResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ControlPlanePostRefreshResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_ControlPlanePostRefreshResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *ControlPlanePostRefreshResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := model.NewRefreshResult()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *ControlPlanePostRefreshResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("PostRefresh_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *ControlPlanePostRefreshResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *ControlPlanePostRefreshResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ControlPlanePostRefreshResult(%+v)", *p)
 
 }
 

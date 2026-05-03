@@ -13,21 +13,30 @@ var (
 	ErrSnapshotProviderRequired = errors.New("control snapshot provider required")
 	ErrInvalidIssueIdentifier   = errors.New("issue identifier is required")
 	ErrIssueNotFound            = errors.New("issue not found")
+	ErrRefreshTriggerRequired   = errors.New("control refresh trigger required")
 )
 
 const (
 	IssueStatusRunning  = "running"
 	IssueStatusRetrying = "retrying"
+
+	RefreshStatusQueued         = "queued"
+	RefreshStatusAlreadyPending = "already_pending"
 )
 
 type SnapshotProvider interface {
 	Snapshot() observability.Snapshot
 }
 
+type RefreshTrigger interface {
+	RequestRefresh(context.Context) (bool, error)
+}
+
 type ControlService interface {
 	GetScaffold(context.Context) (ScaffoldStatus, error)
 	RuntimeState(context.Context) (RuntimeState, error)
 	IssueDetail(context.Context, string) (IssueDetail, error)
+	Refresh(context.Context) (RefreshResult, error)
 }
 
 type Service struct {
@@ -69,6 +78,27 @@ func (s *Service) IssueDetail(ctx context.Context, issueIdentifier string) (Issu
 		return IssueDetail{}, ErrSnapshotProviderRequired
 	}
 	return FindIssueDetail(ProjectSnapshot(s.provider.Snapshot()), issueIdentifier)
+}
+
+func (s *Service) Refresh(ctx context.Context) (RefreshResult, error) {
+	if err := ctx.Err(); err != nil {
+		return RefreshResult{}, err
+	}
+	if s == nil || s.provider == nil {
+		return RefreshResult{}, ErrSnapshotProviderRequired
+	}
+	trigger, ok := s.provider.(RefreshTrigger)
+	if !ok {
+		return RefreshResult{}, ErrRefreshTriggerRequired
+	}
+	queued, err := trigger.RequestRefresh(ctx)
+	if err != nil {
+		return RefreshResult{}, err
+	}
+	if !queued {
+		return RefreshResult{Accepted: true, Status: RefreshStatusAlreadyPending}, nil
+	}
+	return RefreshResult{Accepted: true, Status: RefreshStatusQueued}, nil
 }
 
 func ProjectSnapshot(snapshot observability.Snapshot) RuntimeState {
@@ -181,6 +211,11 @@ type IssueDetail struct {
 	Status          string    `json:"status"`
 	Running         *IssueRun `json:"running,omitempty"`
 	Retry           *Retry    `json:"retry,omitempty"`
+}
+
+type RefreshResult struct {
+	Accepted bool   `json:"accepted"`
+	Status   string `json:"status"`
 }
 
 type Counts struct {

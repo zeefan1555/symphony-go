@@ -35,3 +35,13 @@ func _getissueMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _getrefreshunsupportedMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _postrefreshMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

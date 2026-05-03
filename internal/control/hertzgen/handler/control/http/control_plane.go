@@ -75,3 +75,47 @@ func GetIssue(ctx context.Context, c *app.RequestContext) {
 
 	c.JSON(consts.StatusOK, resp)
 }
+
+// GetRefreshUnsupported .
+// @router /api/v1/refresh [GET]
+func GetRefreshUnsupported(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req model.Empty
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &model.ErrorEnvelope{Error: &model.ErrorDetail{
+			Code:    "invalid_request",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	c.JSON(consts.StatusMethodNotAllowed, &model.ErrorEnvelope{Error: &model.ErrorDetail{
+		Code:    "unsupported_method",
+		Message: "use POST /api/v1/refresh",
+	}})
+}
+
+// PostRefresh .
+// @router /api/v1/refresh [POST]
+func PostRefresh(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req model.Empty
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &model.ErrorEnvelope{Error: &model.ErrorDetail{
+			Code:    "invalid_request",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := getControlService().Refresh(ctx)
+	if err != nil {
+		envelope, status := ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusAccepted, resp)
+}

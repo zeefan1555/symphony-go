@@ -68,6 +68,11 @@ struct RuntimeState {
     7: optional string last_error
 }
 
+struct RefreshResult {
+    1: required bool accepted
+    2: required string status
+}
+
 struct IssueDetail {
     1: required string issue_id
     2: required string issue_identifier
