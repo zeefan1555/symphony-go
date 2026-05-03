@@ -154,6 +154,37 @@ func TestCodexSessionScaffoldIsNotExternalControlRoute(t *testing.T) {
 	}
 }
 
+func TestWorkflowScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
+	text := readFile(t, "../../idl/scaffold/workflow.thrift")
+
+	for _, want := range []string{
+		"service WorkflowScaffold",
+		"LoadWorkflow",
+		"RenderWorkflowPrompt",
+		"WorkflowLoadRequest",
+		"WorkflowSummary",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("workflow scaffold IDL missing %q", want)
+		}
+	}
+}
+
+func TestWorkflowScaffoldIsNotExternalControlRoute(t *testing.T) {
+	repo := "../../"
+	controlRoute := readFile(t, filepath.Join(repo, "internal/generated/hertz/control/router/control/http/http.go"))
+
+	for _, forbidden := range []string{
+		"WorkflowScaffold",
+		"RenderWorkflowPrompt",
+		"workflow",
+	} {
+		if strings.Contains(strings.ToLower(controlRoute), strings.ToLower(forbidden)) {
+			t.Fatalf("external control route exposes internal workflow scaffold %q", forbidden)
+		}
+	}
+}
+
 func TestInternalScaffoldDocumentation(t *testing.T) {
 	doc := readFile(t, "../../docs/internal-scaffold-hertz-idl.md")
 
