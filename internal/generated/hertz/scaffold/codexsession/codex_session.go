@@ -3,6 +3,7 @@
 package codexsession
 
 import (
+	"context"
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
 	"github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/model"
@@ -11,6 +12,8 @@ import (
 type CodexTurnRequest struct {
 	IssueIdentifier string `thrift:"issue_identifier,1,required" form:"issue_identifier,required" json:"issue_identifier,required" query:"issue_identifier,required"`
 	PromptName      string `thrift:"prompt_name,2,required" form:"prompt_name,required" json:"prompt_name,required" query:"prompt_name,required"`
+	WorkspacePath   string `thrift:"workspace_path,3,required" form:"workspace_path,required" json:"workspace_path,required" query:"workspace_path,required"`
+	PromptText      string `thrift:"prompt_text,4,required" form:"prompt_text,required" json:"prompt_text,required" query:"prompt_text,required"`
 }
 
 func NewCodexTurnRequest() *CodexTurnRequest {
@@ -28,9 +31,19 @@ func (p *CodexTurnRequest) GetPromptName() (v string) {
 	return p.PromptName
 }
 
+func (p *CodexTurnRequest) GetWorkspacePath() (v string) {
+	return p.WorkspacePath
+}
+
+func (p *CodexTurnRequest) GetPromptText() (v string) {
+	return p.PromptText
+}
+
 var fieldIDToName_CodexTurnRequest = map[int16]string{
 	1: "issue_identifier",
 	2: "prompt_name",
+	3: "workspace_path",
+	4: "prompt_text",
 }
 
 func (p *CodexTurnRequest) Read(iprot thrift.TProtocol) (err error) {
@@ -39,6 +52,8 @@ func (p *CodexTurnRequest) Read(iprot thrift.TProtocol) (err error) {
 	var fieldId int16
 	var issetIssueIdentifier bool = false
 	var issetPromptName bool = false
+	var issetWorkspacePath bool = false
+	var issetPromptText bool = false
 
 	if _, err = iprot.ReadStructBegin(); err != nil {
 		goto ReadStructBeginError
@@ -72,6 +87,24 @@ func (p *CodexTurnRequest) Read(iprot thrift.TProtocol) (err error) {
 			} else if err = iprot.Skip(fieldTypeId); err != nil {
 				goto SkipFieldError
 			}
+		case 3:
+			if fieldTypeId == thrift.STRING {
+				if err = p.ReadField3(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetWorkspacePath = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		case 4:
+			if fieldTypeId == thrift.STRING {
+				if err = p.ReadField4(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetPromptText = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
 		default:
 			if err = iprot.Skip(fieldTypeId); err != nil {
 				goto SkipFieldError
@@ -92,6 +125,16 @@ func (p *CodexTurnRequest) Read(iprot thrift.TProtocol) (err error) {
 
 	if !issetPromptName {
 		fieldId = 2
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetWorkspacePath {
+		fieldId = 3
+		goto RequiredFieldNotSetError
+	}
+
+	if !issetPromptText {
+		fieldId = 4
 		goto RequiredFieldNotSetError
 	}
 	return nil
@@ -134,6 +177,28 @@ func (p *CodexTurnRequest) ReadField2(iprot thrift.TProtocol) error {
 	p.PromptName = _field
 	return nil
 }
+func (p *CodexTurnRequest) ReadField3(iprot thrift.TProtocol) error {
+
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.WorkspacePath = _field
+	return nil
+}
+func (p *CodexTurnRequest) ReadField4(iprot thrift.TProtocol) error {
+
+	var _field string
+	if v, err := iprot.ReadString(); err != nil {
+		return err
+	} else {
+		_field = v
+	}
+	p.PromptText = _field
+	return nil
+}
 
 func (p *CodexTurnRequest) Write(oprot thrift.TProtocol) (err error) {
 	var fieldId int16
@@ -147,6 +212,14 @@ func (p *CodexTurnRequest) Write(oprot thrift.TProtocol) (err error) {
 		}
 		if err = p.writeField2(oprot); err != nil {
 			fieldId = 2
+			goto WriteFieldError
+		}
+		if err = p.writeField3(oprot); err != nil {
+			fieldId = 3
+			goto WriteFieldError
+		}
+		if err = p.writeField4(oprot); err != nil {
+			fieldId = 4
 			goto WriteFieldError
 		}
 	}
@@ -199,6 +272,40 @@ WriteFieldBeginError:
 	return thrift.PrependError(fmt.Sprintf("%T write field 2 begin error: ", p), err)
 WriteFieldEndError:
 	return thrift.PrependError(fmt.Sprintf("%T write field 2 end error: ", p), err)
+}
+
+func (p *CodexTurnRequest) writeField3(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("workspace_path", thrift.STRING, 3); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteString(p.WorkspacePath); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 3 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 3 end error: ", p), err)
+}
+
+func (p *CodexTurnRequest) writeField4(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("prompt_text", thrift.STRING, 4); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := oprot.WriteString(p.PromptText); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 4 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 4 end error: ", p), err)
 }
 
 func (p *CodexTurnRequest) String() string {
@@ -466,5 +573,436 @@ func (p *CodexTurnSummary) String() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("CodexTurnSummary(%+v)", *p)
+
+}
+
+type CodexSessionScaffold interface {
+	RunTurn(ctx context.Context, request *CodexTurnRequest) (r *CodexTurnSummary, err error)
+}
+
+type CodexSessionScaffoldClient struct {
+	c thrift.TClient
+}
+
+func NewCodexSessionScaffoldClientFactory(t thrift.TTransport, f thrift.TProtocolFactory) *CodexSessionScaffoldClient {
+	return &CodexSessionScaffoldClient{
+		c: thrift.NewTStandardClient(f.GetProtocol(t), f.GetProtocol(t)),
+	}
+}
+
+func NewCodexSessionScaffoldClientProtocol(t thrift.TTransport, iprot thrift.TProtocol, oprot thrift.TProtocol) *CodexSessionScaffoldClient {
+	return &CodexSessionScaffoldClient{
+		c: thrift.NewTStandardClient(iprot, oprot),
+	}
+}
+
+func NewCodexSessionScaffoldClient(c thrift.TClient) *CodexSessionScaffoldClient {
+	return &CodexSessionScaffoldClient{
+		c: c,
+	}
+}
+
+func (p *CodexSessionScaffoldClient) Client_() thrift.TClient {
+	return p.c
+}
+
+func (p *CodexSessionScaffoldClient) RunTurn(ctx context.Context, request *CodexTurnRequest) (r *CodexTurnSummary, err error) {
+	var _args CodexSessionScaffoldRunTurnArgs
+	_args.Request = request
+	var _result CodexSessionScaffoldRunTurnResult
+	if err = p.Client_().Call(ctx, "RunTurn", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+type CodexSessionScaffoldProcessor struct {
+	processorMap map[string]thrift.TProcessorFunction
+	handler      CodexSessionScaffold
+}
+
+func (p *CodexSessionScaffoldProcessor) AddToProcessorMap(key string, processor thrift.TProcessorFunction) {
+	p.processorMap[key] = processor
+}
+
+func (p *CodexSessionScaffoldProcessor) GetProcessorFunction(key string) (processor thrift.TProcessorFunction, ok bool) {
+	processor, ok = p.processorMap[key]
+	return processor, ok
+}
+
+func (p *CodexSessionScaffoldProcessor) ProcessorMap() map[string]thrift.TProcessorFunction {
+	return p.processorMap
+}
+
+func NewCodexSessionScaffoldProcessor(handler CodexSessionScaffold) *CodexSessionScaffoldProcessor {
+	self := &CodexSessionScaffoldProcessor{handler: handler, processorMap: make(map[string]thrift.TProcessorFunction)}
+	self.AddToProcessorMap("RunTurn", &codexSessionScaffoldProcessorRunTurn{handler: handler})
+	return self
+}
+func (p *CodexSessionScaffoldProcessor) Process(ctx context.Context, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	name, _, seqId, err := iprot.ReadMessageBegin()
+	if err != nil {
+		return false, err
+	}
+	if processor, ok := p.GetProcessorFunction(name); ok {
+		return processor.Process(ctx, seqId, iprot, oprot)
+	}
+	iprot.Skip(thrift.STRUCT)
+	iprot.ReadMessageEnd()
+	x := thrift.NewTApplicationException(thrift.UNKNOWN_METHOD, "Unknown function "+name)
+	oprot.WriteMessageBegin(name, thrift.EXCEPTION, seqId)
+	x.Write(oprot)
+	oprot.WriteMessageEnd()
+	oprot.Flush(ctx)
+	return false, x
+}
+
+type codexSessionScaffoldProcessorRunTurn struct {
+	handler CodexSessionScaffold
+}
+
+func (p *codexSessionScaffoldProcessorRunTurn) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := CodexSessionScaffoldRunTurnArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("RunTurn", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := CodexSessionScaffoldRunTurnResult{}
+	var retval *CodexTurnSummary
+	if retval, err2 = p.handler.RunTurn(ctx, args.Request); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RunTurn: "+err2.Error())
+		oprot.WriteMessageBegin("RunTurn", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("RunTurn", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type CodexSessionScaffoldRunTurnArgs struct {
+	Request *CodexTurnRequest `thrift:"request,1,required"`
+}
+
+func NewCodexSessionScaffoldRunTurnArgs() *CodexSessionScaffoldRunTurnArgs {
+	return &CodexSessionScaffoldRunTurnArgs{}
+}
+
+func (p *CodexSessionScaffoldRunTurnArgs) InitDefault() {
+}
+
+var CodexSessionScaffoldRunTurnArgs_Request_DEFAULT *CodexTurnRequest
+
+func (p *CodexSessionScaffoldRunTurnArgs) GetRequest() (v *CodexTurnRequest) {
+	if !p.IsSetRequest() {
+		return CodexSessionScaffoldRunTurnArgs_Request_DEFAULT
+	}
+	return p.Request
+}
+
+var fieldIDToName_CodexSessionScaffoldRunTurnArgs = map[int16]string{
+	1: "request",
+}
+
+func (p *CodexSessionScaffoldRunTurnArgs) IsSetRequest() bool {
+	return p.Request != nil
+}
+
+func (p *CodexSessionScaffoldRunTurnArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+	var issetRequest bool = false
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+				issetRequest = true
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	if !issetRequest {
+		fieldId = 1
+		goto RequiredFieldNotSetError
+	}
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_CodexSessionScaffoldRunTurnArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+RequiredFieldNotSetError:
+	return thrift.NewTProtocolExceptionWithType(thrift.INVALID_DATA, fmt.Errorf("required field %s is not set", fieldIDToName_CodexSessionScaffoldRunTurnArgs[fieldId]))
+}
+
+func (p *CodexSessionScaffoldRunTurnArgs) ReadField1(iprot thrift.TProtocol) error {
+	_field := NewCodexTurnRequest()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Request = _field
+	return nil
+}
+
+func (p *CodexSessionScaffoldRunTurnArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("RunTurn_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *CodexSessionScaffoldRunTurnArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("request", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Request.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *CodexSessionScaffoldRunTurnArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CodexSessionScaffoldRunTurnArgs(%+v)", *p)
+
+}
+
+type CodexSessionScaffoldRunTurnResult struct {
+	Success *CodexTurnSummary `thrift:"success,0,optional"`
+}
+
+func NewCodexSessionScaffoldRunTurnResult() *CodexSessionScaffoldRunTurnResult {
+	return &CodexSessionScaffoldRunTurnResult{}
+}
+
+func (p *CodexSessionScaffoldRunTurnResult) InitDefault() {
+}
+
+var CodexSessionScaffoldRunTurnResult_Success_DEFAULT *CodexTurnSummary
+
+func (p *CodexSessionScaffoldRunTurnResult) GetSuccess() (v *CodexTurnSummary) {
+	if !p.IsSetSuccess() {
+		return CodexSessionScaffoldRunTurnResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_CodexSessionScaffoldRunTurnResult = map[int16]string{
+	0: "success",
+}
+
+func (p *CodexSessionScaffoldRunTurnResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *CodexSessionScaffoldRunTurnResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_CodexSessionScaffoldRunTurnResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *CodexSessionScaffoldRunTurnResult) ReadField0(iprot thrift.TProtocol) error {
+	_field := NewCodexTurnSummary()
+	if err := _field.Read(iprot); err != nil {
+		return err
+	}
+	p.Success = _field
+	return nil
+}
+
+func (p *CodexSessionScaffoldRunTurnResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("RunTurn_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *CodexSessionScaffoldRunTurnResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *CodexSessionScaffoldRunTurnResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CodexSessionScaffoldRunTurnResult(%+v)", *p)
 
 }
