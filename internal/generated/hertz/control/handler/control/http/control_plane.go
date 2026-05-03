@@ -7,8 +7,9 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
-	httpmodel "github.com/zeefan1555/symphony-go/internal/control/hertzgen/model/control/http"
-	model "github.com/zeefan1555/symphony-go/internal/control/hertzgen/model/control/model"
+	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
+	httpmodel "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/http"
+	model "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/model"
 )
 
 // GetScaffold .
@@ -22,7 +23,7 @@ func GetScaffold(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	status, err := getControlService().GetScaffold(ctx)
+	status, err := hertzhook.CurrentService().GetScaffold(ctx)
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
@@ -43,7 +44,7 @@ func GetState(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := getControlService().GetState(ctx)
+	resp, err := hertzhook.CurrentService().GetState(ctx)
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
@@ -66,9 +67,9 @@ func GetIssue(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := getControlService().GetIssue(ctx, req.IssueIdentifier)
+	resp, err := hertzhook.CurrentService().GetIssue(ctx, req.IssueIdentifier)
 	if err != nil {
-		envelope, status := ErrorEnvelope(err)
+		envelope, status := hertzhook.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -110,9 +111,9 @@ func PostRefresh(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := getControlService().Refresh(ctx)
+	resp, err := hertzhook.CurrentService().Refresh(ctx)
 	if err != nil {
-		envelope, status := ErrorEnvelope(err)
+		envelope, status := hertzhook.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}

@@ -4,7 +4,7 @@ package main
 
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
-	router "github.com/zeefan1555/symphony-go/internal/control/hertzgen/router"
+	router "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/router"
 )
 
 // register registers all routers.

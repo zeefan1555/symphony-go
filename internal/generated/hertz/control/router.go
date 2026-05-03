@@ -4,7 +4,7 @@ package main
 
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
-	handler "github.com/zeefan1555/symphony-go/internal/control/hertzgen/handler"
+	handler "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/handler"
 )
 
 // customizeRegister registers customize routers.
