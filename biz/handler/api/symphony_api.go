@@ -10,6 +10,7 @@ import (
 	common "github.com/zeefan1555/symphony-go/biz/model/common"
 	control "github.com/zeefan1555/symphony-go/biz/model/control"
 	orchestrator "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
+	workspace "github.com/zeefan1555/symphony-go/biz/model/workspace"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
 )
 
@@ -116,6 +117,102 @@ func ProjectIssueRun(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp, err := hertzhook.CurrentService().ProjectIssueRun(ctx, req.IssueIdentifier)
+	if err != nil {
+		envelope, status := hertzhook.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// ResolveWorkspacePath .
+// @router /api/v1/workspace/resolve [POST]
+func ResolveWorkspacePath(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req workspace.ResolveWorkspacePathReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_issue_identifier",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzhook.CurrentService().ResolveWorkspacePath(ctx, req.IssueIdentifier)
+	if err != nil {
+		envelope, status := hertzhook.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// ValidateWorkspacePath .
+// @router /api/v1/workspace/validate [POST]
+func ValidateWorkspacePath(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req workspace.ValidateWorkspacePathReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_workspace_path",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzhook.CurrentService().ValidateWorkspacePath(ctx, req.WorkspacePath)
+	if err != nil {
+		envelope, status := hertzhook.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// PrepareWorkspace .
+// @router /api/v1/workspace/prepare [POST]
+func PrepareWorkspace(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req workspace.PrepareWorkspaceReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_issue_identifier",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzhook.CurrentService().PrepareWorkspace(ctx, req.IssueIdentifier)
+	if err != nil {
+		envelope, status := hertzhook.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// CleanupWorkspace .
+// @router /api/v1/workspace/cleanup [POST]
+func CleanupWorkspace(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req workspace.CleanupWorkspaceReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_workspace_path",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzhook.CurrentService().CleanupWorkspace(ctx, req.WorkspacePath)
 	if err != nil {
 		envelope, status := hertzhook.ErrorEnvelope(err)
 		c.JSON(status, envelope)
