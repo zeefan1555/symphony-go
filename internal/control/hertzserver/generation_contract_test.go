@@ -29,7 +29,9 @@ func TestRepositoryDocumentsHertzGenerationCommand(t *testing.T) {
 	for _, want := range []string{
 		"hz new",
 		"idl/control/http.thrift",
-		"internal/generated/hertz/control",
+		"biz/handler",
+		"biz/model",
+		"biz/router",
 	} {
 		if !strings.Contains(scriptText, want) {
 			t.Fatalf("hertz generation script missing %q", want)
@@ -47,7 +49,9 @@ func TestMaintainerWorkflowDocumentsIDLBoundariesAndGeneration(t *testing.T) {
 	for _, want := range []string{
 		"`idl/control/common.thrift`",
 		"`idl/control/http.thrift`",
-		"`internal/generated/hertz/control/`",
+		"`biz/handler`",
+		"`biz/model`",
+		"`biz/router`",
 		"`internal/control/hertzserver/`",
 		"`internal/service/control/`",
 		"`make hertz-generate`",
@@ -100,7 +104,7 @@ func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
 func TestHertzScaffoldDoesNotOwnOrchestratorState(t *testing.T) {
 	forbiddenImport := "internal/" + "orchestrator"
 	for _, root := range []string{
-		"../../../internal/generated/hertz/control",
+		"../../../biz",
 		"../../../internal/control/hertzserver",
 	} {
 		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
@@ -127,7 +131,7 @@ func TestHertzScaffoldDoesNotOwnOrchestratorState(t *testing.T) {
 }
 
 func TestProductionCodeDoesNotImportOldHertzgenPath(t *testing.T) {
-	oldGeneratedPath := "internal/control/" + "hertzgen"
+	oldGeneratedPath := "internal/generated/hertz/" + "control"
 	for _, root := range []string{
 		"../../../cmd",
 		"../../../internal",

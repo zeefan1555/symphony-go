@@ -7,9 +7,9 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	httpmodel "github.com/zeefan1555/symphony-go/biz/model/control/http"
+	model "github.com/zeefan1555/symphony-go/biz/model/control/model"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
-	httpmodel "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/http"
-	model "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/model"
 )
 
 // GetScaffold .

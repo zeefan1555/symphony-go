@@ -4,7 +4,7 @@ package http
 
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
-	http "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/handler/control/http"
+	http "github.com/zeefan1555/symphony-go/biz/handler/control/http"
 )
 
 /*
