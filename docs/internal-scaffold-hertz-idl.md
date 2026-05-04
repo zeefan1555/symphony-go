@@ -24,7 +24,7 @@ make hertz-scaffold-generate
 
 `make hertz-scaffold-generate` 调用 `scripts/hertz_scaffold_generate.sh`，脚本使用 `hz model` 读取 `idl/scaffold/orchestrator.thrift`、`idl/scaffold/workspace.thrift`、`idl/scaffold/codex_session.thrift` 和 `idl/scaffold/workflow.thrift`，并把生成结果写入 `internal/generated/hertz/scaffold/`。
 
-生成结束后脚本会运行 `scripts/check_generated_hertz_boundary.sh`。该检查确认 `internal/generated/hertz/` 下的 Go 文件都带有生成代码头，并且不导入 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow` 或 `internal/linear` 等核心业务包。
+生成结束后脚本会运行 `scripts/check_generated_hertz_boundary.sh`。该检查确认 `internal/generated/hertz/` 与标准 `biz` 生成外壳下的 Go 文件都带有生成代码头；其中生成 model/router 不能导入 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/service` 或 `internal/issuetracker` 等核心/adapter 包。脚本同时检查 `internal/service/` 不导入 Hertz `app.RequestContext`，也不直接依赖 issue tracker adapter。
 
 ## 边界说明
 
