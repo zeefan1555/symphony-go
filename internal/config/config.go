@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/viper"
 	"github.com/zeefan1555/symphony-go/internal/types"
 )
 
@@ -21,7 +22,16 @@ const (
 	ErrInvalidPollingInterval    = "invalid_polling_interval"
 	ErrInvalidServerPort         = "invalid_server_port"
 	ErrInvalidReviewPolicy       = "invalid_review_policy"
+	WarnWorkflowMergeTarget      = "workflow_merge_target_deprecated"
 )
+
+type AppConfig struct {
+	Git GitConfig `mapstructure:"git"`
+}
+
+type GitConfig struct {
+	MergeTarget string `mapstructure:"merge_target"`
+}
 
 type Error struct {
 	Code    string
@@ -42,6 +52,11 @@ func Code(err error) string {
 
 func Resolve(raw types.Config, workflowPath string) (types.Config, error) {
 	cfg := raw
+	appCfg, appLoaded, err := LoadAppConfig(workflowPath)
+	if err != nil {
+		return types.Config{}, err
+	}
+	applyAppConfig(&cfg, appCfg, appLoaded)
 	applyDefaults(&cfg)
 	resolveEnv(&cfg)
 	normalizeStates(&cfg)
@@ -53,6 +68,52 @@ func Resolve(raw types.Config, workflowPath string) (types.Config, error) {
 		return types.Config{}, err
 	}
 	return cfg, nil
+}
+
+func LoadAppConfig(workflowPath string) (AppConfig, bool, error) {
+	configPath := filepath.Join(workflowDir(workflowPath), "conf", "config.yaml")
+	if _, err := os.Stat(configPath); err != nil {
+		if os.IsNotExist(err) {
+			return AppConfig{}, false, nil
+		}
+		return AppConfig{}, false, err
+	}
+	reader := viper.New()
+	reader.SetConfigFile(configPath)
+	reader.SetConfigType("yaml")
+	if err := reader.ReadInConfig(); err != nil {
+		return AppConfig{}, false, fmt.Errorf("read app config: %w", err)
+	}
+	var cfg AppConfig
+	if err := reader.Unmarshal(&cfg); err != nil {
+		return AppConfig{}, false, fmt.Errorf("parse app config: %w", err)
+	}
+	return cfg, true, nil
+}
+
+func workflowDir(workflowPath string) string {
+	if workflowPath == "" {
+		return "."
+	}
+	return filepath.Dir(workflowPath)
+}
+
+func applyAppConfig(cfg *types.Config, appCfg AppConfig, appLoaded bool) {
+	if !appLoaded {
+		return
+	}
+	target := strings.TrimSpace(appCfg.Git.MergeTarget)
+	if target == "" {
+		return
+	}
+	workflowTarget := strings.TrimSpace(cfg.Merge.Target)
+	if workflowTarget != "" && workflowTarget != target {
+		cfg.Warnings = append(cfg.Warnings, types.ConfigWarning{
+			Code:    WarnWorkflowMergeTarget,
+			Message: fmt.Sprintf("workflow merge.target %q is deprecated and ignored because conf/config.yaml git.merge_target is set", workflowTarget),
+		})
+	}
+	cfg.Merge.Target = target
 }
 
 func applyDefaults(cfg *types.Config) {
@@ -112,7 +173,6 @@ func resolveEnv(cfg *types.Config) {
 		cfg.Tracker.APIKey = os.Getenv("LINEAR_API_KEY")
 	}
 	cfg.Workspace.Root = resolveDollar(cfg.Workspace.Root)
-	cfg.Merge.Target = resolveDollar(cfg.Merge.Target)
 }
 
 func resolveDollar(value string) string {

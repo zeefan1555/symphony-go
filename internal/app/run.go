@@ -119,6 +119,16 @@ func NewRuntime(opts Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	for _, warning := range loaded.Config.Warnings {
+		_ = log.Write(logging.Event{
+			Level:   "warn",
+			Event:   "config_warning",
+			Message: warning.Message,
+			Fields: map[string]any{
+				"code": warning.Code,
+			},
+		})
+	}
 
 	manager := workspace.New(loaded.Config.Workspace.Root, loaded.Config.Hooks)
 	runner := codex.New(loaded.Config.Codex)

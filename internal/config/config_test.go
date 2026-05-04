@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/zeefan1555/symphony-go/internal/types"
@@ -93,6 +94,68 @@ func TestResolvePreservesExplicitMergeTarget(t *testing.T) {
 	}
 	if resolved.Merge.Target != "release" {
 		t.Fatalf("merge target = %q, want release", resolved.Merge.Target)
+	}
+}
+
+func TestResolveUsesAppConfigMergeTarget(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	dir := t.TempDir()
+	writeAppConfig(t, dir, "release")
+
+	resolved, err := Resolve(types.Config{
+		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+	}, filepath.Join(dir, "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Merge.Target != "release" {
+		t.Fatalf("merge target = %q, want release", resolved.Merge.Target)
+	}
+	if len(resolved.Warnings) != 0 {
+		t.Fatalf("warnings = %#v, want none", resolved.Warnings)
+	}
+}
+
+func TestResolveAppConfigMergeTargetOverridesWorkflowWithWarning(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	dir := t.TempDir()
+	writeAppConfig(t, dir, "release")
+
+	resolved, err := Resolve(types.Config{
+		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Merge:   types.MergeConfig{Target: "main"},
+	}, filepath.Join(dir, "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Merge.Target != "release" {
+		t.Fatalf("merge target = %q, want release", resolved.Merge.Target)
+	}
+	if len(resolved.Warnings) != 1 {
+		t.Fatalf("warnings = %#v, want one warning", resolved.Warnings)
+	}
+	if resolved.Warnings[0].Code != WarnWorkflowMergeTarget {
+		t.Fatalf("warning code = %q", resolved.Warnings[0].Code)
+	}
+	if !strings.Contains(resolved.Warnings[0].Message, "workflow merge.target") {
+		t.Fatalf("warning message = %q", resolved.Warnings[0].Message)
+	}
+}
+
+func TestResolveDoesNotUseEnvironmentAsAppConfigOverride(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	t.Setenv("SYMPHONY_GO_GIT_MERGE_TARGET", "env-release")
+	dir := t.TempDir()
+	writeAppConfig(t, dir, "config-release")
+
+	resolved, err := Resolve(types.Config{
+		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+	}, filepath.Join(dir, "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Merge.Target != "config-release" {
+		t.Fatalf("merge target = %q, want config-release", resolved.Merge.Target)
 	}
 }
 
@@ -249,5 +312,17 @@ func TestResolveNormalizesPerStateConcurrency(t *testing.T) {
 	}
 	if _, ok := resolved.Agent.MaxConcurrentAgentsByState["broken"]; ok {
 		t.Fatalf("invalid non-positive entries must be ignored: %#v", resolved.Agent.MaxConcurrentAgentsByState)
+	}
+}
+
+func writeAppConfig(t *testing.T, dir string, mergeTarget string) {
+	t.Helper()
+	confDir := filepath.Join(dir, "conf")
+	if err := os.MkdirAll(confDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "git:\n  merge_target: " + mergeTarget + "\n"
+	if err := os.WriteFile(filepath.Join(confDir, "config.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
