@@ -168,7 +168,17 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 
 func reviewFinalPasses(text string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(text))
-	return strings.HasPrefix(normalized, "review: pass")
+	for _, prefix := range []string{
+		"review: pass",
+		"conclusion: pass",
+		"结论: pass",
+		"结论：pass",
+	} {
+		if strings.HasPrefix(normalized, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func completedAgentMessageText(event codex.Event) string {

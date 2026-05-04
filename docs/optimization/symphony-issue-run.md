@@ -9,9 +9,10 @@
 - Evidence:
   - `.symphony/logs/ZEE-74-20260504-190717.out` 记录 reviewer 子进程已能调用 `linear 2.0.0`、`linear auth whoami` 和 `linear issue view ZEE-74 --json`，说明 Linear CLI 工具链已通。
   - 同一日志 `19:12:46` 记录 `codex_final` 输出 `Review: PASS`，但 issue 仍保持 `AI Review`，随后 listener 又启动新的 reviewer session。
+  - 修复后重跑 `.symphony/logs/ZEE-74-20260504-191829.out`，`19:24:02` reviewer 输出中文格式 `结论: PASS`，再次证明兜底判断必须兼容中英文结构化 PASS。
   - 问题不再是 Linear 工具不可用，而是 reviewer 已给出通过结论时，agent 未可靠执行状态推进，orchestrator 也没有兜底。
 - Optimization:
-  - 代码层：orchestrator 在 reviewer phase 捕获最终 `agentMessage`；当最终消息以 `Review: PASS` 开头且 Linear 状态仍为 `AI Review` 时，自动执行 `AI Review -> Merging` 并在同一 session 追加 merge continuation prompt。
+  - 代码层：orchestrator 在 reviewer phase 捕获最终 `agentMessage`；当最终消息以 `Review: PASS`、`Conclusion: PASS` 或 `结论: PASS` 开头且 Linear 状态仍为 `AI Review` 时，自动执行 `AI Review -> Merging` 并在同一 session 追加 merge continuation prompt。
   - 测试层：新增回归用例覆盖 reviewer 只输出 `Review: PASS`、没有自行移动状态时，framework 仍继续进入 `Merging` 并执行后续 turn。
 - Files:
   - `internal/orchestrator/agent_session.go`

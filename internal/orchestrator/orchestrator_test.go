@@ -2706,7 +2706,7 @@ func (r *reviewPassThenMergeRunner) RunSession(ctx context.Context, request code
 					"params": map[string]any{
 						"item": map[string]any{
 							"type": "agentMessage",
-							"text": "Review: PASS\n\nFindings:\n- 无阻塞发现。",
+							"text": "结论: PASS\n\nFindings:\n- 无阻塞发现。",
 						},
 					},
 				},
