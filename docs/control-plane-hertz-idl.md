@@ -14,7 +14,7 @@
 
 `internal/control/hertzserver/` 是手写 HTTP adapter。它把 Hertz handler 边界接到仓库自己的 control service，并负责 HTTP 状态码、error envelope 和测试。
 
-`internal/control/service.go` 是手写 ControlService 边界。控制面业务语义先进入这里，再通过 snapshot provider 或 refresh trigger 等小接口连接 orchestrator/listener 能力。
+`internal/service/control/` 是手写 ControlService 业务服务边界。控制面业务语义先进入这里，再通过 snapshot provider 或 refresh trigger 等小接口连接 orchestrator/listener 能力。
 
 ## 生成命令
 
@@ -30,7 +30,7 @@ make hertz-generate
 
 ## Review 重点
 
-控制面变更应优先 review IDL 契约和手写 adapter：先确认 `idl/control/common.thrift` 与 `idl/control/http.thrift` 的输入、输出、错误模型和 route annotations 是否符合产品语义，再确认 `internal/control/hertzhook/`、`internal/control/hertzserver/` 与 `internal/control/service.go` 是否只承担 hook、adapter 和 service 边界职责。
+控制面变更应优先 review IDL 契约和手写 adapter，并同步检查业务服务边界：先确认 `idl/control/common.thrift` 与 `idl/control/http.thrift` 的输入、输出、错误模型和 route annotations 是否符合产品语义，再确认 `internal/control/hertzhook/`、`internal/control/hertzserver/` 是否只承担 hook/adapter 职责，最后确认 `internal/service/control/` 保持协议无关的业务服务边界。
 
 `internal/generated/hertz/control/` 的大体积 diff 通常来自 `hz` 生成。review 时只需要确认生成命令来自 `make hertz-generate`，且生成结果和 IDL 变更一致；不要把生成代码噪音当成主要讨论对象。
 
