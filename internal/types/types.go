@@ -41,6 +41,12 @@ type Config struct {
 	Merge     MergeConfig     `yaml:"merge"`
 	Agent     AgentConfig     `yaml:"agent"`
 	Codex     CodexConfig     `yaml:"codex"`
+	Warnings  []ConfigWarning `yaml:"-"`
+}
+
+type ConfigWarning struct {
+	Code    string
+	Message string
 }
 
 type ServerConfig struct {
