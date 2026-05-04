@@ -136,6 +136,50 @@ func TestServiceRefreshRequiresTrigger(t *testing.T) {
 	}
 }
 
+func TestServiceProjectsIssueRunState(t *testing.T) {
+	provider := fakeSnapshotProvider{snapshot: observability.Snapshot{
+		Running: []observability.RunningEntry{{
+			IssueIdentifier: "ZEE-56",
+		}},
+		Retrying: []observability.RetryEntry{{
+			IssueIdentifier: "ZEE-57",
+		}},
+	}}
+	service := control.NewService(provider)
+
+	running, err := service.ProjectIssueRun(context.Background(), "ZEE-56")
+	if err != nil {
+		t.Fatalf("ProjectIssueRun running returned error: %v", err)
+	}
+	if running.RuntimeState != control.IssueStatusRunning || running.IssueIdentifier != "ZEE-56" {
+		t.Fatalf("running projection = %#v, want running ZEE-56", running)
+	}
+	if running.Boundary.Name != "orchestrator.issue_run_projection" {
+		t.Fatalf("boundary = %#v, want orchestrator issue-run boundary", running.Boundary)
+	}
+
+	retrying, err := service.ProjectIssueRun(context.Background(), "ZEE-57")
+	if err != nil {
+		t.Fatalf("ProjectIssueRun retrying returned error: %v", err)
+	}
+	if retrying.RuntimeState != control.IssueStatusRetrying {
+		t.Fatalf("retrying projection = %#v, want retrying", retrying)
+	}
+
+	missing, err := service.ProjectIssueRun(context.Background(), "ZEE-404")
+	if err != nil {
+		t.Fatalf("ProjectIssueRun missing returned error: %v", err)
+	}
+	if missing.RuntimeState != control.IssueStatusNotRunning {
+		t.Fatalf("missing projection = %#v, want not_running", missing)
+	}
+
+	_, err = service.ProjectIssueRun(context.Background(), "")
+	if !errors.Is(err, control.ErrInvalidIssueIdentifier) {
+		t.Fatalf("ProjectIssueRun empty error = %v, want ErrInvalidIssueIdentifier", err)
+	}
+}
+
 func TestServiceReadsRuntimeStateFromSnapshotProvider(t *testing.T) {
 	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
 	startedAt := generatedAt.Add(-2 * time.Minute)

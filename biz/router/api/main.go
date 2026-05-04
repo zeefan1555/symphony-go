@@ -28,6 +28,10 @@ func Register(r *server.Hertz) {
 				_control.POST("/get-state", append(_getstateMw(), api.GetState)...)
 				_control.POST("/refresh", append(_refreshMw(), api.Refresh)...)
 			}
+			{
+				_orchestrator := _v1.Group("/orchestrator", _orchestratorMw()...)
+				_orchestrator.POST("/project-issue-run", append(_projectissuerunMw(), api.ProjectIssueRun)...)
+			}
 		}
 	}
 }

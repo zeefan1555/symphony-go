@@ -17,8 +17,9 @@ var (
 )
 
 const (
-	IssueStatusRunning  = "running"
-	IssueStatusRetrying = "retrying"
+	IssueStatusRunning    = "running"
+	IssueStatusRetrying   = "retrying"
+	IssueStatusNotRunning = "not_running"
 
 	RefreshStatusQueued         = "queued"
 	RefreshStatusAlreadyPending = "already_pending"
@@ -36,6 +37,7 @@ type ControlService interface {
 	GetScaffold(context.Context) (ScaffoldStatus, error)
 	RuntimeState(context.Context) (RuntimeState, error)
 	IssueDetail(context.Context, string) (IssueDetail, error)
+	ProjectIssueRun(context.Context, string) (IssueRunProjection, error)
 	Refresh(context.Context) (RefreshResult, error)
 }
 
@@ -78,6 +80,19 @@ func (s *Service) IssueDetail(ctx context.Context, issueIdentifier string) (Issu
 		return IssueDetail{}, ErrSnapshotProviderRequired
 	}
 	return FindIssueDetail(ProjectSnapshot(s.provider.Snapshot()), issueIdentifier)
+}
+
+func (s *Service) ProjectIssueRun(ctx context.Context, issueIdentifier string) (IssueRunProjection, error) {
+	if err := ctx.Err(); err != nil {
+		return IssueRunProjection{}, err
+	}
+	if strings.TrimSpace(issueIdentifier) == "" {
+		return IssueRunProjection{}, ErrInvalidIssueIdentifier
+	}
+	if s == nil || s.provider == nil {
+		return IssueRunProjection{}, ErrSnapshotProviderRequired
+	}
+	return ProjectIssueRunState(ProjectSnapshot(s.provider.Snapshot()), issueIdentifier), nil
 }
 
 func (s *Service) Refresh(ctx context.Context) (RefreshResult, error) {
@@ -191,8 +206,47 @@ func FindIssueDetail(state RuntimeState, issueIdentifier string) (IssueDetail, e
 	return IssueDetail{}, ErrIssueNotFound
 }
 
+func ProjectIssueRunState(state RuntimeState, issueIdentifier string) IssueRunProjection {
+	runtimeState := IssueStatusNotRunning
+	for _, entry := range state.Running {
+		if entry.IssueIdentifier == issueIdentifier {
+			runtimeState = IssueStatusRunning
+			break
+		}
+	}
+	if runtimeState == IssueStatusNotRunning {
+		for _, entry := range state.Retrying {
+			if entry.IssueIdentifier == issueIdentifier {
+				runtimeState = IssueStatusRetrying
+				break
+			}
+		}
+	}
+	return IssueRunProjection{
+		Boundary: CapabilityBoundary{
+			Name:               "orchestrator.issue_run_projection",
+			Purpose:            "Project issue-run control state from the handwritten orchestrator runtime.",
+			HandwrittenAdapter: "internal/orchestrator/scaffold",
+		},
+		IssueIdentifier: issueIdentifier,
+		RuntimeState:    runtimeState,
+	}
+}
+
 type ScaffoldStatus struct {
 	Status string `json:"status"`
+}
+
+type CapabilityBoundary struct {
+	Name               string `json:"name"`
+	Purpose            string `json:"purpose"`
+	HandwrittenAdapter string `json:"handwritten_adapter"`
+}
+
+type IssueRunProjection struct {
+	Boundary        CapabilityBoundary `json:"boundary"`
+	IssueIdentifier string             `json:"issue_identifier"`
+	RuntimeState    string             `json:"runtime_state"`
 }
 
 type RuntimeState struct {
