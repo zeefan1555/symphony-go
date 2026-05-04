@@ -80,8 +80,8 @@ cat > "$tmp_issue" <<'EOF'
 - 让 Symphony Go listener 按 `WORKFLOW.md` 全自动跑完：
   `Todo -> In Progress -> AI Review -> Merging -> Done`。
 - Linear workpad、状态说明、commit message 和可见说明默认使用中文。
-- 不创建 PR；`Merging` 阶段把本地 issue worktree 分支合入本地 `main`，
-  验证后 `git push origin main`。
+- `Merging` 阶段使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow；
+  不在当前 sandbox 内直接把 issue worktree 分支合入本地 `main`。
 EOF
 
 linear issue create \
@@ -183,8 +183,8 @@ Expected healthy evidence:
 - Workpad receives `initial`, `handoff`, `ai_review`, and merge/terminal evidence.
 - AI Review passes or sends the issue to `Rework` with reasons.
 - Rework produces a new implementation commit and returns to `AI Review`.
-- `Merging` merges the local issue branch into local `main`, validates, and
-  pushes `origin/main`.
+- `Merging` uses `.codex/skills/pr/SKILL.md` to create/update a GitHub PR,
+  wait for checks, squash-merge it, and sync root `main`.
 - Issue reaches `Done`.
 
 If the issue stalls, diagnose before restarting:
@@ -201,14 +201,13 @@ Treat repeated stalls as framework signal. Do not keep restarting blindly.
 
 ## Merging Checks
 
-`Merging` must not create a PR. It merges the local issue branch into local
-`main`, validates, pushes `origin/main`, and moves the issue to `Done`.
+`Merging` must use the PR merge flow documented in `.codex/skills/pr/SKILL.md`.
+The issue worktree branch is pushed, a GitHub PR is created or updated, checks
+are handled there, and the PR is squash-merged before root `main` is synced.
 
-Do not pull the remote issue branch. Issue branches are local worktree branches
-by default, so `git pull origin <issue-branch>` is expected to fail when the
-branch was never pushed. Do not pre-pull remote `main` on the normal path; only
-handle remote synchronization if `git push origin main` fails because the remote
-advanced.
+Do not directly run `git merge --no-ff <issue-branch>` in the root checkout for
+the normal path. If the PR flow fails, inspect the exact PR/script/GitHub
+blocker and record it instead of falling back to local main merge.
 
 After terminal state, verify:
 
@@ -219,13 +218,6 @@ git rev-parse --short origin/main
 git worktree list --porcelain | rg -n "<ISSUE>|\\.worktrees/<ISSUE>" || true
 linear issue view <ISSUE> --json
 ```
-
-If `git merge` reports `warning: unable to unlink '<path>': Operation not
-permitted`, remove a residual untracked file only when all are true:
-
-- `git status --short` shows the same path as `??`.
-- `git show --name-status --oneline HEAD` shows that path as deleted.
-- The path is explicitly in the issue scope.
 
 ## Stop The Issue Listener
 
@@ -251,7 +243,7 @@ Classify findings:
 
 - Skill gaps: instructions caused manual waiting, duplicate listeners, wrong
   team/project/state, missing terminal checks, or unclear handoff.
-- Workflow gaps: prompt caused unnecessary remote pulls, PR work, wrong state
+- Workflow gaps: prompt caused unnecessary remote pulls, wrong PR flow usage, wrong state
   routing, weak AI Review/Rework loop, or ambiguous repo-root/worktree behavior.
 - Code gaps: behavior should be first-class in the orchestrator, workspace
   manager, Linear adapter, runner, logs, or TUI instead of relying on humans.
@@ -334,7 +326,7 @@ Report back with:
 - Final issue state.
 - Worktree path and cleanup result.
 - AI Review result and any Rework loop.
-- Merge commit and push evidence if `Merging` ran.
+- PR URL, squash merge/root sync evidence if `Merging` ran.
 - Root checkout status after merge.
 - Optimization notes recorded, files changed, validation commands, commit, and
   push result.

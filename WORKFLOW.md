@@ -118,6 +118,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 - `linear`：操作 Linear。
 - `linear-cli`：当 `linear_graphql` 不可用或 CLI 更适合时，用 `linear` CLI 操作 Linear；不要调用 Linear MCP/app 工具。
+- `pr`：当 issue 进入 `Merging` 时，使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow 创建/更新 PR、等待检查、squash merge，并同步 root `main`。
 
 ## Review 路由原则
 
@@ -125,14 +126,14 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 当前默认使用 `mode: auto`，描述目标路径 `In Progress -> AI Review -> Merging -> Done`；orchestrator 不根据 commit 自动推进业务状态。
 - implementer agent 可以多 turn、多 commit；完成 acceptance、validation、workpad 和最终 commit 后，由 agent 移动到 `AI Review`。
 - `AI Review` 由真实 reviewer agent 执行。
-- reviewer 通过后移动到 `Merging`，并在同一个 reviewer session 中继续执行 merge 协议。
+- reviewer 通过后移动到 `Merging`；`Merging` 阶段使用 `pr` skill 完成 PR merge flow。
 - reviewer 不通过时，按 `on_ai_fail: rework` 移动到 `Rework`，下一轮必须基于 review 发现重新计划、修复、验证和提交。
 - `Human Review` 只作为真实外部 blocker 的人工 hold 状态；默认流程不得依赖人工把 issue 从 `Human Review` 推到 `Merging`。
 
 ## 阶段路由
 
 - 本 Workflow 正文是默认注入给 agent 的总 SOP；阶段级说明优先写在这里，避免和额外配置漂移。
-- `Merging` 阶段不走 PR land；直接把当前 issue worktree 分支合入 repo root 的 `main`，验证后 `git push origin main`。
+- `Merging` 阶段走 PR merge flow；不要在当前 sandbox 内直接把 issue worktree 分支合入 repo root 的 `main`。
 - 新增阶段时，先在 Linear 创建同名状态，再在本 Workflow 的状态映射和对应步骤里写清楚该阶段的执行协议。
 
 ## 状态映射
@@ -140,9 +141,9 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - `Backlog`：不属于本 workflow 范围；不要修改。
 - `Todo`：排队状态；开始主动工作前立即转到 `In Progress`。
 - `In Progress`：正在实现。
-- `AI Review`：由真实 reviewer agent 审查；通过后进入 `Merging` 并同 session 继续 merge，失败时进入 `Rework`。
+- `AI Review`：由真实 reviewer agent 审查；通过后进入 `Merging`，失败时进入 `Rework`。
 - `Human Review`：仅用于真实外部 blocker 的人工 hold；不是默认 review 终点。
-- `Merging`：AI Review 已通过；把 issue worktree 分支合入 repo root 的 `main`，验证后 push `main`。不要创建 PR。
+- `Merging`：AI Review 已通过；在 issue worktree 中使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow 创建/更新 PR、等待检查、squash merge，并同步 root `main`。
 - `Rework`：AI Review 要求修改；需要按 review 发现重新计划、实现、验证和提交。
 - `Done`：终态；无需继续操作。
 
@@ -154,9 +155,9 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - `Backlog`：不要修改 issue 内容或状态，停止并等待人类移动到 `Todo`。
    - `Todo`：立即移动到 `In Progress`，然后确保 bootstrap workpad comment 存在，不存在则创建，随后进入执行流程。
    - `In Progress`：从当前 scratchpad comment 继续执行。
-   - `AI Review`：启动真实 reviewer agent 审查；通过后进入 `Merging` 并同 session 继续 merge，失败时进入 `Rework`。
+   - `AI Review`：启动真实 reviewer agent 审查；通过后进入 `Merging`，失败时进入 `Rework`。
    - `Human Review`：只等待真实外部 blocker 的人工解锁；不要自行改代码或合并。
-   - `Merging`：进入后执行本地 main merge + push 流程；该状态要求 issue worktree 分支已有本地提交。
+   - `Merging`：进入后执行 PR merge flow；该状态要求 issue worktree 分支已有本地提交。
    - `Rework`：基于 AI Review 发现进入 rework 流程。
    - `Done`：什么都不做并退出。
 4. 检查当前 issue worktree 分支、`git status --short` 和 `HEAD`。
@@ -194,37 +195,32 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 8. 实现前捕获具体复现信号，并记录到 workpad 的 `Notes`：可以是命令输出、截图或确定性的 UI 行为。
 9. 代码修改前记录当前 issue worktree 的 branch、`HEAD` short SHA 和 `git status --short`。
    - 不要尝试 `git pull origin <issue-branch>`；issue 分支默认只存在本地 worktree。
-   - 不要为了本地个人测试流主动 pull 远端 main；本 workflow 以当前本地 main 为合入目标。
+   - 不要为了本地个人测试流主动 pull 远端 main；PR merge flow 会在 `Merging` 阶段按 `pr` skill 同步 root `main`。
 10. compact context，然后进入执行。
 
-## Main merge 协议（Merging 阶段必须执行）
+## PR merge 协议（Merging 阶段必须执行）
 
-当 ticket 进入 `Merging` 时，不创建 PR，直接把 issue worktree 分支合入 repo root 的 `main`：
+当 ticket 进入 `Merging` 时，不在当前 turn 里直接写 repo root `main`。必须从 issue worktree 使用 `pr` skill：
 
-1. 在 issue worktree 中确认分支名、`HEAD` short SHA 和 `git status --short`。
-2. 确认 issue worktree 已有本次任务提交；如果没有提交，停止并在 workpad 记录 blocker。
-3. 回到 repo root，确认当前 checkout 是 `main`，且 `git status --short` 干净。
-   - 如果 root checkout 不在 `main`，先切到 `main`。
-   - 如果 root checkout 有无关脏改动，停止并记录 blocker；不要覆盖或 stash 不属于本 issue 的改动。
-4. 不要在此阶段 pull 远端分支；本流程是把本地 issue worktree 分支合入本地 `main` 后再 push。
-5. 执行 `git merge --no-ff <issue-worktree-branch>`。
-6. 如果发生冲突，只解决当前 issue 必需的冲突；解决后重跑验证并记录冲突文件。
-7. 在 repo root 运行当前 scope 要求的验证。
-8. 验证通过后执行 `git push origin main`。
-9. 如果 push 因远端 main 更新而失败，再按最小范围处理远端同步问题；不要在正常路径预先 pull。
-10. 更新 workpad，记录：
+1. 打开并遵守 `.codex/skills/pr/SKILL.md`。
+2. 在 issue worktree 中确认分支名、`HEAD` short SHA 和 `git status --short`。
+3. 确认 issue worktree 已有本次任务提交；如果没有提交，停止并在 workpad 记录 blocker。
+4. 准备中文 PR title/body，body 至少包含 `## 摘要`、`## 验证` 和 `Linear: <ISSUE>`。
+5. 从 issue worktree 执行 `.codex/skills/pr/scripts/pr_merge_flow.sh`；脚本负责 push branch、创建或更新 PR、等待 checks、squash merge，并在 merge 后同步 root `main`。
+6. 如果脚本报告缺少 `gh` auth、GitHub 权限、branch protection、conflict 或 checks failure，按 `pr` skill 的 Failure Handling 处理；只有本 session 无法解决时才进入 blocked-access escape hatch。
+7. 更新 workpad，记录：
    - issue branch
    - issue branch HEAD
-   - main merge commit short SHA
-   - validation 命令和结果
-   - push 结果
-11. push 成功后移动 issue 到 `Done`。
+   - PR URL
+   - validation/checks 结果
+   - squash merge 或 root pull 结果
+8. PR merge flow 成功后移动 issue 到 `Done`。
 
 ## Blocked-access escape hatch（必须遵守）
 
 仅当缺少必要工具、auth 或权限，且本 session 无法解决时使用。
 
-- Git push 默认不是 valid blocker。必须先尝试最小 fallback，例如 `git fetch` / auth 状态检查 / 重新 push，然后继续 main merge flow。
+- GitHub push/PR 默认不是 valid blocker。必须先尝试 `pr` skill 中的最小 fallback，例如 `git fetch`、auth 状态检查、重新 push 或检查 PR mergeability，然后继续 PR merge flow。
 - Git access/auth 问题不能直接移动到 `Human Review`，除非所有 fallback 都已尝试并记录在 workpad。
 - 如果缺少必要工具或 auth，移动 ticket 到 `Human Review`，并在 workpad 写入短 blocker brief，包含：
   - 缺少什么
@@ -258,7 +254,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 8. 更新 workpad comment 的最终 checklist 和 validation notes。
     - 勾选已完成的 plan、acceptance、validation 项。
     - 在同一个 workpad comment 中加入最终 handoff notes，包括 commit 和 validation summary。
-    - 明确写出后续 `AI Review` 需要 reviewer agent 审查，reviewer 通过后会在同 session 执行 merge 协议。
+    - 明确写出后续 `AI Review` 需要 reviewer agent 审查；reviewer 通过后会进入 `Merging`，并由 `pr` skill 执行 PR merge flow。
     - 如果执行中有任何不清楚的地方，在底部添加简短 `### Confusions` section。
     - 不要额外发布 completion summary comment。
 9. 状态切换前重新打开并刷新 workpad，让 `Plan`、`Acceptance Criteria`、`Validation` 与已完成工作完全一致。
@@ -267,14 +263,15 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
     - implementer agent 不移动到 `Merging`；`Merging` 只由 reviewer 通过后进入。
     - 例外：如果按 blocked-access escape hatch 被工具或 auth 阻塞，可以带 blocker brief 和明确解锁动作移动到 `Human Review`。
 
-## Step 3：AI Review、Rework 与 main merge 处理
+## Step 3：AI Review、Rework 与 PR merge 处理
 
 1. 当 issue 处于 `AI Review`，启动真实 reviewer agent。
 2. reviewer agent 审查 issue、workpad、diff、commit range 和验证证据。
-3. 如果 review 通过，reviewer agent 移动 issue 到 `Merging`，并在同一个 session 中执行 `Main merge 协议`：把 issue worktree 分支合入 repo root 的 `main`，验证并 `git push origin main`。
-4. 如果 review 不通过，reviewer agent 把 findings 写入 workpad，移动 issue 到 `Rework`，然后结束本轮。
-5. push 成功后，更新 workpad 证据并移动 issue 到 `Done`。
-6. `Human Review` 只处理真实外部 blocker；人工解锁后应回到 `Todo`、`In Progress` 或 `AI Review` 继续自动流程。
+3. 如果 review 通过，reviewer agent 移动 issue 到 `Merging`。
+4. `Merging` 阶段执行 `PR merge 协议`：从 issue worktree 使用 `.codex/skills/pr/SKILL.md` 的 PR flow 创建/更新 PR、等待检查、squash merge，并同步 root `main`。
+5. 如果 review 不通过，reviewer agent 把 findings 写入 workpad，移动 issue 到 `Rework`，然后结束本轮。
+6. PR merge flow 成功后，更新 workpad 证据并移动 issue 到 `Done`。
+7. `Human Review` 只处理真实外部 blocker；人工解锁后应回到 `Todo`、`In Progress` 或 `AI Review` 继续自动流程。
 
 ## Step 4：Rework 处理
 
@@ -294,7 +291,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - issue worktree 分支已有本次任务 commit。
 - 最新 commit 的 validation/tests 绿色。
 - workpad 已记录 issue branch、HEAD short SHA、validation 命令和结果。
-- 不创建 PR；进入 `AI Review` 前只需要本地 issue branch commit 和验证证据。
+- 进入 `AI Review` 前只需要本地 issue branch commit 和验证证据；PR 由 `Merging` 阶段的 `pr` skill 创建或更新。
 - 如果触及 app，runtime validation/media 要求已完成。
 
 ## Guardrails
@@ -307,7 +304,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 如果发现超出范围的改进，创建单独 Backlog issue，不要扩大当前 scope；该 issue 要有清晰标题、描述、验收标准、同 project 归属、与当前 issue 的 `related` 链接，并在依赖当前 issue 时设置 `blockedBy`。
 - 未达到 `AI Review` 完成门槛前，不要移动到 `AI Review`；达到门槛后由 implementer agent 移动到 `AI Review`。
 - 不要把 `Human Review` 当成默认审核阶段；它只用于真实外部 blocker。
-- 在 `Merging` 中不要创建 PR；只允许执行 main merge + validation + push。
+- 在 `Merging` 中不要直接合入本地 `main`；只允许执行 `pr` skill 的 PR merge flow。
 - 如果状态是 terminal，例如 `Done`，什么都不做并退出。
 - issue 文本保持简洁、具体、面向 reviewer。
 - 如果被阻塞且尚无 workpad，添加一个 blocker comment，说明 blocker、影响和下一步解锁动作。

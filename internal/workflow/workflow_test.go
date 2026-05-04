@@ -124,3 +124,31 @@ prompt
 		t.Fatalf("stall timeout = %d, want default 300000", loaded.Config.Codex.StallTimeoutMS)
 	}
 }
+
+func TestRepoWorkflowUsesPRMergeFlow(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, want := range []string{
+		".codex/skills/pr/SKILL.md",
+		"PR merge flow",
+		".codex/skills/pr/scripts/pr_merge_flow.sh",
+		"不要在当前 sandbox 内直接把 issue worktree 分支合入 repo root 的 `main`",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("repo workflow missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"git merge --no-ff <issue-worktree-branch>",
+		"验证后 `git push origin main`",
+		"`Merging` 阶段不走 PR land",
+		"在 `Merging` 中不要创建 PR",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("repo workflow still contains local merge wording %q", forbidden)
+		}
+	}
+}

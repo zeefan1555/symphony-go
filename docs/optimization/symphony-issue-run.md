@@ -3,6 +3,26 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-04 19:45 +08 - ZEE-74
+
+- Trigger: 用户明确不希望通过给 reviewer 额外 repo root 写权限来解决 merge 卡点，希望把 workflow 改为 PR merge flow。
+- Evidence:
+  - `.symphony/logs/ZEE-74-20260504-192614.out` 记录 reviewer 成功执行 `linear issue update ZEE-74 --state Merging`，但随后在同一 reviewer turn 里尝试 root main merge，最终把 issue 退到 `Human Review`。
+  - 直接扩大 `AI Review` turn writable roots 会把 workflow 语义泄漏成 hardcoded sandbox 权限，不符合用户预期。
+- Optimization:
+  - Workflow 层：`Merging` 阶段改为使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow；从 issue worktree push branch、创建/更新 PR、等待 checks、squash merge，并由脚本同步 root `main`。
+  - Skill 层：同步更新 `symphony-issue-run` 监控口径，禁止正常路径 fallback 到 root local merge。
+  - 测试层：新增 repo workflow contract，确保 `WORKFLOW.md` 指向 PR skill/script，且不再包含直接 local merge 的关键命令和禁 PR 文案。
+- Files:
+  - `WORKFLOW.md`
+  - `.codex/skills/symphony-issue-run/SKILL.md`
+  - `internal/workflow/workflow_test.go`
+  - `docs/architecture/symphony-go-architecture.md`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - `GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/workflow`
+- Follow-up: 重建 `bin/symphony-go` 后继续跑 `ZEE-74`，验证 `Merging` 是否走 PR script 而不是 root local merge。
+
 ## 2026-05-04 19:14 +08 - ZEE-74
 
 - Trigger: 继续 `ZEE-74` 冒烟时，用户要求验证全自动链路是否能从 `AI Review` 往后推进。
