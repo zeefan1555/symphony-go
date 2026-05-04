@@ -80,14 +80,16 @@ Treat the PRD parent as a planning issue unless it has its own concrete implemen
 
 Build the child set from `Sub-issues`, parent links, relations, comments, or Linear search for issues named by the PRD. Record identifier, title, state, labels, assignee, blockers, and Workpad status.
 
-If any child is not Done, build a dependency graph before choosing work:
+If any child is not Done, build a dependency and conflict graph before choosing work:
 
 - node: child issue id, title, state, labels, assignee, branch, Workpad status, expected write scope;
 - edge: `A -> B` when B is blocked by A;
-- executable wave: every non-Done child whose `Blocked by` issues are all terminal;
-- downstream wave: children that should unlock after the current executable wave lands.
+- conflict edge: `A -- B` when A and B likely edit the same files, generated outputs, migrations, public interfaces, or shared tests;
+- ready set: every non-Done child whose `Blocked by` issues are all terminal;
+- runnable batch: the largest safe subset of the ready set with no conflict edges;
+- downstream unlock set: children that should become ready after the current batch lands.
 
-Choose executable children using this order:
+Classify each child before dispatch:
 
 1. `ready-for-agent` / equivalent and no non-terminal `Blocked by` issues.
 2. `needs-triage` / Backlog with enough detail to write an agent brief and no non-terminal `Blocked by` issues.
@@ -95,13 +97,30 @@ Choose executable children using this order:
 
 Skip `ready-for-human`, `needs-info`, canceled, or Done children. Do not skip blocked children permanently; keep them in the dependency graph and re-evaluate after their blockers merge. If every remaining child is blocked by non-terminal issues, process the minimal blocker wave first. If every remaining child is skipped for human/info reasons, write the blocker summary to the parent PRD and stop.
 
-## Commander And Dependency-Wave Execution
+## Commander And Dynamic DAG Scheduling
 
-The main agent is the commander. It does not blindly process one child at a time. It repeatedly computes the executable wave, dispatches subagents for all independent children in that wave, integrates their results, merges finished PRs one by one, then recomputes the dependency graph.
+The main agent is the commander. It should spend time up front understanding the dependency DAG and likely file/module ownership, then dynamically allocate subagents. The commander's job is scheduling, integration, merge ordering, and parent closure; child implementation should be delegated whenever it is safe.
 
-Example: if six children exist and five are blocked by the first child, run the first child alone. After its PR is merged and Linear marks it Done, re-read the parent and children. If the other five are now unblocked and their write scopes are independent, dispatch five subagents immediately.
+Scheduling loop:
 
-Dispatch multiple child issues in the same wave only if all of these are true:
+1. Read all child issues, blockers, labels, descriptions, comments, and Workpads.
+2. Infer a dependency DAG from Linear `Blocked by` relations first, then from explicit wording in issue text.
+3. Infer expected write scope for each child from the package/module names, files mentioned, acceptance criteria, generated outputs, and prior child PRs.
+4. Compute the current ready set: all non-Done children with no non-terminal blockers.
+5. Partition the ready set into runnable batches by conflict risk. Prefer the largest batch of independent children, not simply the first issue.
+6. Dispatch one subagent per child in the selected batch.
+7. As subagents finish, review their result, merge PRs serially, sync `main`, and refresh branches/worktrees for still-running or queued children.
+8. Re-read Linear and recompute the DAG after every merge, state change, or discovered blocker.
+9. Repeat until every child is Done or the remaining graph is blocked by human/info constraints.
+
+Examples:
+
+- If six children exist and five are blocked by the first child, run the first child first. After it is Done, recompute the DAG and dispatch the five newly unblocked independent children together.
+- If six children exist and the first five have no blockers while the sixth depends on all five, dispatch the first five together when their write scopes are independent. After they merge, dispatch the sixth.
+- If several independent chains exist, dispatch the head of each chain together, then continue each chain as its predecessor lands.
+- If one child changes a shared generated contract and several children consume that contract, treat the generated-contract child as a high-priority blocker even if Linear forgot the explicit relation; record the inferred dependency in the parent workpad.
+
+Dispatch multiple child issues in the same runnable batch only if all of these are true:
 
 - each selected child has no non-terminal `Blocked by` issue;
 - their expected write scopes are disjoint;
@@ -120,9 +139,11 @@ Commander responsibilities:
 
 1. Keep the parent dependency graph current after every merge or blocker change.
 2. Avoid duplicate work between subagents.
-3. Review returned changes quickly before merge.
-4. Serialize PR merge/root sync and update remaining branches from the new `origin/main`.
-5. If two children touch overlapping files, stop parallelizing that pair and continue those children sequentially.
+3. Decide when to run a blocker personally versus delegating it; default to delegating implementation and keeping the main thread free for orchestration.
+4. Review returned changes quickly before merge.
+5. Serialize PR merge/root sync and update remaining branches from the new `origin/main`.
+6. If two children touch overlapping files, stop parallelizing that pair and continue those children sequentially.
+7. Record scheduling decisions, inferred dependencies, active subagents, queued children, and remaining blockers in the parent PRD workpad.
 
 If subagents are unavailable in the current runtime, continue sequentially but record that runtime limitation in the parent PRD workpad.
 
