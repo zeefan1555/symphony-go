@@ -8,7 +8,7 @@
 
 `idl/common.thrift` 放公共模型，例如 runtime state、issue detail 和 error envelope。这个文件只描述 transport-neutral 数据模型，不承载 HTTP 路由语义，也不能作为 service method 的顶层请求或响应。
 
-`idl/control.thrift` 放控制面 method 的专属 `XxxReq` / `XxxResp` contract。它可以引用公共模型作为字段，但不定义 service，也不放 route annotations。
+`idl/control.thrift`、`idl/orchestrator.thrift`、`idl/workspace.thrift`、`idl/workflow.thrift` 和 `idl/codex_session.thrift` 是平铺领域 IDL。它们只放对应 method 的专属 `XxxReq` / `XxxResp` contract 和必要嵌套模型；可以引用公共模型作为字段，但不定义 service，也不放 route annotations。
 
 `biz/handler`、`biz/model` 和 `biz/router` 是 Hertz 生成代码目录。这里的 model、router 和默认 handler scaffold 由 `hz` 生成，review 时不要把生成噪音当作主要讨论对象。
 
@@ -17,6 +17,17 @@
 `internal/control/hertzserver/` 是手写 HTTP adapter。它把 Hertz handler 边界接到仓库自己的 control service，并负责 HTTP 状态码、error envelope 和测试。
 
 `internal/service/control/` 是手写 ControlService 业务服务边界。控制面业务语义先进入这里，再通过 snapshot provider 或 refresh trigger 等小接口连接 orchestrator/listener 能力。
+
+## 新增接口流程
+
+新增诊断控制面 API 时按固定顺序做：
+
+1. 在对应平铺领域 IDL 中新增专属 `XxxReq` / `XxxResp`。即使请求或响应暂时为空，也必须定义独立结构体；不要复用其他接口的 Req/Resp，也不要让公共模型直接作为 service method 的顶层类型。
+2. 在 `idl/main.thrift` 的唯一 `SymphonyAPI` service 中注册 method，并使用 `api.post` 动作式路由。业务 POST 接口统一从 request body 取输入，字段应使用 `api.body` 标明来源。
+3. 运行 `make hertz-generate`，让 Hertz 刷新 `biz/handler`、`biz/model` 和 `biz/router`。
+4. 在生成 handler 中只补 bind/error envelope/委托逻辑，调用 `internal/control/hertzhook/` 暴露的手写服务接口；不要在 handler 中解析 workflow、操作 workspace、启动 Codex 或读取 issue tracker。
+5. 在 `internal/control/hertzserver/` 做 HTTP adapter 和模型转换，在 `internal/service/control/` 做手写服务实现，并通过小接口调用现有 orchestrator、workspace、workflow、Codex runner 等核心能力。
+6. 补测试：IDL/route contract、HTTP route smoke 或 fake delegate 测试、service 单元测试，以及对应 scaffold adapter 测试。最后运行 `make hertz-layout-smoke` 和 `./test.sh ./...`。
 
 ## 生成命令
 
@@ -32,7 +43,7 @@ make hertz-generate
 
 ## Review 重点
 
-控制面变更应优先 review IDL 契约和手写 adapter，并同步检查业务服务边界：先确认 `idl/main.thrift`、`idl/common.thrift` 与 `idl/control.thrift` 的输入、输出、错误模型和 route annotations 是否符合产品语义，再确认 `internal/control/hertzhook/`、`internal/control/hertzserver/` 是否只承担 hook/adapter 职责，最后确认 `internal/service/control/` 保持协议无关的业务服务边界。
+控制面变更应优先 review IDL 契约和手写 adapter，并同步检查业务服务边界：先确认 `idl/main.thrift`、`idl/common.thrift`、`idl/control.thrift`、`idl/orchestrator.thrift`、`idl/workspace.thrift`、`idl/workflow.thrift` 与 `idl/codex_session.thrift` 的输入、输出、错误模型和 route annotations 是否符合诊断控制面 API 语义，再确认 `internal/control/hertzhook/`、`internal/control/hertzserver/` 是否只承担 hook/adapter 职责，最后确认 `internal/service/control/` 保持协议无关的手写服务实现边界。
 
 `biz/handler`、`biz/model` 和 `biz/router` 的大体积 diff 通常来自 `hz` 生成。review 时只需要确认生成命令来自 `make hertz-generate`，且生成结果和 IDL 变更一致；不要把生成代码噪音当成主要讨论对象。
 
