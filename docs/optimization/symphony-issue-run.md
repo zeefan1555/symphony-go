@@ -3,6 +3,28 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-04 20:33 +08 - ZEE-75
+
+- Trigger: 跑优化后的 todo 冒烟时，用户希望确认下次执行是否还有卡点。
+- Evidence:
+  - `.symphony/logs/run-20260504-201403.human.log` 显示 `Merging` session 在 `20:23:56` 启动，但直到 `20:27:33` 才开始执行 `.codex/skills/pr/scripts/pr_merge_flow.sh`，脚本前约 3 分半仍花在技能读取、Linear CLI auth/status/comment 查询和模型计划上。
+  - 同一日志显示 PR script 从 `20:27:33` 到 `20:28:23` 左右完成 PR 创建、merge 和 worktree cleanup，脚本本体耗时约 50 秒。
+  - `linear issue view ZEE-75 --json` 显示 issue 已 `Done` 且 PR #33 merged，但 root checkout 仍 `behind 1`；监督会话随后执行 `git pull --ff-only origin main` 才从 `2f5c6a5` fast-forward 到 `a18f37e`。
+  - Workpad 缺少 Merging 最终证据；监督会话已补写同一个 comment `56849a19-e7ea-4c4a-8779-876113b76eaf`。
+- Optimization:
+  - Workflow 层：收紧 `Merging 快路径`，明确 listener 已经按状态路由，脚本前不要再执行 `linear auth whoami`、不要读取 `.codex/skills/linear*.md`、不要读取完整历史 workpad。
+  - Workflow 层：要求 Linear comment / state 更新集中放在 PR script 成功或失败之后。
+  - Workflow 层：如果 PR script 成功但 root `main` 未同步到 `origin/main`，立即执行 `git pull --ff-only origin main` 作为 Merging 收尾，并写入 workpad。
+  - 测试层：扩展 repo workflow contract，防止后续删除这些 Merging 快路径约束。
+- Files:
+  - `WORKFLOW.md`
+  - `internal/workflow/workflow_test.go`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/workflow`
+  - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go make build`
+- Follow-up: 下一轮真实 issue-run 应重点看 `Merging` session start 到 PR script start 是否降到 90 秒内，以及 root main 是否自动同步。
+
 ## 2026-05-04 20:12 +08 - ZEE-74 follow-up
 
 - Trigger: 用户反馈 PR flow 冒烟整体偏慢，希望优化流程后再跑一个 todo 冒烟确认下次是否还有卡点。

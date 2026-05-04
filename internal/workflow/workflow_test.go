@@ -140,6 +140,9 @@ func TestRepoWorkflowUsesPRMergeFlow(t *testing.T) {
 		"不要重新执行 AI Review",
 		"先运行 `.codex/skills/pr/scripts/pr_merge_flow.sh`，再集中更新一次 workpad",
 		"PR script 和远端 checks 是 `Merging` 阶段的质量门槛",
+		"脚本前不要再执行 `linear auth whoami`",
+		"脚本前不要读取完整历史 workpad",
+		"如果 PR script 成功但 root `main` 没有同步到 `origin/main`",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("repo workflow missing %q", want)

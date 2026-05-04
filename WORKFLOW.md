@@ -225,6 +225,13 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 3. 先运行 `.codex/skills/pr/scripts/pr_merge_flow.sh`，再集中更新一次 workpad；不要在脚本前做多轮 workpad rewrite。
 4. PR script 和远端 checks 是 `Merging` 阶段的质量门槛；如果失败，按 Failure Handling 修复或记录 blocker。
 
+为了避免 `Merging` 阶段在 PR script 前消耗过多时间，还必须遵守：
+
+- listener 已经按状态路由到 `Merging`，脚本前不要再执行 `linear auth whoami` 或额外读取 `.codex/skills/linear*.md`。
+- 脚本前不要读取完整历史 workpad；只需要拿到当前 issue branch、`HEAD` 和干净工作区证据。
+- Linear comment / state 更新放在 PR script 成功或失败之后集中处理。
+- 如果 PR script 成功但 root `main` 没有同步到 `origin/main`，立即执行 `git pull --ff-only origin main` 作为 Merging 收尾步骤，并把结果写入 workpad。
+
 ## Blocked-access escape hatch（必须遵守）
 
 仅当缺少必要工具、auth 或权限，且本 session 无法解决时使用。
