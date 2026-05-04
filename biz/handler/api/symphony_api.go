@@ -10,6 +10,7 @@ import (
 	common "github.com/zeefan1555/symphony-go/biz/model/common"
 	control "github.com/zeefan1555/symphony-go/biz/model/control"
 	orchestrator "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
+	workflow "github.com/zeefan1555/symphony-go/biz/model/workflow"
 	workspace "github.com/zeefan1555/symphony-go/biz/model/workspace"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
 )
@@ -213,6 +214,61 @@ func CleanupWorkspace(ctx context.Context, c *app.RequestContext) {
 	}
 
 	resp, err := hertzhook.CurrentService().CleanupWorkspace(ctx, req.WorkspacePath)
+	if err != nil {
+		envelope, status := hertzhook.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// LoadWorkflow .
+// @router /api/v1/workflow/load [POST]
+func LoadWorkflow(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req workflow.LoadWorkflowReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_workflow_path",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzhook.CurrentService().LoadWorkflow(ctx, req.WorkflowPath)
+	if err != nil {
+		envelope, status := hertzhook.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// RenderWorkflowPrompt .
+// @router /api/v1/workflow/render-prompt [POST]
+func RenderWorkflowPrompt(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req workflow.RenderWorkflowPromptReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_workflow_render_request",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzhook.CurrentService().RenderWorkflowPrompt(ctx, hertzhook.WorkflowRenderRequest{
+		WorkflowPath:     req.WorkflowPath,
+		IssueIdentifier:  req.IssueIdentifier,
+		IssueTitle:       req.IssueTitle,
+		IssueDescription: req.IssueDescription,
+		HasAttempt:       req.HasAttempt,
+		Attempt:          req.Attempt,
+	})
 	if err != nil {
 		envelope, status := hertzhook.ErrorEnvelope(err)
 		c.JSON(status, envelope)

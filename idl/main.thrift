@@ -4,6 +4,7 @@ include "common.thrift"
 include "control.thrift"
 include "orchestrator.thrift"
 include "workspace.thrift"
+include "workflow.thrift"
 
 service SymphonyAPI {
     control.GetScaffoldResp GetScaffold(1: control.GetScaffoldReq req) (api.post="/api/v1/control/get-scaffold")
@@ -15,4 +16,6 @@ service SymphonyAPI {
     workspace.ValidateWorkspacePathResp ValidateWorkspacePath(1: workspace.ValidateWorkspacePathReq req) (api.post="/api/v1/workspace/validate")
     workspace.PrepareWorkspaceResp PrepareWorkspace(1: workspace.PrepareWorkspaceReq req) (api.post="/api/v1/workspace/prepare")
     workspace.CleanupWorkspaceResp CleanupWorkspace(1: workspace.CleanupWorkspaceReq req) (api.post="/api/v1/workspace/cleanup")
+    workflow.LoadWorkflowResp LoadWorkflow(1: workflow.LoadWorkflowReq req) (api.post="/api/v1/workflow/load")
+    workflow.RenderWorkflowPromptResp RenderWorkflowPrompt(1: workflow.RenderWorkflowPromptReq req) (api.post="/api/v1/workflow/render-prompt")
 }

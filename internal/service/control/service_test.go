@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -249,6 +250,44 @@ func TestServiceProjectsWorkspaceLifecycle(t *testing.T) {
 	}
 }
 
+func TestServiceLoadsAndRendersWorkflow(t *testing.T) {
+	workflowPath := writeControlWorkflowFile(t)
+	service := control.NewService(fakeSnapshotProvider{snapshot: observability.NewSnapshot()})
+
+	summary, err := service.LoadWorkflow(context.Background(), workflowPath)
+	if err != nil {
+		t.Fatalf("LoadWorkflow returned error: %v", err)
+	}
+	if summary.Boundary.Name != "workflow.load_render" {
+		t.Fatalf("boundary = %#v, want workflow load/render", summary.Boundary)
+	}
+	if summary.WorkflowPath != workflowPath || strings.Join(summary.StateNames, ",") != "Todo,In Progress" {
+		t.Fatalf("summary = %#v, want workflow path and active states", summary)
+	}
+
+	rendered, err := service.RenderWorkflowPrompt(context.Background(), control.WorkflowRenderInput{
+		WorkflowPath:     workflowPath,
+		IssueIdentifier:  "ZEE-59",
+		IssueTitle:       "Workflow tracer",
+		IssueDescription: "Render through control service.",
+		HasAttempt:       true,
+		Attempt:          2,
+	})
+	if err != nil {
+		t.Fatalf("RenderWorkflowPrompt returned error: %v", err)
+	}
+	for _, want := range []string{"ZEE-59", "Workflow tracer", "Render through control service.", "attempt 2"} {
+		if !strings.Contains(rendered.Prompt, want) {
+			t.Fatalf("rendered prompt missing %q:\n%s", want, rendered.Prompt)
+		}
+	}
+
+	_, err = service.LoadWorkflow(context.Background(), "")
+	if !errors.Is(err, control.ErrInvalidWorkflowPath) {
+		t.Fatalf("LoadWorkflow empty error = %v, want ErrInvalidWorkflowPath", err)
+	}
+}
+
 func TestServiceReadsRuntimeStateFromSnapshotProvider(t *testing.T) {
 	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
 	startedAt := generatedAt.Add(-2 * time.Minute)
@@ -318,4 +357,28 @@ func TestServiceReadsRuntimeStateFromSnapshotProvider(t *testing.T) {
 	if state.LastError != "last error" {
 		t.Fatalf("LastError = %q, want last error", state.LastError)
 	}
+}
+
+func writeControlWorkflowFile(t *testing.T) string {
+	t.Helper()
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	path := filepath.Join(t.TempDir(), "WORKFLOW.md")
+	content := `---
+tracker:
+  kind: linear
+  project_slug: demo
+  active_states:
+    - Todo
+    - In Progress
+---
+Issue {{ issue.identifier }}: {{ issue.title }}
+Description: {{ issue.description }}
+{% if attempt %}
+attempt {{ attempt }}
+{% endif %}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

@@ -33,6 +33,11 @@ func Register(r *server.Hertz) {
 				_orchestrator.POST("/project-issue-run", append(_projectissuerunMw(), api.ProjectIssueRun)...)
 			}
 			{
+				_workflow := _v1.Group("/workflow", _workflowMw()...)
+				_workflow.POST("/load", append(_loadworkflowMw(), api.LoadWorkflow)...)
+				_workflow.POST("/render-prompt", append(_renderworkflowpromptMw(), api.RenderWorkflowPrompt)...)
+			}
+			{
 				_workspace := _v1.Group("/workspace", _workspaceMw()...)
 				_workspace.POST("/cleanup", append(_cleanupworkspaceMw(), api.CleanupWorkspace)...)
 				_workspace.POST("/prepare", append(_prepareworkspaceMw(), api.PrepareWorkspace)...)

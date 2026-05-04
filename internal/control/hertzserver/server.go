@@ -11,6 +11,7 @@ import (
 	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
 	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
 	orchestratormodel "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
+	workflowmodel "github.com/zeefan1555/symphony-go/biz/model/workflow"
 	workspacemodel "github.com/zeefan1555/symphony-go/biz/model/workspace"
 	"github.com/zeefan1555/symphony-go/biz/router"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
@@ -132,6 +133,29 @@ func (a controlAdapter) CleanupWorkspace(ctx context.Context, workspacePath stri
 	return &workspacemodel.CleanupWorkspaceResp{Result: workspaceCleanupResultModel(result)}, nil
 }
 
+func (a controlAdapter) LoadWorkflow(ctx context.Context, workflowPath string) (*workflowmodel.LoadWorkflowResp, error) {
+	summary, err := a.control.LoadWorkflow(ctx, workflowPath)
+	if err != nil {
+		return nil, controlWorkflowHTTPError(err)
+	}
+	return &workflowmodel.LoadWorkflowResp{Summary: workflowSummaryModel(summary)}, nil
+}
+
+func (a controlAdapter) RenderWorkflowPrompt(ctx context.Context, request hertzhook.WorkflowRenderRequest) (*workflowmodel.RenderWorkflowPromptResp, error) {
+	result, err := a.control.RenderWorkflowPrompt(ctx, controlplane.WorkflowRenderInput{
+		WorkflowPath:     request.WorkflowPath,
+		IssueIdentifier:  request.IssueIdentifier,
+		IssueTitle:       request.IssueTitle,
+		IssueDescription: request.IssueDescription,
+		HasAttempt:       request.HasAttempt,
+		Attempt:          int(request.Attempt),
+	})
+	if err != nil {
+		return nil, controlWorkflowHTTPError(err)
+	}
+	return &workflowmodel.RenderWorkflowPromptResp{Result: workflowRenderResultModel(result)}, nil
+}
+
 func (a controlAdapter) Refresh(ctx context.Context) (*controlmodel.RefreshResp, error) {
 	result, err := a.control.Refresh(ctx)
 	if err != nil {
@@ -159,6 +183,15 @@ func controlWorkspaceHTTPError(err error) error {
 		return hertzhook.NewError(400, "invalid_workspace_path", "workspace path is invalid")
 	case errors.Is(err, controlplane.ErrWorkspaceManagerRequired):
 		return hertzhook.NewError(503, "workspace_unavailable", "workspace manager is unavailable")
+	default:
+		return err
+	}
+}
+
+func controlWorkflowHTTPError(err error) error {
+	switch {
+	case errors.Is(err, controlplane.ErrInvalidWorkflowPath):
+		return hertzhook.NewError(400, "invalid_workflow_path", "workflow path is required")
 	default:
 		return err
 	}
@@ -317,6 +350,21 @@ func workspaceCleanupResultModel(result controlplane.WorkspaceCleanupResult) *wo
 		WorkspacePath:   result.WorkspacePath,
 		Removed:         result.Removed,
 		ContainedInRoot: result.ContainedInRoot,
+	}
+}
+
+func workflowSummaryModel(summary controlplane.WorkflowSummary) *workflowmodel.WorkflowSummary {
+	return &workflowmodel.WorkflowSummary{
+		Boundary:     capabilityBoundaryModel(summary.Boundary),
+		WorkflowPath: summary.WorkflowPath,
+		StateNames:   append([]string(nil), summary.StateNames...),
+	}
+}
+
+func workflowRenderResultModel(result controlplane.WorkflowRenderResult) *workflowmodel.WorkflowRenderResult {
+	return &workflowmodel.WorkflowRenderResult{
+		Boundary: capabilityBoundaryModel(result.Boundary),
+		Prompt:   result.Prompt,
 	}
 }
 

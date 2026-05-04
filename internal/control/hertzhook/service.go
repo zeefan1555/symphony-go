@@ -8,6 +8,7 @@ import (
 	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
 	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
 	orchestratormodel "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
+	workflowmodel "github.com/zeefan1555/symphony-go/biz/model/workflow"
 	workspacemodel "github.com/zeefan1555/symphony-go/biz/model/workspace"
 )
 
@@ -24,7 +25,18 @@ type ControlService interface {
 	ValidateWorkspacePath(context.Context, string) (*workspacemodel.ValidateWorkspacePathResp, error)
 	PrepareWorkspace(context.Context, string) (*workspacemodel.PrepareWorkspaceResp, error)
 	CleanupWorkspace(context.Context, string) (*workspacemodel.CleanupWorkspaceResp, error)
+	LoadWorkflow(context.Context, string) (*workflowmodel.LoadWorkflowResp, error)
+	RenderWorkflowPrompt(context.Context, WorkflowRenderRequest) (*workflowmodel.RenderWorkflowPromptResp, error)
 	Refresh(context.Context) (*controlmodel.RefreshResp, error)
+}
+
+type WorkflowRenderRequest struct {
+	WorkflowPath     string
+	IssueIdentifier  string
+	IssueTitle       string
+	IssueDescription string
+	HasAttempt       bool
+	Attempt          int32
 }
 
 type ControlFunc func(context.Context) (ScaffoldStatus, error)
@@ -59,6 +71,14 @@ func (f ControlFunc) PrepareWorkspace(context.Context, string) (*workspacemodel.
 
 func (f ControlFunc) CleanupWorkspace(context.Context, string) (*workspacemodel.CleanupWorkspaceResp, error) {
 	return nil, NewError(503, "workspace_unavailable", "workspace manager is unavailable")
+}
+
+func (f ControlFunc) LoadWorkflow(context.Context, string) (*workflowmodel.LoadWorkflowResp, error) {
+	return nil, NewError(503, "workflow_unavailable", "workflow loader is unavailable")
+}
+
+func (f ControlFunc) RenderWorkflowPrompt(context.Context, WorkflowRenderRequest) (*workflowmodel.RenderWorkflowPromptResp, error) {
+	return nil, NewError(503, "workflow_unavailable", "workflow renderer is unavailable")
 }
 
 func (f ControlFunc) Refresh(context.Context) (*controlmodel.RefreshResp, error) {
