@@ -158,7 +158,7 @@ func NewRuntime(opts Options) (*Runtime, error) {
 		Options:       opts,
 		Loaded:        loaded,
 		Service:       service,
-		ControlServer: hertzserver.New(controlplane.NewServiceWithWorkspace(service, manager)),
+		ControlServer: hertzserver.New(controlplane.NewServiceWithWorkspaceAndCodexRunner(service, manager, runner)),
 		Logger:        log,
 	}, nil
 }

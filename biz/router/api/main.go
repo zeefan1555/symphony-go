@@ -22,6 +22,10 @@ func Register(r *server.Hertz) {
 		{
 			_v1 := _api.Group("/v1", _v1Mw()...)
 			{
+				_codex_session := _v1.Group("/codex-session", _codex_sessionMw()...)
+				_codex_session.POST("/run-turn", append(_runturnMw(), api.RunTurn)...)
+			}
+			{
 				_control := _v1.Group("/control", _controlMw()...)
 				_control.POST("/get-issue", append(_getissueMw(), api.GetIssue)...)
 				_control.POST("/get-scaffold", append(_getscaffoldMw(), api.GetScaffold)...)

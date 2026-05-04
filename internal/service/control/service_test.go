@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
 	"github.com/zeefan1555/symphony-go/internal/types"
@@ -23,6 +24,12 @@ type fakeRefreshProvider struct {
 	snapshot observability.Snapshot
 	results  []bool
 	calls    int
+}
+
+type fakeControlCodexRunner struct {
+	request corecodex.SessionRequest
+	result  corecodex.SessionResult
+	err     error
 }
 
 func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
@@ -106,6 +113,11 @@ func (p *fakeRefreshProvider) RequestRefresh(ctx context.Context) (bool, error) 
 	result := p.results[0]
 	p.results = p.results[1:]
 	return result, nil
+}
+
+func (f *fakeControlCodexRunner) RunSession(ctx context.Context, request corecodex.SessionRequest, onEvent func(corecodex.Event)) (corecodex.SessionResult, error) {
+	f.request = request
+	return f.result, f.err
 }
 
 func TestServiceRefreshRequestsProviderPoll(t *testing.T) {
@@ -285,6 +297,43 @@ func TestServiceLoadsAndRendersWorkflow(t *testing.T) {
 	_, err = service.LoadWorkflow(context.Background(), "")
 	if !errors.Is(err, control.ErrInvalidWorkflowPath) {
 		t.Fatalf("LoadWorkflow empty error = %v, want ErrInvalidWorkflowPath", err)
+	}
+}
+
+func TestServiceRunsCodexTurnThroughRunner(t *testing.T) {
+	runner := &fakeControlCodexRunner{result: corecodex.SessionResult{
+		SessionID: "session-1",
+		ThreadID:  "thread-1",
+		Turns: []corecodex.Result{{
+			SessionID: "session-1",
+			ThreadID:  "thread-1",
+			TurnID:    "turn-1",
+		}},
+	}}
+	service := control.NewServiceWithCodexRunner(fakeSnapshotProvider{snapshot: observability.NewSnapshot()}, runner)
+
+	summary, err := service.RunCodexTurn(context.Background(), control.CodexTurnInput{
+		IssueIdentifier: "ZEE-58",
+		PromptName:      "implementation",
+		WorkspacePath:   "/tmp/workspace",
+		PromptText:      "Implement the requested slice.",
+	})
+	if err != nil {
+		t.Fatalf("RunCodexTurn returned error: %v", err)
+	}
+	if runner.request.WorkspacePath != "/tmp/workspace" || runner.request.Issue.Identifier != "ZEE-58" {
+		t.Fatalf("runner request = %#v, want workspace and issue identifier", runner.request)
+	}
+	if len(runner.request.Prompts) != 1 || runner.request.Prompts[0].Text != "Implement the requested slice." {
+		t.Fatalf("prompts = %#v, want single prompt text", runner.request.Prompts)
+	}
+	if summary.Boundary.Name != "codex_session.turn" || summary.SessionID != "session-1" || summary.TurnCount != 1 {
+		t.Fatalf("summary = %#v, want codex turn summary", summary)
+	}
+
+	_, err = service.RunCodexTurn(context.Background(), control.CodexTurnInput{})
+	if !errors.Is(err, control.ErrInvalidCodexTurnRequest) {
+		t.Fatalf("RunCodexTurn empty error = %v, want ErrInvalidCodexTurnRequest", err)
 	}
 }
 

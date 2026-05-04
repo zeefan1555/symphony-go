@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzserver"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
@@ -28,6 +29,12 @@ type refreshSnapshotProvider struct {
 	results  []bool
 	err      error
 	calls    int
+}
+
+type fakeCodexRunner struct {
+	request corecodex.SessionRequest
+	result  corecodex.SessionResult
+	err     error
 }
 
 func (p snapshotProvider) Snapshot() observability.Snapshot {
@@ -52,6 +59,11 @@ func (p *refreshSnapshotProvider) RequestRefresh(ctx context.Context) (bool, err
 	result := p.results[0]
 	p.results = p.results[1:]
 	return result, nil
+}
+
+func (f *fakeCodexRunner) RunSession(ctx context.Context, request corecodex.SessionRequest, onEvent func(corecodex.Event)) (corecodex.SessionResult, error) {
+	f.request = request
+	return f.result, f.err
 }
 
 func TestStateRouteReturnsEmptyRuntimeState(t *testing.T) {
@@ -754,6 +766,56 @@ func TestWorkflowRoutesDelegateToControlService(t *testing.T) {
 		if !strings.Contains(rendered.Result.Prompt, want) {
 			t.Fatalf("rendered prompt missing %q:\n%s", want, rendered.Result.Prompt)
 		}
+	}
+}
+
+func TestCodexSessionRouteDelegatesToControlService(t *testing.T) {
+	runner := &fakeCodexRunner{result: corecodex.SessionResult{
+		SessionID: "session-1",
+		ThreadID:  "thread-1",
+		Turns: []corecodex.Result{{
+			SessionID: "session-1",
+			ThreadID:  "thread-1",
+			TurnID:    "turn-1",
+		}},
+	}}
+	service := control.NewServiceWithCodexRunner(snapshotProvider{snapshot: observability.NewSnapshot()}, runner)
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp := postJSON(t, baseURL, "/api/v1/codex-session/run-turn", `{"issue_identifier":"ZEE-58","prompt_name":"implementation","workspace_path":"/tmp/workspace","prompt_text":"Implement the requested slice."}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		Summary struct {
+			Boundary struct {
+				Name               string `json:"name"`
+				HandwrittenAdapter string `json:"handwritten_adapter"`
+			} `json:"boundary"`
+			SessionID string `json:"session_id"`
+			TurnCount int32  `json:"turn_count"`
+		} `json:"summary"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if runner.request.WorkspacePath != "/tmp/workspace" {
+		t.Fatalf("workspace path = %q", runner.request.WorkspacePath)
+	}
+	if runner.request.Issue.Identifier != "ZEE-58" {
+		t.Fatalf("issue identifier = %q", runner.request.Issue.Identifier)
+	}
+	if len(runner.request.Prompts) != 1 || runner.request.Prompts[0].Text != "Implement the requested slice." {
+		t.Fatalf("prompts = %#v", runner.request.Prompts)
+	}
+	if body.Summary.Boundary.Name != "codex_session.turn" || body.Summary.Boundary.HandwrittenAdapter != "internal/codex/scaffold" {
+		t.Fatalf("boundary = %#v, want codex session turn boundary", body.Summary.Boundary)
+	}
+	if body.Summary.SessionID != "session-1" || body.Summary.TurnCount != 1 {
+		t.Fatalf("summary = %#v, want session-1 turn count 1", body.Summary)
 	}
 }
 

@@ -149,19 +149,21 @@ func TestCodexSessionScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
 	}
 }
 
-func TestCodexSessionScaffoldIsNotExternalControlRoute(t *testing.T) {
+func TestCodexSessionScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 	repo := "../../"
 	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
 
-	for _, forbidden := range []string{
-		"CodexSessionScaffold",
+	for _, want := range []string{
+		`_v1.Group("/codex-session"`,
+		`POST("/run-turn"`,
 		"RunTurn",
-		"codexsession",
-		"codex",
 	} {
-		if strings.Contains(strings.ToLower(controlRoute), strings.ToLower(forbidden)) {
-			t.Fatalf("external control route exposes internal codex session scaffold %q", forbidden)
+		if !strings.Contains(controlRoute, want) {
+			t.Fatalf("diagnostic route missing codex session scaffold route %q", want)
 		}
+	}
+	if strings.Contains(controlRoute, "CodexSessionScaffold") {
+		t.Fatalf("diagnostic route must expose the action, not the generated scaffold service name")
 	}
 }
 
