@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,20 +139,22 @@ func TestRuntimeRunStartsHTTPControlServer(t *testing.T) {
 	if runtime.ControlAddress == "" {
 		t.Fatal("control address was not recorded")
 	}
-	resp, err := http.Get("http://" + runtime.ControlAddress + "/api/v1/state")
+	resp, err := http.Post("http://"+runtime.ControlAddress+"/api/v1/control/get-state", "application/json", strings.NewReader("{}"))
 	if err != nil {
-		t.Fatalf("GET state: %v", err)
+		t.Fatalf("POST get-state: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	var body struct {
-		Counts struct {
-			Running int `json:"running"`
-		} `json:"counts"`
-		Running []struct {
-			IssueIdentifier string `json:"issue_identifier"`
-		} `json:"running"`
+		State struct {
+			Counts struct {
+				Running int `json:"running"`
+			} `json:"counts"`
+			Running []struct {
+				IssueIdentifier string `json:"issue_identifier"`
+			} `json:"running"`
+		} `json:"state"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode state: %v", err)
@@ -159,7 +162,7 @@ func TestRuntimeRunStartsHTTPControlServer(t *testing.T) {
 	if err := resp.Body.Close(); err != nil {
 		t.Fatalf("close response body: %v", err)
 	}
-	if body.Counts.Running != 1 || len(body.Running) != 1 || body.Running[0].IssueIdentifier != "ZEE-55" {
+	if body.State.Counts.Running != 1 || len(body.State.Running) != 1 || body.State.Running[0].IssueIdentifier != "ZEE-55" {
 		t.Fatalf("state response = %#v, want same runtime snapshot", body)
 	}
 

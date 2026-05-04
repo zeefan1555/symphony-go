@@ -1,11 +1,4 @@
-namespace go control.model
-
-struct Empty {
-}
-
-struct ScaffoldStatus {
-    1: required string status
-}
+namespace go common
 
 struct RuntimeCounts {
     1: required i32 running
@@ -66,11 +59,6 @@ struct RuntimeState {
     5: required CodexTotals codex_totals
     6: required PollingStatus polling
     7: optional string last_error
-}
-
-struct RefreshResult {
-    1: required bool accepted
-    2: required string status
 }
 
 struct IssueDetail {

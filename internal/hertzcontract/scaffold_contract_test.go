@@ -66,7 +66,7 @@ func TestOrchestratorScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
 
 func TestOrchestratorScaffoldIsNotExternalControlRoute(t *testing.T) {
 	repo := "../../"
-	controlRoute := readFile(t, filepath.Join(repo, "biz/router/control/http/http.go"))
+	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
 
 	for _, forbidden := range []string{
 		"ProjectIssueRun",
@@ -97,7 +97,7 @@ func TestWorkspaceScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
 
 func TestWorkspaceScaffoldIsNotExternalControlRoute(t *testing.T) {
 	repo := "../../"
-	controlRoute := readFile(t, filepath.Join(repo, "biz/router/control/http/http.go"))
+	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
 
 	for _, forbidden := range []string{
 		"WorkspaceScaffold",
@@ -140,7 +140,7 @@ func TestCodexSessionScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
 
 func TestCodexSessionScaffoldIsNotExternalControlRoute(t *testing.T) {
 	repo := "../../"
-	controlRoute := readFile(t, filepath.Join(repo, "biz/router/control/http/http.go"))
+	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
 
 	for _, forbidden := range []string{
 		"CodexSessionScaffold",
@@ -172,7 +172,7 @@ func TestWorkflowScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
 
 func TestWorkflowScaffoldIsNotExternalControlRoute(t *testing.T) {
 	repo := "../../"
-	controlRoute := readFile(t, filepath.Join(repo, "biz/router/control/http/http.go"))
+	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
 
 	for _, forbidden := range []string{
 		"WorkflowScaffold",
