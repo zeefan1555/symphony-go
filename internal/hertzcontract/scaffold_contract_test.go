@@ -248,6 +248,30 @@ func TestGeneratedHertzScaffoldStaysGeneratedOnly(t *testing.T) {
 	}
 }
 
+func TestGeneratedHertzBoundaryCheckCoversBizAndServiceBoundaries(t *testing.T) {
+	repo := "../../"
+	makefile := readFile(t, filepath.Join(repo, "Makefile"))
+	if !strings.Contains(makefile, "check-generated-hertz-boundary") ||
+		!strings.Contains(makefile, "scripts/check_generated_hertz_boundary.sh") {
+		t.Fatalf("Makefile must expose the generated Hertz boundary check")
+	}
+
+	checkScript := readFile(t, filepath.Join(repo, "scripts/check_generated_hertz_boundary.sh"))
+	for _, want := range []string{
+		"biz/handler",
+		"biz/model",
+		"biz/router",
+		"internal/service",
+		"github.com/cloudwego/hertz/pkg/app",
+		"app\\.RequestContext",
+		"internal/issuetracker",
+	} {
+		if !strings.Contains(checkScript, want) {
+			t.Fatalf("generated Hertz boundary check missing %q", want)
+		}
+	}
+}
+
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	content, err := os.ReadFile(path)
