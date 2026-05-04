@@ -136,6 +136,10 @@ func TestRepoWorkflowUsesPRMergeFlow(t *testing.T) {
 		"PR merge flow",
 		".codex/skills/pr/scripts/pr_merge_flow.sh",
 		"不要在当前 sandbox 内直接把 issue worktree 分支合入 repo root 的 `main`",
+		"Merging 快路径",
+		"不要重新执行 AI Review",
+		"先运行 `.codex/skills/pr/scripts/pr_merge_flow.sh`，再集中更新一次 workpad",
+		"PR script 和远端 checks 是 `Merging` 阶段的质量门槛",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("repo workflow missing %q", want)

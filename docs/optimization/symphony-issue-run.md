@@ -3,6 +3,25 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-04 20:12 +08 - ZEE-74 follow-up
+
+- Trigger: 用户反馈 PR flow 冒烟整体偏慢，希望优化流程后再跑一个 todo 冒烟确认下次是否还有卡点。
+- Evidence:
+  - `.symphony/logs/run-20260504-194540.jsonl` 显示 `Merging` 阶段真正的 PR script 在 `19:48:24.877` 左右启动，并在约 25 秒内输出 PR URL；主要耗时发生在脚本前的上下文读取、issue/comment 检查和 workpad 更新。
+  - `.symphony/logs/ZEE-74-20260504-194540.out` / human log 显示 PR flow 本身可完成，但 `Merging` 语义仍允许 agent 重新展开较多 workflow 和历史 workpad 内容。
+- Optimization:
+  - Workflow 层：新增 `Merging 快路径`，明确 `Merging` 已经过 AI Review，不重新执行实现或审查流程；只读取当前 issue、唯一 workpad、git status/HEAD 和 PR skill 必需部分。
+  - Workflow 层：要求先运行 `.codex/skills/pr/scripts/pr_merge_flow.sh`，再集中更新一次 workpad，减少脚本前多轮外部写入和长上下文消耗。
+  - 测试层：扩展 repo workflow contract，锁住快路径、跳过重审、先跑 PR script 和以 PR script/checks 为质量门槛的文案。
+- Files:
+  - `WORKFLOW.md`
+  - `internal/workflow/workflow_test.go`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/workflow`
+  - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go make build`
+- Follow-up: 提交并推送后创建新的 Todo 冒烟 issue，观察 `Merging` 到 PR script 启动之间是否仍有明显等待。
+
 ## 2026-05-04 19:45 +08 - ZEE-74
 
 - Trigger: 用户明确不希望通过给 reviewer 额外 repo root 写权限来解决 merge 卡点，希望把 workflow 改为 PR merge flow。

@@ -216,6 +216,15 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - squash merge 或 root pull 结果
 8. PR merge flow 成功后移动 issue 到 `Done`。
 
+### Merging 快路径
+
+`Merging` 是已经通过 AI Review 后的发布阶段，不要重新执行实现或审查流程。该阶段的目标是在一个 Codex turn 内完成 PR URL、squash merge、root sync、workpad 记录和 `Done` 状态。
+
+1. 不要重新执行 AI Review；除非 PR script、GitHub checks 或 workpad 证据明确失败，否则不要重复运行实现阶段 validation。
+2. 控制上下文读取：只读取当前 issue、唯一 `## Codex Workpad`、issue worktree 的 `git status --short` / `HEAD`，以及 `.codex/skills/pr/SKILL.md` 中执行 PR flow 必需的部分。
+3. 先运行 `.codex/skills/pr/scripts/pr_merge_flow.sh`，再集中更新一次 workpad；不要在脚本前做多轮 workpad rewrite。
+4. PR script 和远端 checks 是 `Merging` 阶段的质量门槛；如果失败，按 Failure Handling 修复或记录 blocker。
+
 ## Blocked-access escape hatch（必须遵守）
 
 仅当缺少必要工具、auth 或权限，且本 session 无法解决时使用。
