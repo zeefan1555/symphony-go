@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/zeefan1555/symphony-go/internal/codex"
-	controlplane "github.com/zeefan1555/symphony-go/internal/control"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzserver"
 	"github.com/zeefan1555/symphony-go/internal/issuetracker/linear"
 	"github.com/zeefan1555/symphony-go/internal/logging"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/orchestrator"
+	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
 	"github.com/zeefan1555/symphony-go/internal/tui"
 	"github.com/zeefan1555/symphony-go/internal/types"
 	"github.com/zeefan1555/symphony-go/internal/workflow"

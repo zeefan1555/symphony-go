@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
-	controlplane "github.com/zeefan1555/symphony-go/internal/control"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
 	controlmodel "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/model"
 	"github.com/zeefan1555/symphony-go/internal/generated/hertz/control/router"
+	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
 )
 
 type Control = controlplane.ControlService

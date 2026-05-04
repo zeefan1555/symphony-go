@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	controlplane "github.com/zeefan1555/symphony-go/internal/control"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzserver"
 	"github.com/zeefan1555/symphony-go/internal/observability"
+	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
 )
 
 func TestNewRuntimeAssemblesRunDependencies(t *testing.T) {

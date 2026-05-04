@@ -49,7 +49,7 @@ func TestMaintainerWorkflowDocumentsIDLBoundariesAndGeneration(t *testing.T) {
 		"`idl/control/http.thrift`",
 		"`internal/generated/hertz/control/`",
 		"`internal/control/hertzserver/`",
-		"`internal/control/service.go`",
+		"`internal/service/control/`",
 		"`make hertz-generate`",
 		"`scripts/hertz_generate.sh`",
 	} {

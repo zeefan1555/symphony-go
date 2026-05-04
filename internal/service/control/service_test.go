@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/control"
 	"github.com/zeefan1555/symphony-go/internal/observability"
+	"github.com/zeefan1555/symphony-go/internal/service/control"
 )
 
 type fakeSnapshotProvider struct {
