@@ -8,6 +8,7 @@ import (
 	"github.com/apache/thrift/lib/go/thrift"
 	"github.com/zeefan1555/symphony-go/biz/model/control"
 	"github.com/zeefan1555/symphony-go/biz/model/orchestrator"
+	"github.com/zeefan1555/symphony-go/biz/model/workflow"
 	"github.com/zeefan1555/symphony-go/biz/model/workspace"
 )
 
@@ -29,6 +30,10 @@ type SymphonyAPI interface {
 	PrepareWorkspace(ctx context.Context, req *workspace.PrepareWorkspaceReq) (r *workspace.PrepareWorkspaceResp, err error)
 
 	CleanupWorkspace(ctx context.Context, req *workspace.CleanupWorkspaceReq) (r *workspace.CleanupWorkspaceResp, err error)
+
+	LoadWorkflow(ctx context.Context, req *workflow.LoadWorkflowReq) (r *workflow.LoadWorkflowResp, err error)
+
+	RenderWorkflowPrompt(ctx context.Context, req *workflow.RenderWorkflowPromptReq) (r *workflow.RenderWorkflowPromptResp, err error)
 }
 
 type SymphonyAPIClient struct {
@@ -138,6 +143,24 @@ func (p *SymphonyAPIClient) CleanupWorkspace(ctx context.Context, req *workspace
 	}
 	return _result.GetSuccess(), nil
 }
+func (p *SymphonyAPIClient) LoadWorkflow(ctx context.Context, req *workflow.LoadWorkflowReq) (r *workflow.LoadWorkflowResp, err error) {
+	var _args SymphonyAPILoadWorkflowArgs
+	_args.Req = req
+	var _result SymphonyAPILoadWorkflowResult
+	if err = p.Client_().Call(ctx, "LoadWorkflow", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+func (p *SymphonyAPIClient) RenderWorkflowPrompt(ctx context.Context, req *workflow.RenderWorkflowPromptReq) (r *workflow.RenderWorkflowPromptResp, err error) {
+	var _args SymphonyAPIRenderWorkflowPromptArgs
+	_args.Req = req
+	var _result SymphonyAPIRenderWorkflowPromptResult
+	if err = p.Client_().Call(ctx, "RenderWorkflowPrompt", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
 
 type SymphonyAPIProcessor struct {
 	processorMap map[string]thrift.TProcessorFunction
@@ -168,6 +191,8 @@ func NewSymphonyAPIProcessor(handler SymphonyAPI) *SymphonyAPIProcessor {
 	self.AddToProcessorMap("ValidateWorkspacePath", &symphonyAPIProcessorValidateWorkspacePath{handler: handler})
 	self.AddToProcessorMap("PrepareWorkspace", &symphonyAPIProcessorPrepareWorkspace{handler: handler})
 	self.AddToProcessorMap("CleanupWorkspace", &symphonyAPIProcessorCleanupWorkspace{handler: handler})
+	self.AddToProcessorMap("LoadWorkflow", &symphonyAPIProcessorLoadWorkflow{handler: handler})
+	self.AddToProcessorMap("RenderWorkflowPrompt", &symphonyAPIProcessorRenderWorkflowPrompt{handler: handler})
 	return self
 }
 func (p *SymphonyAPIProcessor) Process(ctx context.Context, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
@@ -603,6 +628,102 @@ func (p *symphonyAPIProcessorCleanupWorkspace) Process(ctx context.Context, seqI
 		result.Success = retval
 	}
 	if err2 = oprot.WriteMessageBegin("CleanupWorkspace", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type symphonyAPIProcessorLoadWorkflow struct {
+	handler SymphonyAPI
+}
+
+func (p *symphonyAPIProcessorLoadWorkflow) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := SymphonyAPILoadWorkflowArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("LoadWorkflow", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := SymphonyAPILoadWorkflowResult{}
+	var retval *workflow.LoadWorkflowResp
+	if retval, err2 = p.handler.LoadWorkflow(ctx, args.Req); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing LoadWorkflow: "+err2.Error())
+		oprot.WriteMessageBegin("LoadWorkflow", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("LoadWorkflow", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type symphonyAPIProcessorRenderWorkflowPrompt struct {
+	handler SymphonyAPI
+}
+
+func (p *symphonyAPIProcessorRenderWorkflowPrompt) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := SymphonyAPIRenderWorkflowPromptArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("RenderWorkflowPrompt", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := SymphonyAPIRenderWorkflowPromptResult{}
+	var retval *workflow.RenderWorkflowPromptResp
+	if retval, err2 = p.handler.RenderWorkflowPrompt(ctx, args.Req); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing RenderWorkflowPrompt: "+err2.Error())
+		oprot.WriteMessageBegin("RenderWorkflowPrompt", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("RenderWorkflowPrompt", thrift.REPLY, seqId); err2 != nil {
 		err = err2
 	}
 	if err2 = result.Write(oprot); err == nil && err2 != nil {
@@ -3246,4 +3367,588 @@ func (p *SymphonyAPICleanupWorkspaceResult) String() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("SymphonyAPICleanupWorkspaceResult(%+v)", *p)
+}
+
+type SymphonyAPILoadWorkflowArgs struct {
+	Req *workflow.LoadWorkflowReq `thrift:"req,1"`
+}
+
+func NewSymphonyAPILoadWorkflowArgs() *SymphonyAPILoadWorkflowArgs {
+	return &SymphonyAPILoadWorkflowArgs{}
+}
+
+var SymphonyAPILoadWorkflowArgs_Req_DEFAULT *workflow.LoadWorkflowReq
+
+func (p *SymphonyAPILoadWorkflowArgs) GetReq() (v *workflow.LoadWorkflowReq) {
+	if !p.IsSetReq() {
+		return SymphonyAPILoadWorkflowArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+var fieldIDToName_SymphonyAPILoadWorkflowArgs = map[int16]string{
+	1: "req",
+}
+
+func (p *SymphonyAPILoadWorkflowArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *SymphonyAPILoadWorkflowArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				if err = iprot.Skip(fieldTypeId); err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_SymphonyAPILoadWorkflowArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *SymphonyAPILoadWorkflowArgs) ReadField1(iprot thrift.TProtocol) error {
+	p.Req = workflow.NewLoadWorkflowReq()
+	if err := p.Req.Read(iprot); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *SymphonyAPILoadWorkflowArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("LoadWorkflow_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *SymphonyAPILoadWorkflowArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("req", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Req.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *SymphonyAPILoadWorkflowArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SymphonyAPILoadWorkflowArgs(%+v)", *p)
+}
+
+type SymphonyAPILoadWorkflowResult struct {
+	Success *workflow.LoadWorkflowResp `thrift:"success,0,optional"`
+}
+
+func NewSymphonyAPILoadWorkflowResult() *SymphonyAPILoadWorkflowResult {
+	return &SymphonyAPILoadWorkflowResult{}
+}
+
+var SymphonyAPILoadWorkflowResult_Success_DEFAULT *workflow.LoadWorkflowResp
+
+func (p *SymphonyAPILoadWorkflowResult) GetSuccess() (v *workflow.LoadWorkflowResp) {
+	if !p.IsSetSuccess() {
+		return SymphonyAPILoadWorkflowResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_SymphonyAPILoadWorkflowResult = map[int16]string{
+	0: "success",
+}
+
+func (p *SymphonyAPILoadWorkflowResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *SymphonyAPILoadWorkflowResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				if err = iprot.Skip(fieldTypeId); err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_SymphonyAPILoadWorkflowResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *SymphonyAPILoadWorkflowResult) ReadField0(iprot thrift.TProtocol) error {
+	p.Success = workflow.NewLoadWorkflowResp()
+	if err := p.Success.Read(iprot); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *SymphonyAPILoadWorkflowResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("LoadWorkflow_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *SymphonyAPILoadWorkflowResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *SymphonyAPILoadWorkflowResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SymphonyAPILoadWorkflowResult(%+v)", *p)
+}
+
+type SymphonyAPIRenderWorkflowPromptArgs struct {
+	Req *workflow.RenderWorkflowPromptReq `thrift:"req,1"`
+}
+
+func NewSymphonyAPIRenderWorkflowPromptArgs() *SymphonyAPIRenderWorkflowPromptArgs {
+	return &SymphonyAPIRenderWorkflowPromptArgs{}
+}
+
+var SymphonyAPIRenderWorkflowPromptArgs_Req_DEFAULT *workflow.RenderWorkflowPromptReq
+
+func (p *SymphonyAPIRenderWorkflowPromptArgs) GetReq() (v *workflow.RenderWorkflowPromptReq) {
+	if !p.IsSetReq() {
+		return SymphonyAPIRenderWorkflowPromptArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+var fieldIDToName_SymphonyAPIRenderWorkflowPromptArgs = map[int16]string{
+	1: "req",
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				if err = iprot.Skip(fieldTypeId); err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_SymphonyAPIRenderWorkflowPromptArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptArgs) ReadField1(iprot thrift.TProtocol) error {
+	p.Req = workflow.NewRenderWorkflowPromptReq()
+	if err := p.Req.Read(iprot); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("RenderWorkflowPrompt_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("req", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Req.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SymphonyAPIRenderWorkflowPromptArgs(%+v)", *p)
+}
+
+type SymphonyAPIRenderWorkflowPromptResult struct {
+	Success *workflow.RenderWorkflowPromptResp `thrift:"success,0,optional"`
+}
+
+func NewSymphonyAPIRenderWorkflowPromptResult() *SymphonyAPIRenderWorkflowPromptResult {
+	return &SymphonyAPIRenderWorkflowPromptResult{}
+}
+
+var SymphonyAPIRenderWorkflowPromptResult_Success_DEFAULT *workflow.RenderWorkflowPromptResp
+
+func (p *SymphonyAPIRenderWorkflowPromptResult) GetSuccess() (v *workflow.RenderWorkflowPromptResp) {
+	if !p.IsSetSuccess() {
+		return SymphonyAPIRenderWorkflowPromptResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_SymphonyAPIRenderWorkflowPromptResult = map[int16]string{
+	0: "success",
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				if err = iprot.Skip(fieldTypeId); err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_SymphonyAPIRenderWorkflowPromptResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptResult) ReadField0(iprot thrift.TProtocol) error {
+	p.Success = workflow.NewRenderWorkflowPromptResp()
+	if err := p.Success.Read(iprot); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("RenderWorkflowPrompt_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *SymphonyAPIRenderWorkflowPromptResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SymphonyAPIRenderWorkflowPromptResult(%+v)", *p)
 }

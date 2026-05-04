@@ -80,3 +80,18 @@ func _validateworkspacepathMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _workflowMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _loadworkflowMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _renderworkflowpromptMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}

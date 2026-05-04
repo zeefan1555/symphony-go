@@ -9,6 +9,7 @@ import (
 
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/types"
+	coreworkflow "github.com/zeefan1555/symphony-go/internal/workflow"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
@@ -19,6 +20,7 @@ var (
 	ErrRefreshTriggerRequired   = errors.New("control refresh trigger required")
 	ErrWorkspaceManagerRequired = errors.New("workspace manager required")
 	ErrInvalidWorkspacePath     = errors.New("invalid workspace path")
+	ErrInvalidWorkflowPath      = errors.New("workflow path is required")
 )
 
 const (
@@ -47,6 +49,8 @@ type ControlService interface {
 	ValidateWorkspacePath(context.Context, string) (WorkspacePathValidation, error)
 	PrepareWorkspace(context.Context, string) (WorkspacePreparation, error)
 	CleanupWorkspace(context.Context, string) (WorkspaceCleanupResult, error)
+	LoadWorkflow(context.Context, string) (WorkflowSummary, error)
+	RenderWorkflowPrompt(context.Context, WorkflowRenderInput) (WorkflowRenderResult, error)
 	Refresh(context.Context) (RefreshResult, error)
 }
 
@@ -178,6 +182,54 @@ func (s *Service) CleanupWorkspace(ctx context.Context, path string) (WorkspaceC
 		WorkspacePath:   path,
 		Removed:         true,
 		ContainedInRoot: true,
+	}, nil
+}
+
+func (s *Service) LoadWorkflow(ctx context.Context, path string) (WorkflowSummary, error) {
+	if err := ctx.Err(); err != nil {
+		return WorkflowSummary{}, err
+	}
+	if strings.TrimSpace(path) == "" {
+		return WorkflowSummary{}, ErrInvalidWorkflowPath
+	}
+	loaded, err := coreworkflow.Load(path)
+	if err != nil {
+		return WorkflowSummary{}, err
+	}
+	return WorkflowSummary{
+		Boundary:     WorkflowBoundary(),
+		WorkflowPath: path,
+		StateNames:   append([]string(nil), loaded.Config.Tracker.ActiveStates...),
+	}, nil
+}
+
+func (s *Service) RenderWorkflowPrompt(ctx context.Context, input WorkflowRenderInput) (WorkflowRenderResult, error) {
+	if err := ctx.Err(); err != nil {
+		return WorkflowRenderResult{}, err
+	}
+	if strings.TrimSpace(input.WorkflowPath) == "" {
+		return WorkflowRenderResult{}, ErrInvalidWorkflowPath
+	}
+	loaded, err := coreworkflow.Load(input.WorkflowPath)
+	if err != nil {
+		return WorkflowRenderResult{}, err
+	}
+	var attempt *int
+	if input.HasAttempt {
+		value := input.Attempt
+		attempt = &value
+	}
+	prompt, err := coreworkflow.Render(loaded.PromptTemplate, types.Issue{
+		Identifier:  input.IssueIdentifier,
+		Title:       input.IssueTitle,
+		Description: input.IssueDescription,
+	}, attempt)
+	if err != nil {
+		return WorkflowRenderResult{}, err
+	}
+	return WorkflowRenderResult{
+		Boundary: WorkflowBoundary(),
+		Prompt:   prompt,
 	}, nil
 }
 
@@ -368,6 +420,34 @@ type WorkspaceCleanupResult struct {
 	WorkspacePath   string             `json:"workspace_path"`
 	Removed         bool               `json:"removed"`
 	ContainedInRoot bool               `json:"contained_in_root"`
+}
+
+func WorkflowBoundary() CapabilityBoundary {
+	return CapabilityBoundary{
+		Name:               "workflow.load_render",
+		Purpose:            "Load workflow configuration and render prompts through the handwritten workflow package.",
+		HandwrittenAdapter: "internal/workflow/scaffold",
+	}
+}
+
+type WorkflowRenderInput struct {
+	WorkflowPath     string `json:"workflow_path"`
+	IssueIdentifier  string `json:"issue_identifier"`
+	IssueTitle       string `json:"issue_title"`
+	IssueDescription string `json:"issue_description"`
+	HasAttempt       bool   `json:"has_attempt"`
+	Attempt          int    `json:"attempt"`
+}
+
+type WorkflowSummary struct {
+	Boundary     CapabilityBoundary `json:"boundary"`
+	WorkflowPath string             `json:"workflow_path"`
+	StateNames   []string           `json:"state_names"`
+}
+
+type WorkflowRenderResult struct {
+	Boundary CapabilityBoundary `json:"boundary"`
+	Prompt   string             `json:"prompt"`
 }
 
 type RuntimeState struct {

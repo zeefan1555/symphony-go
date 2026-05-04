@@ -181,18 +181,23 @@ func TestWorkflowScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
 	}
 }
 
-func TestWorkflowScaffoldIsNotExternalControlRoute(t *testing.T) {
+func TestWorkflowScaffoldIsExposedAsDiagnosticRoutes(t *testing.T) {
 	repo := "../../"
 	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
 
-	for _, forbidden := range []string{
-		"WorkflowScaffold",
+	for _, want := range []string{
+		`_v1.Group("/workflow"`,
+		`POST("/load"`,
+		`POST("/render-prompt"`,
+		"LoadWorkflow",
 		"RenderWorkflowPrompt",
-		"workflow",
 	} {
-		if strings.Contains(strings.ToLower(controlRoute), strings.ToLower(forbidden)) {
-			t.Fatalf("external control route exposes internal workflow scaffold %q", forbidden)
+		if !strings.Contains(controlRoute, want) {
+			t.Fatalf("diagnostic route missing workflow scaffold route %q", want)
 		}
+	}
+	if strings.Contains(controlRoute, "WorkflowScaffold") {
+		t.Fatalf("diagnostic route must expose actions, not the generated scaffold service name")
 	}
 }
 

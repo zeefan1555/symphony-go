@@ -707,6 +707,56 @@ func TestWorkspaceRoutesDelegateToControlService(t *testing.T) {
 	}
 }
 
+func TestWorkflowRoutesDelegateToControlService(t *testing.T) {
+	workflowPath := writeWorkflowFile(t)
+	service := control.NewService(snapshotProvider{snapshot: observability.NewSnapshot()})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	loadResp := postJSON(t, baseURL, "/api/v1/workflow/load", `{"workflow_path":"`+workflowPath+`"}`)
+	defer loadResp.Body.Close()
+	if loadResp.StatusCode != http.StatusOK {
+		t.Fatalf("load status = %d, want %d", loadResp.StatusCode, http.StatusOK)
+	}
+	var loaded struct {
+		Summary struct {
+			Boundary struct {
+				Name string `json:"name"`
+			} `json:"boundary"`
+			WorkflowPath string   `json:"workflow_path"`
+			StateNames   []string `json:"state_names"`
+		} `json:"summary"`
+	}
+	if err := json.NewDecoder(loadResp.Body).Decode(&loaded); err != nil {
+		t.Fatalf("decode load response: %v", err)
+	}
+	if loaded.Summary.Boundary.Name != "workflow.load_render" {
+		t.Fatalf("workflow boundary = %q, want load_render", loaded.Summary.Boundary.Name)
+	}
+	if loaded.Summary.WorkflowPath != workflowPath || strings.Join(loaded.Summary.StateNames, ",") != "Todo,In Progress" {
+		t.Fatalf("summary = %#v, want workflow path and active states", loaded.Summary)
+	}
+
+	renderResp := postJSON(t, baseURL, "/api/v1/workflow/render-prompt", `{"workflow_path":"`+workflowPath+`","issue_identifier":"ZEE-59","issue_title":"Workflow tracer","issue_description":"Render through HTTP route.","has_attempt":true,"attempt":2}`)
+	defer renderResp.Body.Close()
+	if renderResp.StatusCode != http.StatusOK {
+		t.Fatalf("render status = %d, want %d", renderResp.StatusCode, http.StatusOK)
+	}
+	var rendered struct {
+		Result struct {
+			Prompt string `json:"prompt"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(renderResp.Body).Decode(&rendered); err != nil {
+		t.Fatalf("decode render response: %v", err)
+	}
+	for _, want := range []string{"ZEE-59", "Workflow tracer", "Render through HTTP route.", "attempt 2"} {
+		if !strings.Contains(rendered.Result.Prompt, want) {
+			t.Fatalf("rendered prompt missing %q:\n%s", want, rendered.Result.Prompt)
+		}
+	}
+}
+
 func postJSON(t *testing.T, baseURL, path, body string) *http.Response {
 	t.Helper()
 
@@ -754,4 +804,28 @@ func startTestServer(t *testing.T, server *hertzserver.Server) string {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func writeWorkflowFile(t *testing.T) string {
+	t.Helper()
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	path := filepath.Join(t.TempDir(), "WORKFLOW.md")
+	content := `---
+tracker:
+  kind: linear
+  project_slug: demo
+  active_states:
+    - Todo
+    - In Progress
+---
+Issue {{ issue.identifier }}: {{ issue.title }}
+Description: {{ issue.description }}
+{% if attempt %}
+attempt {{ attempt }}
+{% endif %}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
