@@ -7,6 +7,7 @@ import (
 
 	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
 	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
+	orchestratormodel "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
 )
 
 type ScaffoldStatus struct {
@@ -17,6 +18,7 @@ type ControlService interface {
 	GetScaffold(context.Context) (ScaffoldStatus, error)
 	GetState(context.Context) (*commonmodel.RuntimeState, error)
 	GetIssue(context.Context, string) (*commonmodel.IssueDetail, error)
+	ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error)
 	Refresh(context.Context) (*controlmodel.RefreshResp, error)
 }
 
@@ -32,6 +34,10 @@ func (f ControlFunc) GetState(context.Context) (*commonmodel.RuntimeState, error
 
 func (f ControlFunc) GetIssue(context.Context, string) (*commonmodel.IssueDetail, error) {
 	return nil, NewError(404, "issue_not_found", "issue not found")
+}
+
+func (f ControlFunc) ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error) {
+	return nil, NewError(404, "issue_run_not_found", "issue run not found")
 }
 
 func (f ControlFunc) Refresh(context.Context) (*controlmodel.RefreshResp, error) {

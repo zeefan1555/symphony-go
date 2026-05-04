@@ -545,6 +545,48 @@ func TestScaffoldRouteCallsAuthoredControlService(t *testing.T) {
 	}
 }
 
+func TestOrchestratorRouteReturnsIssueRunProjection(t *testing.T) {
+	service := control.NewService(snapshotProvider{snapshot: observability.Snapshot{
+		Running: []observability.RunningEntry{{
+			IssueIdentifier: "ZEE-56",
+			State:           "In Progress",
+		}},
+	}})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp := postJSON(t, baseURL, "/api/v1/orchestrator/project-issue-run", `{"issue_identifier":"ZEE-56"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		Projection struct {
+			Boundary struct {
+				Name               string `json:"name"`
+				HandwrittenAdapter string `json:"handwritten_adapter"`
+			} `json:"boundary"`
+			IssueIdentifier string `json:"issue_identifier"`
+			RuntimeState    string `json:"runtime_state"`
+		} `json:"projection"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Projection.Boundary.Name != "orchestrator.issue_run_projection" {
+		t.Fatalf("boundary name = %q, want orchestrator issue-run projection", body.Projection.Boundary.Name)
+	}
+	wantAdapter := "internal/" + "orchestrator/scaffold"
+	if body.Projection.Boundary.HandwrittenAdapter != wantAdapter {
+		t.Fatalf("adapter = %q, want orchestrator scaffold adapter", body.Projection.Boundary.HandwrittenAdapter)
+	}
+	if body.Projection.IssueIdentifier != "ZEE-56" || body.Projection.RuntimeState != "running" {
+		t.Fatalf("projection = %#v, want running ZEE-56", body.Projection)
+	}
+}
+
 func postJSON(t *testing.T, baseURL, path, body string) *http.Response {
 	t.Helper()
 

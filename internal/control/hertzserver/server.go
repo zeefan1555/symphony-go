@@ -10,6 +10,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app/server"
 	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
 	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
+	orchestratormodel "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
 	"github.com/zeefan1555/symphony-go/biz/router"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
 	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
@@ -88,6 +89,14 @@ func (a controlAdapter) GetIssue(ctx context.Context, issueIdentifier string) (*
 		return nil, controlHTTPError(err)
 	}
 	return issueDetailModel(detail), nil
+}
+
+func (a controlAdapter) ProjectIssueRun(ctx context.Context, issueIdentifier string) (*orchestratormodel.ProjectIssueRunResp, error) {
+	projection, err := a.control.ProjectIssueRun(ctx, issueIdentifier)
+	if err != nil {
+		return nil, controlHTTPError(err)
+	}
+	return issueRunProjectionModel(projection), nil
 }
 
 func (a controlAdapter) Refresh(ctx context.Context) (*controlmodel.RefreshResp, error) {
@@ -228,6 +237,20 @@ func retryRunModel(entry controlplane.Retry) *commonmodel.RetryRun {
 		modelEntry.WorkspacePath = stringPtr(entry.WorkspacePath)
 	}
 	return modelEntry
+}
+
+func issueRunProjectionModel(projection controlplane.IssueRunProjection) *orchestratormodel.ProjectIssueRunResp {
+	return &orchestratormodel.ProjectIssueRunResp{
+		Projection: &orchestratormodel.IssueRunProjection{
+			Boundary: &commonmodel.CapabilityBoundary{
+				Name:               projection.Boundary.Name,
+				Purpose:            projection.Boundary.Purpose,
+				HandwrittenAdapter: projection.Boundary.HandwrittenAdapter,
+			},
+			IssueIdentifier: projection.IssueIdentifier,
+			RuntimeState:    projection.RuntimeState,
+		},
+	}
 }
 
 func formatControlTime(value time.Time) string {

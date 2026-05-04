@@ -1,5 +1,11 @@
 namespace go common
 
+struct CapabilityBoundary {
+    1: required string name
+    2: required string purpose
+    3: required string handwritten_adapter
+}
+
 struct RuntimeCounts {
     1: required i32 running
     2: required i32 retrying

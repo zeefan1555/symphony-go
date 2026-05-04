@@ -64,18 +64,21 @@ func TestOrchestratorScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
 	}
 }
 
-func TestOrchestratorScaffoldIsNotExternalControlRoute(t *testing.T) {
+func TestOrchestratorScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 	repo := "../../"
 	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
 
-	for _, forbidden := range []string{
+	for _, want := range []string{
+		`_v1.Group("/orchestrator"`,
+		`POST("/project-issue-run"`,
 		"ProjectIssueRun",
-		"OrchestratorScaffold",
-		"orchestrator",
 	} {
-		if strings.Contains(controlRoute, forbidden) {
-			t.Fatalf("external control route exposes internal orchestrator scaffold %q", forbidden)
+		if !strings.Contains(controlRoute, want) {
+			t.Fatalf("diagnostic route missing orchestrator scaffold route %q", want)
 		}
+	}
+	if strings.Contains(controlRoute, "OrchestratorScaffold") {
+		t.Fatalf("diagnostic route must expose the action, not the generated scaffold service name")
 	}
 }
 

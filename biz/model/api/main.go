@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
 	"github.com/zeefan1555/symphony-go/biz/model/control"
+	"github.com/zeefan1555/symphony-go/biz/model/orchestrator"
 )
 
 type SymphonyAPI interface {
@@ -17,6 +18,8 @@ type SymphonyAPI interface {
 	Refresh(ctx context.Context, req *control.RefreshReq) (r *control.RefreshResp, err error)
 
 	GetIssue(ctx context.Context, req *control.GetIssueReq) (r *control.GetIssueResp, err error)
+
+	ProjectIssueRun(ctx context.Context, req *orchestrator.ProjectIssueRunReq) (r *orchestrator.ProjectIssueRunResp, err error)
 }
 
 type SymphonyAPIClient struct {
@@ -81,6 +84,15 @@ func (p *SymphonyAPIClient) GetIssue(ctx context.Context, req *control.GetIssueR
 	}
 	return _result.GetSuccess(), nil
 }
+func (p *SymphonyAPIClient) ProjectIssueRun(ctx context.Context, req *orchestrator.ProjectIssueRunReq) (r *orchestrator.ProjectIssueRunResp, err error) {
+	var _args SymphonyAPIProjectIssueRunArgs
+	_args.Req = req
+	var _result SymphonyAPIProjectIssueRunResult
+	if err = p.Client_().Call(ctx, "ProjectIssueRun", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
 
 type SymphonyAPIProcessor struct {
 	processorMap map[string]thrift.TProcessorFunction
@@ -106,6 +118,7 @@ func NewSymphonyAPIProcessor(handler SymphonyAPI) *SymphonyAPIProcessor {
 	self.AddToProcessorMap("GetState", &symphonyAPIProcessorGetState{handler: handler})
 	self.AddToProcessorMap("Refresh", &symphonyAPIProcessorRefresh{handler: handler})
 	self.AddToProcessorMap("GetIssue", &symphonyAPIProcessorGetIssue{handler: handler})
+	self.AddToProcessorMap("ProjectIssueRun", &symphonyAPIProcessorProjectIssueRun{handler: handler})
 	return self
 }
 func (p *SymphonyAPIProcessor) Process(ctx context.Context, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
@@ -301,6 +314,54 @@ func (p *symphonyAPIProcessorGetIssue) Process(ctx context.Context, seqId int32,
 		result.Success = retval
 	}
 	if err2 = oprot.WriteMessageBegin("GetIssue", thrift.REPLY, seqId); err2 != nil {
+		err = err2
+	}
+	if err2 = result.Write(oprot); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.WriteMessageEnd(); err == nil && err2 != nil {
+		err = err2
+	}
+	if err2 = oprot.Flush(ctx); err == nil && err2 != nil {
+		err = err2
+	}
+	if err != nil {
+		return
+	}
+	return true, err
+}
+
+type symphonyAPIProcessorProjectIssueRun struct {
+	handler SymphonyAPI
+}
+
+func (p *symphonyAPIProcessorProjectIssueRun) Process(ctx context.Context, seqId int32, iprot, oprot thrift.TProtocol) (success bool, err thrift.TException) {
+	args := SymphonyAPIProjectIssueRunArgs{}
+	if err = args.Read(iprot); err != nil {
+		iprot.ReadMessageEnd()
+		x := thrift.NewTApplicationException(thrift.PROTOCOL_ERROR, err.Error())
+		oprot.WriteMessageBegin("ProjectIssueRun", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return false, err
+	}
+
+	iprot.ReadMessageEnd()
+	var err2 error
+	result := SymphonyAPIProjectIssueRunResult{}
+	var retval *orchestrator.ProjectIssueRunResp
+	if retval, err2 = p.handler.ProjectIssueRun(ctx, args.Req); err2 != nil {
+		x := thrift.NewTApplicationException(thrift.INTERNAL_ERROR, "Internal error processing ProjectIssueRun: "+err2.Error())
+		oprot.WriteMessageBegin("ProjectIssueRun", thrift.EXCEPTION, seqId)
+		x.Write(oprot)
+		oprot.WriteMessageEnd()
+		oprot.Flush(ctx)
+		return true, err2
+	} else {
+		result.Success = retval
+	}
+	if err2 = oprot.WriteMessageBegin("ProjectIssueRun", thrift.REPLY, seqId); err2 != nil {
 		err = err2
 	}
 	if err2 = result.Write(oprot); err == nil && err2 != nil {
@@ -1484,4 +1545,296 @@ func (p *SymphonyAPIGetIssueResult) String() string {
 		return "<nil>"
 	}
 	return fmt.Sprintf("SymphonyAPIGetIssueResult(%+v)", *p)
+}
+
+type SymphonyAPIProjectIssueRunArgs struct {
+	Req *orchestrator.ProjectIssueRunReq `thrift:"req,1"`
+}
+
+func NewSymphonyAPIProjectIssueRunArgs() *SymphonyAPIProjectIssueRunArgs {
+	return &SymphonyAPIProjectIssueRunArgs{}
+}
+
+var SymphonyAPIProjectIssueRunArgs_Req_DEFAULT *orchestrator.ProjectIssueRunReq
+
+func (p *SymphonyAPIProjectIssueRunArgs) GetReq() (v *orchestrator.ProjectIssueRunReq) {
+	if !p.IsSetReq() {
+		return SymphonyAPIProjectIssueRunArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+var fieldIDToName_SymphonyAPIProjectIssueRunArgs = map[int16]string{
+	1: "req",
+}
+
+func (p *SymphonyAPIProjectIssueRunArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *SymphonyAPIProjectIssueRunArgs) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 1:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField1(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				if err = iprot.Skip(fieldTypeId); err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_SymphonyAPIProjectIssueRunArgs[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *SymphonyAPIProjectIssueRunArgs) ReadField1(iprot thrift.TProtocol) error {
+	p.Req = orchestrator.NewProjectIssueRunReq()
+	if err := p.Req.Read(iprot); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *SymphonyAPIProjectIssueRunArgs) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("ProjectIssueRun_args"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField1(oprot); err != nil {
+			fieldId = 1
+			goto WriteFieldError
+		}
+
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *SymphonyAPIProjectIssueRunArgs) writeField1(oprot thrift.TProtocol) (err error) {
+	if err = oprot.WriteFieldBegin("req", thrift.STRUCT, 1); err != nil {
+		goto WriteFieldBeginError
+	}
+	if err := p.Req.Write(oprot); err != nil {
+		return err
+	}
+	if err = oprot.WriteFieldEnd(); err != nil {
+		goto WriteFieldEndError
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 1 end error: ", p), err)
+}
+
+func (p *SymphonyAPIProjectIssueRunArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SymphonyAPIProjectIssueRunArgs(%+v)", *p)
+}
+
+type SymphonyAPIProjectIssueRunResult struct {
+	Success *orchestrator.ProjectIssueRunResp `thrift:"success,0,optional"`
+}
+
+func NewSymphonyAPIProjectIssueRunResult() *SymphonyAPIProjectIssueRunResult {
+	return &SymphonyAPIProjectIssueRunResult{}
+}
+
+var SymphonyAPIProjectIssueRunResult_Success_DEFAULT *orchestrator.ProjectIssueRunResp
+
+func (p *SymphonyAPIProjectIssueRunResult) GetSuccess() (v *orchestrator.ProjectIssueRunResp) {
+	if !p.IsSetSuccess() {
+		return SymphonyAPIProjectIssueRunResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+var fieldIDToName_SymphonyAPIProjectIssueRunResult = map[int16]string{
+	0: "success",
+}
+
+func (p *SymphonyAPIProjectIssueRunResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *SymphonyAPIProjectIssueRunResult) Read(iprot thrift.TProtocol) (err error) {
+
+	var fieldTypeId thrift.TType
+	var fieldId int16
+
+	if _, err = iprot.ReadStructBegin(); err != nil {
+		goto ReadStructBeginError
+	}
+
+	for {
+		_, fieldTypeId, fieldId, err = iprot.ReadFieldBegin()
+		if err != nil {
+			goto ReadFieldBeginError
+		}
+		if fieldTypeId == thrift.STOP {
+			break
+		}
+
+		switch fieldId {
+		case 0:
+			if fieldTypeId == thrift.STRUCT {
+				if err = p.ReadField0(iprot); err != nil {
+					goto ReadFieldError
+				}
+			} else {
+				if err = iprot.Skip(fieldTypeId); err != nil {
+					goto SkipFieldError
+				}
+			}
+		default:
+			if err = iprot.Skip(fieldTypeId); err != nil {
+				goto SkipFieldError
+			}
+		}
+
+		if err = iprot.ReadFieldEnd(); err != nil {
+			goto ReadFieldEndError
+		}
+	}
+	if err = iprot.ReadStructEnd(); err != nil {
+		goto ReadStructEndError
+	}
+
+	return nil
+ReadStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct begin error: ", p), err)
+ReadFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d begin error: ", p, fieldId), err)
+ReadFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T read field %d '%s' error: ", p, fieldId, fieldIDToName_SymphonyAPIProjectIssueRunResult[fieldId]), err)
+SkipFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T field %d skip type %d error: ", p, fieldId, fieldTypeId), err)
+
+ReadFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read field end error", p), err)
+ReadStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T read struct end error: ", p), err)
+}
+
+func (p *SymphonyAPIProjectIssueRunResult) ReadField0(iprot thrift.TProtocol) error {
+	p.Success = orchestrator.NewProjectIssueRunResp()
+	if err := p.Success.Read(iprot); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *SymphonyAPIProjectIssueRunResult) Write(oprot thrift.TProtocol) (err error) {
+	var fieldId int16
+	if err = oprot.WriteStructBegin("ProjectIssueRun_result"); err != nil {
+		goto WriteStructBeginError
+	}
+	if p != nil {
+		if err = p.writeField0(oprot); err != nil {
+			fieldId = 0
+			goto WriteFieldError
+		}
+
+	}
+	if err = oprot.WriteFieldStop(); err != nil {
+		goto WriteFieldStopError
+	}
+	if err = oprot.WriteStructEnd(); err != nil {
+		goto WriteStructEndError
+	}
+	return nil
+WriteStructBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
+WriteFieldError:
+	return thrift.PrependError(fmt.Sprintf("%T write field %d error: ", p, fieldId), err)
+WriteFieldStopError:
+	return thrift.PrependError(fmt.Sprintf("%T write field stop error: ", p), err)
+WriteStructEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write struct end error: ", p), err)
+}
+
+func (p *SymphonyAPIProjectIssueRunResult) writeField0(oprot thrift.TProtocol) (err error) {
+	if p.IsSetSuccess() {
+		if err = oprot.WriteFieldBegin("success", thrift.STRUCT, 0); err != nil {
+			goto WriteFieldBeginError
+		}
+		if err := p.Success.Write(oprot); err != nil {
+			return err
+		}
+		if err = oprot.WriteFieldEnd(); err != nil {
+			goto WriteFieldEndError
+		}
+	}
+	return nil
+WriteFieldBeginError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 begin error: ", p), err)
+WriteFieldEndError:
+	return thrift.PrependError(fmt.Sprintf("%T write field 0 end error: ", p), err)
+}
+
+func (p *SymphonyAPIProjectIssueRunResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SymphonyAPIProjectIssueRunResult(%+v)", *p)
 }
