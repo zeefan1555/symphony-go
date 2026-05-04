@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 
+	codexsessionmodel "github.com/zeefan1555/symphony-go/biz/model/codexsession"
 	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
 	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
 	orchestratormodel "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
@@ -27,6 +28,7 @@ type ControlService interface {
 	CleanupWorkspace(context.Context, string) (*workspacemodel.CleanupWorkspaceResp, error)
 	LoadWorkflow(context.Context, string) (*workflowmodel.LoadWorkflowResp, error)
 	RenderWorkflowPrompt(context.Context, WorkflowRenderRequest) (*workflowmodel.RenderWorkflowPromptResp, error)
+	RunTurn(context.Context, CodexTurnRequest) (*codexsessionmodel.RunTurnResp, error)
 	Refresh(context.Context) (*controlmodel.RefreshResp, error)
 }
 
@@ -37,6 +39,13 @@ type WorkflowRenderRequest struct {
 	IssueDescription string
 	HasAttempt       bool
 	Attempt          int32
+}
+
+type CodexTurnRequest struct {
+	IssueIdentifier string
+	PromptName      string
+	WorkspacePath   string
+	PromptText      string
 }
 
 type ControlFunc func(context.Context) (ScaffoldStatus, error)
@@ -79,6 +88,10 @@ func (f ControlFunc) LoadWorkflow(context.Context, string) (*workflowmodel.LoadW
 
 func (f ControlFunc) RenderWorkflowPrompt(context.Context, WorkflowRenderRequest) (*workflowmodel.RenderWorkflowPromptResp, error) {
 	return nil, NewError(503, "workflow_unavailable", "workflow renderer is unavailable")
+}
+
+func (f ControlFunc) RunTurn(context.Context, CodexTurnRequest) (*codexsessionmodel.RunTurnResp, error) {
+	return nil, NewError(503, "codex_runner_unavailable", "codex runner is unavailable")
 }
 
 func (f ControlFunc) Refresh(context.Context) (*controlmodel.RefreshResp, error) {

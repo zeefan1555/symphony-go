@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
+	codexsessionmodel "github.com/zeefan1555/symphony-go/biz/model/codexsession"
 	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
 	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
 	orchestratormodel "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
@@ -156,6 +157,19 @@ func (a controlAdapter) RenderWorkflowPrompt(ctx context.Context, request hertzh
 	return &workflowmodel.RenderWorkflowPromptResp{Result: workflowRenderResultModel(result)}, nil
 }
 
+func (a controlAdapter) RunTurn(ctx context.Context, request hertzhook.CodexTurnRequest) (*codexsessionmodel.RunTurnResp, error) {
+	summary, err := a.control.RunCodexTurn(ctx, controlplane.CodexTurnInput{
+		IssueIdentifier: request.IssueIdentifier,
+		PromptName:      request.PromptName,
+		WorkspacePath:   request.WorkspacePath,
+		PromptText:      request.PromptText,
+	})
+	if err != nil {
+		return nil, controlCodexHTTPError(err)
+	}
+	return &codexsessionmodel.RunTurnResp{Summary: codexTurnSummaryModel(summary)}, nil
+}
+
 func (a controlAdapter) Refresh(ctx context.Context) (*controlmodel.RefreshResp, error) {
 	result, err := a.control.Refresh(ctx)
 	if err != nil {
@@ -192,6 +206,17 @@ func controlWorkflowHTTPError(err error) error {
 	switch {
 	case errors.Is(err, controlplane.ErrInvalidWorkflowPath):
 		return hertzhook.NewError(400, "invalid_workflow_path", "workflow path is required")
+	default:
+		return err
+	}
+}
+
+func controlCodexHTTPError(err error) error {
+	switch {
+	case errors.Is(err, controlplane.ErrInvalidCodexTurnRequest):
+		return hertzhook.NewError(400, "invalid_codex_turn_request", "issue identifier, workspace path, and prompt text are required")
+	case errors.Is(err, controlplane.ErrCodexRunnerRequired):
+		return hertzhook.NewError(503, "codex_runner_unavailable", "codex runner is unavailable")
 	default:
 		return err
 	}
@@ -365,6 +390,14 @@ func workflowRenderResultModel(result controlplane.WorkflowRenderResult) *workfl
 	return &workflowmodel.WorkflowRenderResult{
 		Boundary: capabilityBoundaryModel(result.Boundary),
 		Prompt:   result.Prompt,
+	}
+}
+
+func codexTurnSummaryModel(summary controlplane.CodexTurnSummary) *codexsessionmodel.CodexTurnSummary {
+	return &codexsessionmodel.CodexTurnSummary{
+		Boundary:  capabilityBoundaryModel(summary.Boundary),
+		SessionID: summary.SessionID,
+		TurnCount: summary.TurnCount,
 	}
 }
 

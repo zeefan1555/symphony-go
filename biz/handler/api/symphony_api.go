@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	codexsession "github.com/zeefan1555/symphony-go/biz/model/codexsession"
 	common "github.com/zeefan1555/symphony-go/biz/model/common"
 	control "github.com/zeefan1555/symphony-go/biz/model/control"
 	orchestrator "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
@@ -268,6 +269,35 @@ func RenderWorkflowPrompt(ctx context.Context, c *app.RequestContext) {
 		IssueDescription: req.IssueDescription,
 		HasAttempt:       req.HasAttempt,
 		Attempt:          req.Attempt,
+	})
+	if err != nil {
+		envelope, status := hertzhook.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// RunTurn .
+// @router /api/v1/codex-session/run-turn [POST]
+func RunTurn(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req codexsession.RunTurnReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_codex_turn_request",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzhook.CurrentService().RunTurn(ctx, hertzhook.CodexTurnRequest{
+		IssueIdentifier: req.IssueIdentifier,
+		PromptName:      req.PromptName,
+		WorkspacePath:   req.WorkspacePath,
+		PromptText:      req.PromptText,
 	})
 	if err != nil {
 		envelope, status := hertzhook.ErrorEnvelope(err)

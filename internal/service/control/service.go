@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/types"
 	coreworkflow "github.com/zeefan1555/symphony-go/internal/workflow"
@@ -21,6 +22,8 @@ var (
 	ErrWorkspaceManagerRequired = errors.New("workspace manager required")
 	ErrInvalidWorkspacePath     = errors.New("invalid workspace path")
 	ErrInvalidWorkflowPath      = errors.New("workflow path is required")
+	ErrCodexRunnerRequired      = errors.New("codex runner required")
+	ErrInvalidCodexTurnRequest  = errors.New("invalid codex turn request")
 )
 
 const (
@@ -40,6 +43,10 @@ type RefreshTrigger interface {
 	RequestRefresh(context.Context) (bool, error)
 }
 
+type CodexSessionRunner interface {
+	RunSession(context.Context, corecodex.SessionRequest, func(corecodex.Event)) (corecodex.SessionResult, error)
+}
+
 type ControlService interface {
 	GetScaffold(context.Context) (ScaffoldStatus, error)
 	RuntimeState(context.Context) (RuntimeState, error)
@@ -51,12 +58,14 @@ type ControlService interface {
 	CleanupWorkspace(context.Context, string) (WorkspaceCleanupResult, error)
 	LoadWorkflow(context.Context, string) (WorkflowSummary, error)
 	RenderWorkflowPrompt(context.Context, WorkflowRenderInput) (WorkflowRenderResult, error)
+	RunCodexTurn(context.Context, CodexTurnInput) (CodexTurnSummary, error)
 	Refresh(context.Context) (RefreshResult, error)
 }
 
 type Service struct {
 	provider  SnapshotProvider
 	workspace *coreworkspace.Manager
+	runner    CodexSessionRunner
 }
 
 func NewService(provider SnapshotProvider) *Service {
@@ -65,6 +74,14 @@ func NewService(provider SnapshotProvider) *Service {
 
 func NewServiceWithWorkspace(provider SnapshotProvider, manager *coreworkspace.Manager) *Service {
 	return &Service{provider: provider, workspace: manager}
+}
+
+func NewServiceWithCodexRunner(provider SnapshotProvider, runner CodexSessionRunner) *Service {
+	return &Service{provider: provider, runner: runner}
+}
+
+func NewServiceWithWorkspaceAndCodexRunner(provider SnapshotProvider, manager *coreworkspace.Manager, runner CodexSessionRunner) *Service {
+	return &Service{provider: provider, workspace: manager, runner: runner}
 }
 
 func (s *Service) GetScaffold(ctx context.Context) (ScaffoldStatus, error) {
@@ -230,6 +247,33 @@ func (s *Service) RenderWorkflowPrompt(ctx context.Context, input WorkflowRender
 	return WorkflowRenderResult{
 		Boundary: WorkflowBoundary(),
 		Prompt:   prompt,
+	}, nil
+}
+
+func (s *Service) RunCodexTurn(ctx context.Context, input CodexTurnInput) (CodexTurnSummary, error) {
+	if err := ctx.Err(); err != nil {
+		return CodexTurnSummary{}, err
+	}
+	if strings.TrimSpace(input.IssueIdentifier) == "" || strings.TrimSpace(input.WorkspacePath) == "" || strings.TrimSpace(input.PromptText) == "" {
+		return CodexTurnSummary{}, ErrInvalidCodexTurnRequest
+	}
+	if s == nil || s.runner == nil {
+		return CodexTurnSummary{}, ErrCodexRunnerRequired
+	}
+	result, err := s.runner.RunSession(ctx, corecodex.SessionRequest{
+		WorkspacePath: input.WorkspacePath,
+		Issue:         types.Issue{Identifier: input.IssueIdentifier},
+		Prompts: []corecodex.TurnPrompt{{
+			Text: input.PromptText,
+		}},
+	}, nil)
+	if err != nil {
+		return CodexTurnSummary{}, err
+	}
+	return CodexTurnSummary{
+		Boundary:  CodexSessionBoundary(),
+		SessionID: result.SessionID,
+		TurnCount: int32(len(result.Turns)),
 	}, nil
 }
 
@@ -448,6 +492,27 @@ type WorkflowSummary struct {
 type WorkflowRenderResult struct {
 	Boundary CapabilityBoundary `json:"boundary"`
 	Prompt   string             `json:"prompt"`
+}
+
+func CodexSessionBoundary() CapabilityBoundary {
+	return CapabilityBoundary{
+		Name:               "codex_session.turn",
+		Purpose:            "Run a single Codex turn through the handwritten Codex runner without exposing app-server protocol details.",
+		HandwrittenAdapter: "internal/codex/scaffold",
+	}
+}
+
+type CodexTurnInput struct {
+	IssueIdentifier string `json:"issue_identifier"`
+	PromptName      string `json:"prompt_name"`
+	WorkspacePath   string `json:"workspace_path"`
+	PromptText      string `json:"prompt_text"`
+}
+
+type CodexTurnSummary struct {
+	Boundary  CapabilityBoundary `json:"boundary"`
+	SessionID string             `json:"session_id"`
+	TurnCount int32              `json:"turn_count"`
 }
 
 type RuntimeState struct {
