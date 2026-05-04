@@ -3,10 +3,13 @@ package control
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/zeefan1555/symphony-go/internal/observability"
+	"github.com/zeefan1555/symphony-go/internal/types"
+	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
 var (
@@ -14,6 +17,8 @@ var (
 	ErrInvalidIssueIdentifier   = errors.New("issue identifier is required")
 	ErrIssueNotFound            = errors.New("issue not found")
 	ErrRefreshTriggerRequired   = errors.New("control refresh trigger required")
+	ErrWorkspaceManagerRequired = errors.New("workspace manager required")
+	ErrInvalidWorkspacePath     = errors.New("invalid workspace path")
 )
 
 const (
@@ -38,15 +43,24 @@ type ControlService interface {
 	RuntimeState(context.Context) (RuntimeState, error)
 	IssueDetail(context.Context, string) (IssueDetail, error)
 	ProjectIssueRun(context.Context, string) (IssueRunProjection, error)
+	ResolveWorkspacePath(context.Context, string) (WorkspacePreparation, error)
+	ValidateWorkspacePath(context.Context, string) (WorkspacePathValidation, error)
+	PrepareWorkspace(context.Context, string) (WorkspacePreparation, error)
+	CleanupWorkspace(context.Context, string) (WorkspaceCleanupResult, error)
 	Refresh(context.Context) (RefreshResult, error)
 }
 
 type Service struct {
-	provider SnapshotProvider
+	provider  SnapshotProvider
+	workspace *coreworkspace.Manager
 }
 
 func NewService(provider SnapshotProvider) *Service {
 	return &Service{provider: provider}
+}
+
+func NewServiceWithWorkspace(provider SnapshotProvider, manager *coreworkspace.Manager) *Service {
+	return &Service{provider: provider, workspace: manager}
 }
 
 func (s *Service) GetScaffold(ctx context.Context) (ScaffoldStatus, error) {
@@ -93,6 +107,78 @@ func (s *Service) ProjectIssueRun(ctx context.Context, issueIdentifier string) (
 		return IssueRunProjection{}, ErrSnapshotProviderRequired
 	}
 	return ProjectIssueRunState(ProjectSnapshot(s.provider.Snapshot()), issueIdentifier), nil
+}
+
+func (s *Service) ResolveWorkspacePath(ctx context.Context, issueIdentifier string) (WorkspacePreparation, error) {
+	if err := ctx.Err(); err != nil {
+		return WorkspacePreparation{}, err
+	}
+	if strings.TrimSpace(issueIdentifier) == "" {
+		return WorkspacePreparation{}, ErrInvalidIssueIdentifier
+	}
+	if s == nil || s.workspace == nil {
+		return WorkspacePreparation{}, ErrWorkspaceManagerRequired
+	}
+	path, err := s.workspace.PathForIssue(types.Issue{Identifier: issueIdentifier})
+	if err != nil {
+		return WorkspacePreparation{}, err
+	}
+	return workspacePreparation(path, s.workspace.ValidateWorkspacePath(path) == nil), nil
+}
+
+func (s *Service) ValidateWorkspacePath(ctx context.Context, path string) (WorkspacePathValidation, error) {
+	if err := ctx.Err(); err != nil {
+		return WorkspacePathValidation{}, err
+	}
+	if s == nil || s.workspace == nil {
+		return WorkspacePathValidation{}, ErrWorkspaceManagerRequired
+	}
+	return WorkspacePathValidation{
+		Boundary:        WorkspaceBoundary(),
+		WorkspacePath:   path,
+		ContainedInRoot: s.workspace.ValidateWorkspacePath(path) == nil,
+	}, nil
+}
+
+func (s *Service) PrepareWorkspace(ctx context.Context, issueIdentifier string) (WorkspacePreparation, error) {
+	if err := ctx.Err(); err != nil {
+		return WorkspacePreparation{}, err
+	}
+	if strings.TrimSpace(issueIdentifier) == "" {
+		return WorkspacePreparation{}, ErrInvalidIssueIdentifier
+	}
+	if s == nil || s.workspace == nil {
+		return WorkspacePreparation{}, ErrWorkspaceManagerRequired
+	}
+	path, _, err := s.workspace.Ensure(ctx, types.Issue{Identifier: issueIdentifier})
+	if err != nil {
+		return WorkspacePreparation{}, err
+	}
+	return workspacePreparation(path, s.workspace.ValidateWorkspacePath(path) == nil), nil
+}
+
+func (s *Service) CleanupWorkspace(ctx context.Context, path string) (WorkspaceCleanupResult, error) {
+	if err := ctx.Err(); err != nil {
+		return WorkspaceCleanupResult{}, err
+	}
+	if strings.TrimSpace(path) == "" {
+		return WorkspaceCleanupResult{}, ErrInvalidWorkspacePath
+	}
+	if s == nil || s.workspace == nil {
+		return WorkspaceCleanupResult{}, ErrWorkspaceManagerRequired
+	}
+	if err := s.workspace.ValidateWorkspacePath(path); err != nil {
+		return WorkspaceCleanupResult{}, fmt.Errorf("%w: %v", ErrInvalidWorkspacePath, err)
+	}
+	if err := s.workspace.Remove(ctx, path); err != nil {
+		return WorkspaceCleanupResult{}, err
+	}
+	return WorkspaceCleanupResult{
+		Boundary:        WorkspaceBoundary(),
+		WorkspacePath:   path,
+		Removed:         true,
+		ContainedInRoot: true,
+	}, nil
 }
 
 func (s *Service) Refresh(ctx context.Context) (RefreshResult, error) {
@@ -247,6 +333,41 @@ type IssueRunProjection struct {
 	Boundary        CapabilityBoundary `json:"boundary"`
 	IssueIdentifier string             `json:"issue_identifier"`
 	RuntimeState    string             `json:"runtime_state"`
+}
+
+func WorkspaceBoundary() CapabilityBoundary {
+	return CapabilityBoundary{
+		Name:               "workspace.lifecycle",
+		Purpose:            "Resolve, validate, prepare, and clean up issue workspaces through the handwritten workspace manager.",
+		HandwrittenAdapter: "internal/workspace/scaffold",
+	}
+}
+
+func workspacePreparation(path string, contained bool) WorkspacePreparation {
+	return WorkspacePreparation{
+		Boundary:        WorkspaceBoundary(),
+		WorkspacePath:   path,
+		ContainedInRoot: contained,
+	}
+}
+
+type WorkspacePreparation struct {
+	Boundary        CapabilityBoundary `json:"boundary"`
+	WorkspacePath   string             `json:"workspace_path"`
+	ContainedInRoot bool               `json:"contained_in_root"`
+}
+
+type WorkspacePathValidation struct {
+	Boundary        CapabilityBoundary `json:"boundary"`
+	WorkspacePath   string             `json:"workspace_path"`
+	ContainedInRoot bool               `json:"contained_in_root"`
+}
+
+type WorkspaceCleanupResult struct {
+	Boundary        CapabilityBoundary `json:"boundary"`
+	WorkspacePath   string             `json:"workspace_path"`
+	Removed         bool               `json:"removed"`
+	ContainedInRoot bool               `json:"contained_in_root"`
 }
 
 type RuntimeState struct {

@@ -11,6 +11,7 @@ import (
 	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
 	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
 	orchestratormodel "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
+	workspacemodel "github.com/zeefan1555/symphony-go/biz/model/workspace"
 	"github.com/zeefan1555/symphony-go/biz/router"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
 	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
@@ -99,6 +100,38 @@ func (a controlAdapter) ProjectIssueRun(ctx context.Context, issueIdentifier str
 	return issueRunProjectionModel(projection), nil
 }
 
+func (a controlAdapter) ResolveWorkspacePath(ctx context.Context, issueIdentifier string) (*workspacemodel.ResolveWorkspacePathResp, error) {
+	preparation, err := a.control.ResolveWorkspacePath(ctx, issueIdentifier)
+	if err != nil {
+		return nil, controlWorkspaceHTTPError(err)
+	}
+	return &workspacemodel.ResolveWorkspacePathResp{Preparation: workspacePreparationModel(preparation)}, nil
+}
+
+func (a controlAdapter) ValidateWorkspacePath(ctx context.Context, workspacePath string) (*workspacemodel.ValidateWorkspacePathResp, error) {
+	validation, err := a.control.ValidateWorkspacePath(ctx, workspacePath)
+	if err != nil {
+		return nil, controlWorkspaceHTTPError(err)
+	}
+	return &workspacemodel.ValidateWorkspacePathResp{Validation: workspacePathValidationModel(validation)}, nil
+}
+
+func (a controlAdapter) PrepareWorkspace(ctx context.Context, issueIdentifier string) (*workspacemodel.PrepareWorkspaceResp, error) {
+	preparation, err := a.control.PrepareWorkspace(ctx, issueIdentifier)
+	if err != nil {
+		return nil, controlWorkspaceHTTPError(err)
+	}
+	return &workspacemodel.PrepareWorkspaceResp{Preparation: workspacePreparationModel(preparation)}, nil
+}
+
+func (a controlAdapter) CleanupWorkspace(ctx context.Context, workspacePath string) (*workspacemodel.CleanupWorkspaceResp, error) {
+	result, err := a.control.CleanupWorkspace(ctx, workspacePath)
+	if err != nil {
+		return nil, controlWorkspaceHTTPError(err)
+	}
+	return &workspacemodel.CleanupWorkspaceResp{Result: workspaceCleanupResultModel(result)}, nil
+}
+
 func (a controlAdapter) Refresh(ctx context.Context) (*controlmodel.RefreshResp, error) {
 	result, err := a.control.Refresh(ctx)
 	if err != nil {
@@ -113,6 +146,19 @@ func controlHTTPError(err error) error {
 		return hertzhook.NewError(400, "invalid_issue_identifier", "issue identifier is required")
 	case errors.Is(err, controlplane.ErrIssueNotFound):
 		return hertzhook.NewError(404, "issue_not_found", "issue not found")
+	default:
+		return err
+	}
+}
+
+func controlWorkspaceHTTPError(err error) error {
+	switch {
+	case errors.Is(err, controlplane.ErrInvalidIssueIdentifier):
+		return hertzhook.NewError(400, "invalid_issue_identifier", "issue identifier is required")
+	case errors.Is(err, controlplane.ErrInvalidWorkspacePath):
+		return hertzhook.NewError(400, "invalid_workspace_path", "workspace path is invalid")
+	case errors.Is(err, controlplane.ErrWorkspaceManagerRequired):
+		return hertzhook.NewError(503, "workspace_unavailable", "workspace manager is unavailable")
 	default:
 		return err
 	}
@@ -242,14 +288,43 @@ func retryRunModel(entry controlplane.Retry) *commonmodel.RetryRun {
 func issueRunProjectionModel(projection controlplane.IssueRunProjection) *orchestratormodel.ProjectIssueRunResp {
 	return &orchestratormodel.ProjectIssueRunResp{
 		Projection: &orchestratormodel.IssueRunProjection{
-			Boundary: &commonmodel.CapabilityBoundary{
-				Name:               projection.Boundary.Name,
-				Purpose:            projection.Boundary.Purpose,
-				HandwrittenAdapter: projection.Boundary.HandwrittenAdapter,
-			},
+			Boundary:        capabilityBoundaryModel(projection.Boundary),
 			IssueIdentifier: projection.IssueIdentifier,
 			RuntimeState:    projection.RuntimeState,
 		},
+	}
+}
+
+func workspacePreparationModel(preparation controlplane.WorkspacePreparation) *workspacemodel.WorkspacePreparation {
+	return &workspacemodel.WorkspacePreparation{
+		Boundary:        capabilityBoundaryModel(preparation.Boundary),
+		WorkspacePath:   preparation.WorkspacePath,
+		ContainedInRoot: preparation.ContainedInRoot,
+	}
+}
+
+func workspacePathValidationModel(validation controlplane.WorkspacePathValidation) *workspacemodel.WorkspacePathValidation {
+	return &workspacemodel.WorkspacePathValidation{
+		Boundary:        capabilityBoundaryModel(validation.Boundary),
+		WorkspacePath:   validation.WorkspacePath,
+		ContainedInRoot: validation.ContainedInRoot,
+	}
+}
+
+func workspaceCleanupResultModel(result controlplane.WorkspaceCleanupResult) *workspacemodel.WorkspaceCleanupResult {
+	return &workspacemodel.WorkspaceCleanupResult{
+		Boundary:        capabilityBoundaryModel(result.Boundary),
+		WorkspacePath:   result.WorkspacePath,
+		Removed:         result.Removed,
+		ContainedInRoot: result.ContainedInRoot,
+	}
+}
+
+func capabilityBoundaryModel(boundary controlplane.CapabilityBoundary) *commonmodel.CapabilityBoundary {
+	return &commonmodel.CapabilityBoundary{
+		Name:               boundary.Name,
+		Purpose:            boundary.Purpose,
+		HandwrittenAdapter: boundary.HandwrittenAdapter,
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +15,8 @@ import (
 	"github.com/zeefan1555/symphony-go/internal/control/hertzserver"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
+	"github.com/zeefan1555/symphony-go/internal/types"
+	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
 type snapshotProvider struct {
@@ -584,6 +588,122 @@ func TestOrchestratorRouteReturnsIssueRunProjection(t *testing.T) {
 	}
 	if body.Projection.IssueIdentifier != "ZEE-56" || body.Projection.RuntimeState != "running" {
 		t.Fatalf("projection = %#v, want running ZEE-56", body.Projection)
+	}
+}
+
+func TestWorkspaceRoutesDelegateToControlService(t *testing.T) {
+	root := t.TempDir()
+	manager := coreworkspace.New(root, types.HooksConfig{})
+	service := control.NewServiceWithWorkspace(snapshotProvider{snapshot: observability.NewSnapshot()}, manager)
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resolveResp := postJSON(t, baseURL, "/api/v1/workspace/resolve", `{"issue_identifier":"../ZEE/unsafe"}`)
+	defer resolveResp.Body.Close()
+	if resolveResp.StatusCode != http.StatusOK {
+		t.Fatalf("resolve status = %d, want %d", resolveResp.StatusCode, http.StatusOK)
+	}
+	var resolved struct {
+		Preparation struct {
+			Boundary struct {
+				Name string `json:"name"`
+			} `json:"boundary"`
+			WorkspacePath   string `json:"workspace_path"`
+			ContainedInRoot bool   `json:"contained_in_root"`
+		} `json:"preparation"`
+	}
+	if err := json.NewDecoder(resolveResp.Body).Decode(&resolved); err != nil {
+		t.Fatalf("decode resolve response: %v", err)
+	}
+	wantPath := filepath.Join(root, coreworkspace.SafeIdentifier("../ZEE/unsafe"))
+	if resolved.Preparation.WorkspacePath != wantPath || !resolved.Preparation.ContainedInRoot {
+		t.Fatalf("resolved preparation = %#v, want contained path %q", resolved.Preparation, wantPath)
+	}
+	if resolved.Preparation.Boundary.Name != "workspace.lifecycle" {
+		t.Fatalf("workspace boundary = %q, want lifecycle", resolved.Preparation.Boundary.Name)
+	}
+	if _, err := os.Stat(resolved.Preparation.WorkspacePath); !os.IsNotExist(err) {
+		t.Fatalf("resolve should not create workspace, stat err=%v", err)
+	}
+
+	prepareResp := postJSON(t, baseURL, "/api/v1/workspace/prepare", `{"issue_identifier":"../ZEE/unsafe"}`)
+	defer prepareResp.Body.Close()
+	if prepareResp.StatusCode != http.StatusOK {
+		t.Fatalf("prepare status = %d, want %d", prepareResp.StatusCode, http.StatusOK)
+	}
+	var prepared struct {
+		Preparation struct {
+			WorkspacePath   string `json:"workspace_path"`
+			ContainedInRoot bool   `json:"contained_in_root"`
+		} `json:"preparation"`
+	}
+	if err := json.NewDecoder(prepareResp.Body).Decode(&prepared); err != nil {
+		t.Fatalf("decode prepare response: %v", err)
+	}
+	if prepared.Preparation.WorkspacePath != wantPath || !prepared.Preparation.ContainedInRoot {
+		t.Fatalf("prepared workspace = %#v, want contained path %q", prepared.Preparation, wantPath)
+	}
+	if info, err := os.Stat(prepared.Preparation.WorkspacePath); err != nil || !info.IsDir() {
+		t.Fatalf("prepare should create workspace directory, info=%v err=%v", info, err)
+	}
+
+	validateResp := postJSON(t, baseURL, "/api/v1/workspace/validate", `{"workspace_path":"`+prepared.Preparation.WorkspacePath+`"}`)
+	defer validateResp.Body.Close()
+	if validateResp.StatusCode != http.StatusOK {
+		t.Fatalf("validate status = %d, want %d", validateResp.StatusCode, http.StatusOK)
+	}
+	var validated struct {
+		Validation struct {
+			WorkspacePath   string `json:"workspace_path"`
+			ContainedInRoot bool   `json:"contained_in_root"`
+		} `json:"validation"`
+	}
+	if err := json.NewDecoder(validateResp.Body).Decode(&validated); err != nil {
+		t.Fatalf("decode validate response: %v", err)
+	}
+	if validated.Validation.WorkspacePath != prepared.Preparation.WorkspacePath || !validated.Validation.ContainedInRoot {
+		t.Fatalf("validation = %#v, want contained prepared workspace", validated.Validation)
+	}
+
+	outsidePath := filepath.Join(filepath.Dir(root), "outside")
+	invalidResp := postJSON(t, baseURL, "/api/v1/workspace/validate", `{"workspace_path":"`+outsidePath+`"}`)
+	defer invalidResp.Body.Close()
+	if invalidResp.StatusCode != http.StatusOK {
+		t.Fatalf("invalid validate status = %d, want %d", invalidResp.StatusCode, http.StatusOK)
+	}
+	var invalid struct {
+		Validation struct {
+			WorkspacePath   string `json:"workspace_path"`
+			ContainedInRoot bool   `json:"contained_in_root"`
+		} `json:"validation"`
+	}
+	if err := json.NewDecoder(invalidResp.Body).Decode(&invalid); err != nil {
+		t.Fatalf("decode invalid validate response: %v", err)
+	}
+	if invalid.Validation.WorkspacePath != outsidePath || invalid.Validation.ContainedInRoot {
+		t.Fatalf("invalid validation = %#v, want escaped path marked outside root", invalid.Validation)
+	}
+
+	cleanupResp := postJSON(t, baseURL, "/api/v1/workspace/cleanup", `{"workspace_path":"`+prepared.Preparation.WorkspacePath+`"}`)
+	defer cleanupResp.Body.Close()
+	if cleanupResp.StatusCode != http.StatusOK {
+		t.Fatalf("cleanup status = %d, want %d", cleanupResp.StatusCode, http.StatusOK)
+	}
+	var cleanup struct {
+		Result struct {
+			WorkspacePath   string `json:"workspace_path"`
+			Removed         bool   `json:"removed"`
+			ContainedInRoot bool   `json:"contained_in_root"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(cleanupResp.Body).Decode(&cleanup); err != nil {
+		t.Fatalf("decode cleanup response: %v", err)
+	}
+	if cleanup.Result.WorkspacePath != prepared.Preparation.WorkspacePath || !cleanup.Result.Removed || !cleanup.Result.ContainedInRoot {
+		t.Fatalf("cleanup result = %#v, want removed prepared workspace", cleanup.Result)
+	}
+	if _, err := os.Stat(prepared.Preparation.WorkspacePath); !os.IsNotExist(err) {
+		t.Fatalf("cleanup should remove workspace, stat err=%v", err)
 	}
 }
 

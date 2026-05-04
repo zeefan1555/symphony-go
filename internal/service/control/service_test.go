@@ -3,11 +3,15 @@ package control_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
+	"github.com/zeefan1555/symphony-go/internal/types"
+	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
 type fakeSnapshotProvider struct {
@@ -177,6 +181,71 @@ func TestServiceProjectsIssueRunState(t *testing.T) {
 	_, err = service.ProjectIssueRun(context.Background(), "")
 	if !errors.Is(err, control.ErrInvalidIssueIdentifier) {
 		t.Fatalf("ProjectIssueRun empty error = %v, want ErrInvalidIssueIdentifier", err)
+	}
+}
+
+func TestServiceProjectsWorkspaceLifecycle(t *testing.T) {
+	root := t.TempDir()
+	manager := coreworkspace.New(root, types.HooksConfig{})
+	service := control.NewServiceWithWorkspace(fakeSnapshotProvider{snapshot: observability.NewSnapshot()}, manager)
+
+	resolved, err := service.ResolveWorkspacePath(context.Background(), "../ZEE/unsafe")
+	if err != nil {
+		t.Fatalf("ResolveWorkspacePath returned error: %v", err)
+	}
+	wantPath := filepath.Join(root, coreworkspace.SafeIdentifier("../ZEE/unsafe"))
+	if resolved.WorkspacePath != wantPath || !resolved.ContainedInRoot {
+		t.Fatalf("resolved = %#v, want contained path %q", resolved, wantPath)
+	}
+	if resolved.Boundary.Name != "workspace.lifecycle" {
+		t.Fatalf("boundary = %#v, want workspace lifecycle", resolved.Boundary)
+	}
+	if _, err := os.Stat(resolved.WorkspacePath); !os.IsNotExist(err) {
+		t.Fatalf("resolve should not create workspace, stat err=%v", err)
+	}
+
+	prepared, err := service.PrepareWorkspace(context.Background(), "../ZEE/unsafe")
+	if err != nil {
+		t.Fatalf("PrepareWorkspace returned error: %v", err)
+	}
+	if prepared.WorkspacePath != wantPath || !prepared.ContainedInRoot {
+		t.Fatalf("prepared = %#v, want contained path %q", prepared, wantPath)
+	}
+	if info, err := os.Stat(prepared.WorkspacePath); err != nil || !info.IsDir() {
+		t.Fatalf("prepare should create directory, info=%v err=%v", info, err)
+	}
+
+	validated, err := service.ValidateWorkspacePath(context.Background(), prepared.WorkspacePath)
+	if err != nil {
+		t.Fatalf("ValidateWorkspacePath returned error: %v", err)
+	}
+	if validated.WorkspacePath != prepared.WorkspacePath || !validated.ContainedInRoot {
+		t.Fatalf("validated = %#v, want contained prepared workspace", validated)
+	}
+
+	outsidePath := filepath.Join(filepath.Dir(root), "outside")
+	invalid, err := service.ValidateWorkspacePath(context.Background(), outsidePath)
+	if err != nil {
+		t.Fatalf("ValidateWorkspacePath outside returned error: %v", err)
+	}
+	if invalid.WorkspacePath != outsidePath || invalid.ContainedInRoot {
+		t.Fatalf("invalid validation = %#v, want outside root", invalid)
+	}
+
+	cleanup, err := service.CleanupWorkspace(context.Background(), prepared.WorkspacePath)
+	if err != nil {
+		t.Fatalf("CleanupWorkspace returned error: %v", err)
+	}
+	if cleanup.WorkspacePath != prepared.WorkspacePath || !cleanup.Removed || !cleanup.ContainedInRoot {
+		t.Fatalf("cleanup = %#v, want removed prepared workspace", cleanup)
+	}
+	if _, err := os.Stat(prepared.WorkspacePath); !os.IsNotExist(err) {
+		t.Fatalf("cleanup should remove workspace, stat err=%v", err)
+	}
+
+	_, err = service.CleanupWorkspace(context.Background(), outsidePath)
+	if !errors.Is(err, control.ErrInvalidWorkspacePath) {
+		t.Fatalf("CleanupWorkspace outside error = %v, want ErrInvalidWorkspacePath", err)
 	}
 }
 

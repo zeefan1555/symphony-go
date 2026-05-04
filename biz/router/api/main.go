@@ -32,6 +32,13 @@ func Register(r *server.Hertz) {
 				_orchestrator := _v1.Group("/orchestrator", _orchestratorMw()...)
 				_orchestrator.POST("/project-issue-run", append(_projectissuerunMw(), api.ProjectIssueRun)...)
 			}
+			{
+				_workspace := _v1.Group("/workspace", _workspaceMw()...)
+				_workspace.POST("/cleanup", append(_cleanupworkspaceMw(), api.CleanupWorkspace)...)
+				_workspace.POST("/prepare", append(_prepareworkspaceMw(), api.PrepareWorkspace)...)
+				_workspace.POST("/resolve", append(_resolveworkspacepathMw(), api.ResolveWorkspacePath)...)
+				_workspace.POST("/validate", append(_validateworkspacepathMw(), api.ValidateWorkspacePath)...)
+			}
 		}
 	}
 }

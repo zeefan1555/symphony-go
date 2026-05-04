@@ -55,3 +55,28 @@ func _projectissuerunMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
+
+func _workspaceMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _cleanupworkspaceMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _prepareworkspaceMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _resolveworkspacepathMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _validateworkspacepathMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
