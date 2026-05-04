@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/zeefan1555/symphony-go/internal/codex"
@@ -63,6 +64,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 	var nextIssue *types.Issue
 	maxTurnsReached := false
 	noRetryNeeded := false
+	reviewFinal := ""
 	request := codex.SessionRequest{
 		WorkspacePath: workspacePath,
 		Issue:         issue,
@@ -77,6 +79,24 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		if !isActive(refreshed.State, rt.workflow.Config.Tracker.ActiveStates) || isTerminal(refreshed.State, rt.workflow.Config.Tracker.TerminalStates) {
 			noRetryNeeded = true
 			return codex.TurnPrompt{}, false, nil
+		}
+		if phase == phaseReviewer && refreshed.State == "AI Review" && reviewFinalPasses(reviewFinal) {
+			if err := rt.tracker.UpdateIssueState(ctx, refreshed.ID, "Merging"); err != nil {
+				return codex.TurnPrompt{}, false, err
+			}
+			refreshed.State = "Merging"
+			o.logIssue(refreshed, "state_changed", "AI Review -> Merging", nil)
+			issue = refreshed
+			o.setRunning(observability.RunningEntry{
+				IssueID:         issue.ID,
+				IssueIdentifier: issue.Identifier,
+				State:           issue.State,
+				WorkspacePath:   workspacePath,
+				TurnCount:       turn + 1,
+				StartedAt:       time.Now(),
+			})
+			next := issue
+			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
 		}
 		if refreshed.State == "Human Review" || refreshed.State == "In Review" || refreshed.State == "AI Review" {
 			nextIssue = &refreshed
@@ -115,6 +135,11 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		return codex.TurnPrompt{Text: continuationPromptText, Continuation: true}, true, nil
 	}
 	_, err = rt.runner.RunSession(ctx, request, func(event codex.Event) {
+		if phase == phaseReviewer {
+			if text := completedAgentMessageText(event); text != "" {
+				reviewFinal = text
+			}
+		}
 		o.updateRunningFromEvent(issue.ID, event)
 		o.logIssue(issue, "codex_event", event.Name, event.Payload)
 	})
@@ -139,4 +164,23 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		return errNoRetryNeeded
 	}
 	return nil
+}
+
+func reviewFinalPasses(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	return strings.HasPrefix(normalized, "review: pass")
+}
+
+func completedAgentMessageText(event codex.Event) string {
+	if event.Name != "item/completed" {
+		return ""
+	}
+	params, _ := event.Payload["params"].(map[string]any)
+	item, _ := params["item"].(map[string]any)
+	itemType, _ := item["type"].(string)
+	if itemType != "agentMessage" {
+		return ""
+	}
+	text, _ := item["text"].(string)
+	return text
 }

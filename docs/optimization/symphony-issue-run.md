@@ -3,6 +3,24 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-04 19:14 +08 - ZEE-74
+
+- Trigger: 继续 `ZEE-74` 冒烟时，用户要求验证全自动链路是否能从 `AI Review` 往后推进。
+- Evidence:
+  - `.symphony/logs/ZEE-74-20260504-190717.out` 记录 reviewer 子进程已能调用 `linear 2.0.0`、`linear auth whoami` 和 `linear issue view ZEE-74 --json`，说明 Linear CLI 工具链已通。
+  - 同一日志 `19:12:46` 记录 `codex_final` 输出 `Review: PASS`，但 issue 仍保持 `AI Review`，随后 listener 又启动新的 reviewer session。
+  - 问题不再是 Linear 工具不可用，而是 reviewer 已给出通过结论时，agent 未可靠执行状态推进，orchestrator 也没有兜底。
+- Optimization:
+  - 代码层：orchestrator 在 reviewer phase 捕获最终 `agentMessage`；当最终消息以 `Review: PASS` 开头且 Linear 状态仍为 `AI Review` 时，自动执行 `AI Review -> Merging` 并在同一 session 追加 merge continuation prompt。
+  - 测试层：新增回归用例覆盖 reviewer 只输出 `Review: PASS`、没有自行移动状态时，framework 仍继续进入 `Merging` 并执行后续 turn。
+- Files:
+  - `internal/orchestrator/agent_session.go`
+  - `internal/orchestrator/orchestrator_test.go`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - `GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/orchestrator`
+- Follow-up: 重建 `bin/symphony-go` 后继续跑 `ZEE-74`，验证 `AI Review -> Merging -> Done` 是否真的走通。
+
 ## 2026-05-02 16:36 +08 - ZEE-41
 
 - Trigger: 用户指出 `ZEE-41` 耗时过长，状态流经过 `Human Review`，且最终由父会话手工接管 `Merging`，不符合 `symphony-go` 全自动处理目标。
