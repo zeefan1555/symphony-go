@@ -5,7 +5,8 @@ import (
 	"errors"
 	"sync"
 
-	model "github.com/zeefan1555/symphony-go/biz/model/control/model"
+	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
+	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
 )
 
 type ScaffoldStatus struct {
@@ -14,9 +15,9 @@ type ScaffoldStatus struct {
 
 type ControlService interface {
 	GetScaffold(context.Context) (ScaffoldStatus, error)
-	GetState(context.Context) (*model.RuntimeState, error)
-	GetIssue(context.Context, string) (*model.IssueDetail, error)
-	Refresh(context.Context) (*model.RefreshResult, error)
+	GetState(context.Context) (*commonmodel.RuntimeState, error)
+	GetIssue(context.Context, string) (*commonmodel.IssueDetail, error)
+	Refresh(context.Context) (*controlmodel.RefreshResp, error)
 }
 
 type ControlFunc func(context.Context) (ScaffoldStatus, error)
@@ -25,15 +26,15 @@ func (f ControlFunc) GetScaffold(ctx context.Context) (ScaffoldStatus, error) {
 	return f(ctx)
 }
 
-func (f ControlFunc) GetState(context.Context) (*model.RuntimeState, error) {
+func (f ControlFunc) GetState(context.Context) (*commonmodel.RuntimeState, error) {
 	return emptyRuntimeState(), nil
 }
 
-func (f ControlFunc) GetIssue(context.Context, string) (*model.IssueDetail, error) {
+func (f ControlFunc) GetIssue(context.Context, string) (*commonmodel.IssueDetail, error) {
 	return nil, NewError(404, "issue_not_found", "issue not found")
 }
 
-func (f ControlFunc) Refresh(context.Context) (*model.RefreshResult, error) {
+func (f ControlFunc) Refresh(context.Context) (*controlmodel.RefreshResp, error) {
 	return nil, NewError(503, "refresh_unavailable", "refresh trigger is unavailable")
 }
 
@@ -71,13 +72,13 @@ func CurrentService() ControlService {
 	return controlService.current
 }
 
-func emptyRuntimeState() *model.RuntimeState {
-	return &model.RuntimeState{
-		Counts:      &model.RuntimeCounts{},
-		Running:     []*model.IssueRun{},
-		Retrying:    []*model.RetryRun{},
-		CodexTotals: &model.CodexTotals{},
-		Polling:     &model.PollingStatus{},
+func emptyRuntimeState() *commonmodel.RuntimeState {
+	return &commonmodel.RuntimeState{
+		Counts:      &commonmodel.RuntimeCounts{},
+		Running:     []*commonmodel.IssueRun{},
+		Retrying:    []*commonmodel.RetryRun{},
+		CodexTotals: &commonmodel.CodexTotals{},
+		Polling:     &commonmodel.PollingStatus{},
 	}
 }
 
@@ -107,15 +108,15 @@ func (e *Error) Message() string {
 	return e.message
 }
 
-func ErrorEnvelope(err error) (*model.ErrorEnvelope, int) {
+func ErrorEnvelope(err error) (*commonmodel.ErrorEnvelope, int) {
 	var controlErr *Error
 	if errors.As(err, &controlErr) {
-		return &model.ErrorEnvelope{Error: &model.ErrorDetail{
+		return &commonmodel.ErrorEnvelope{Error: &commonmodel.ErrorDetail{
 			Code:    controlErr.ErrorCode(),
 			Message: controlErr.Message(),
 		}}, controlErr.StatusCode()
 	}
-	return &model.ErrorEnvelope{Error: &model.ErrorDetail{
+	return &commonmodel.ErrorEnvelope{Error: &commonmodel.ErrorDetail{
 		Code:    "internal_error",
 		Message: err.Error(),
 	}}, 500

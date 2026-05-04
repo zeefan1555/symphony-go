@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
-	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control/model"
+	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
+	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
 	"github.com/zeefan1555/symphony-go/biz/router"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
 	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
@@ -73,7 +74,7 @@ func (a controlAdapter) GetScaffold(ctx context.Context) (hertzhook.ScaffoldStat
 	return hertzhook.ScaffoldStatus{Status: status.Status}, nil
 }
 
-func (a controlAdapter) GetState(ctx context.Context) (*controlmodel.RuntimeState, error) {
+func (a controlAdapter) GetState(ctx context.Context) (*commonmodel.RuntimeState, error) {
 	state, err := a.control.RuntimeState(ctx)
 	if err != nil {
 		return nil, err
@@ -81,7 +82,7 @@ func (a controlAdapter) GetState(ctx context.Context) (*controlmodel.RuntimeStat
 	return runtimeStateModel(state), nil
 }
 
-func (a controlAdapter) GetIssue(ctx context.Context, issueIdentifier string) (*controlmodel.IssueDetail, error) {
+func (a controlAdapter) GetIssue(ctx context.Context, issueIdentifier string) (*commonmodel.IssueDetail, error) {
 	detail, err := a.control.IssueDetail(ctx, issueIdentifier)
 	if err != nil {
 		return nil, controlHTTPError(err)
@@ -89,12 +90,12 @@ func (a controlAdapter) GetIssue(ctx context.Context, issueIdentifier string) (*
 	return issueDetailModel(detail), nil
 }
 
-func (a controlAdapter) Refresh(ctx context.Context) (*controlmodel.RefreshResult, error) {
+func (a controlAdapter) Refresh(ctx context.Context) (*controlmodel.RefreshResp, error) {
 	result, err := a.control.Refresh(ctx)
 	if err != nil {
 		return nil, controlRefreshHTTPError(err)
 	}
-	return &controlmodel.RefreshResult{Accepted: result.Accepted, Status: result.Status}, nil
+	return &controlmodel.RefreshResp{Accepted: result.Accepted, Status: result.Status}, nil
 }
 
 func controlHTTPError(err error) error {
@@ -117,32 +118,32 @@ func controlRefreshHTTPError(err error) error {
 	}
 }
 
-func runtimeStateModel(state controlplane.RuntimeState) *controlmodel.RuntimeState {
-	running := make([]*controlmodel.IssueRun, 0, len(state.Running))
+func runtimeStateModel(state controlplane.RuntimeState) *commonmodel.RuntimeState {
+	running := make([]*commonmodel.IssueRun, 0, len(state.Running))
 	for _, entry := range state.Running {
 		running = append(running, issueRunModel(entry))
 	}
 
-	retrying := make([]*controlmodel.RetryRun, 0, len(state.Retrying))
+	retrying := make([]*commonmodel.RetryRun, 0, len(state.Retrying))
 	for _, entry := range state.Retrying {
 		retrying = append(retrying, retryRunModel(entry))
 	}
 
-	modelState := &controlmodel.RuntimeState{
+	modelState := &commonmodel.RuntimeState{
 		GeneratedAt: formatControlTime(state.GeneratedAt),
-		Counts: &controlmodel.RuntimeCounts{
+		Counts: &commonmodel.RuntimeCounts{
 			Running:  int32(state.Counts.Running),
 			Retrying: int32(state.Counts.Retrying),
 		},
 		Running:  running,
 		Retrying: retrying,
-		CodexTotals: &controlmodel.CodexTotals{
+		CodexTotals: &commonmodel.CodexTotals{
 			InputTokens:    int32(state.CodexTotals.InputTokens),
 			OutputTokens:   int32(state.CodexTotals.OutputTokens),
 			TotalTokens:    int32(state.CodexTotals.TotalTokens),
 			SecondsRunning: state.CodexTotals.SecondsRunning,
 		},
-		Polling: &controlmodel.PollingStatus{
+		Polling: &commonmodel.PollingStatus{
 			Checking:     state.Polling.Checking,
 			NextPollInMs: state.Polling.NextPollInMS,
 			IntervalMs:   int32(state.Polling.IntervalMS),
@@ -160,8 +161,8 @@ func runtimeStateModel(state controlplane.RuntimeState) *controlmodel.RuntimeSta
 	return modelState
 }
 
-func issueDetailModel(detail controlplane.IssueDetail) *controlmodel.IssueDetail {
-	modelDetail := &controlmodel.IssueDetail{
+func issueDetailModel(detail controlplane.IssueDetail) *commonmodel.IssueDetail {
+	modelDetail := &commonmodel.IssueDetail{
 		IssueID:         detail.IssueID,
 		IssueIdentifier: detail.IssueIdentifier,
 		Status:          detail.Status,
@@ -175,13 +176,13 @@ func issueDetailModel(detail controlplane.IssueDetail) *controlmodel.IssueDetail
 	return modelDetail
 }
 
-func issueRunModel(entry controlplane.IssueRun) *controlmodel.IssueRun {
-	modelEntry := &controlmodel.IssueRun{
+func issueRunModel(entry controlplane.IssueRun) *commonmodel.IssueRun {
+	modelEntry := &commonmodel.IssueRun{
 		IssueID:         entry.IssueID,
 		IssueIdentifier: entry.IssueIdentifier,
 		State:           entry.State,
 		TurnCount:       int32(entry.TurnCount),
-		Tokens: &controlmodel.TokenUsage{
+		Tokens: &commonmodel.TokenUsage{
 			InputTokens:  int32(entry.Tokens.InputTokens),
 			OutputTokens: int32(entry.Tokens.OutputTokens),
 			TotalTokens:  int32(entry.Tokens.TotalTokens),
@@ -213,8 +214,8 @@ func issueRunModel(entry controlplane.IssueRun) *controlmodel.IssueRun {
 	return modelEntry
 }
 
-func retryRunModel(entry controlplane.Retry) *controlmodel.RetryRun {
-	modelEntry := &controlmodel.RetryRun{
+func retryRunModel(entry controlplane.Retry) *commonmodel.RetryRun {
+	modelEntry := &commonmodel.RetryRun{
 		IssueID:         entry.IssueID,
 		IssueIdentifier: entry.IssueIdentifier,
 		Attempt:         int32(entry.Attempt),

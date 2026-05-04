@@ -28,7 +28,7 @@ func TestRepositoryDocumentsHertzGenerationCommand(t *testing.T) {
 	scriptText := string(script)
 	for _, want := range []string{
 		"hz new",
-		"idl/control/http.thrift",
+		"idl/main.thrift",
 		"biz/handler",
 		"biz/model",
 		"biz/router",
@@ -47,8 +47,9 @@ func TestMaintainerWorkflowDocumentsIDLBoundariesAndGeneration(t *testing.T) {
 	text := string(doc)
 
 	for _, want := range []string{
-		"`idl/control/common.thrift`",
-		"`idl/control/http.thrift`",
+		"`idl/main.thrift`",
+		"`idl/common.thrift`",
+		"`idl/control.thrift`",
 		"`biz/handler`",
 		"`biz/model`",
 		"`biz/router`",
@@ -84,7 +85,7 @@ func TestMaintainerWorkflowDocumentsReviewAndTransportBoundaries(t *testing.T) {
 }
 
 func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
-	commonIDL, err := os.ReadFile("../../../idl/control/common.thrift")
+	commonIDL, err := os.ReadFile("../../../idl/common.thrift")
 	if err != nil {
 		t.Fatalf("read common IDL: %v", err)
 	}
@@ -92,12 +93,69 @@ func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
 		t.Fatalf("shared control model IDL must not contain Hertz api annotations")
 	}
 
-	httpIDL, err := os.ReadFile("../../../idl/control/http.thrift")
+	mainIDL, err := os.ReadFile("../../../idl/main.thrift")
 	if err != nil {
-		t.Fatalf("read HTTP control IDL: %v", err)
+		t.Fatalf("read main IDL: %v", err)
 	}
-	if !strings.Contains(string(httpIDL), `api.get="/api/v1/scaffold"`) {
-		t.Fatalf("HTTP control IDL must define the scaffold route annotation")
+	if !strings.Contains(string(mainIDL), `api.post="/api/v1/control/get-scaffold"`) {
+		t.Fatalf("main IDL must define the scaffold POST route annotation")
+	}
+	if strings.Contains(string(mainIDL), "api.get") {
+		t.Fatalf("business routes in main IDL must use POST annotations")
+	}
+}
+
+func TestUnifiedMainIDLControlsTopLevelContracts(t *testing.T) {
+	mainIDL, err := os.ReadFile("../../../idl/main.thrift")
+	if err != nil {
+		t.Fatalf("read main IDL: %v", err)
+	}
+	mainText := string(mainIDL)
+	if !strings.Contains(mainText, "service SymphonyAPI") {
+		t.Fatalf("main IDL must own the single Hertz service")
+	}
+	for _, want := range []string{
+		"control.GetScaffoldResp GetScaffold(1: control.GetScaffoldReq req)",
+		"control.GetStateResp GetState(1: control.GetStateReq req)",
+		"control.RefreshResp Refresh(1: control.RefreshReq req)",
+		"control.GetIssueResp GetIssue(1: control.GetIssueReq req)",
+	} {
+		if !strings.Contains(mainText, want) {
+			t.Fatalf("main IDL missing dedicated top-level contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"common.Empty",
+		"common.RuntimeState GetState",
+		"common.RefreshResult Refresh",
+		"common.IssueDetail GetIssue",
+	} {
+		if strings.Contains(mainText, forbidden) {
+			t.Fatalf("main IDL must not use shared model as top-level request/response: %q", forbidden)
+		}
+	}
+
+	controlIDL, err := os.ReadFile("../../../idl/control.thrift")
+	if err != nil {
+		t.Fatalf("read control IDL: %v", err)
+	}
+	controlText := string(controlIDL)
+	if strings.Contains(controlText, "service ") {
+		t.Fatalf("control child IDL must not declare a service")
+	}
+	for _, want := range []string{
+		"struct GetScaffoldReq",
+		"struct GetScaffoldResp",
+		"struct GetStateReq",
+		"struct GetStateResp",
+		"struct RefreshReq",
+		"struct RefreshResp",
+		"struct GetIssueReq",
+		"struct GetIssueResp",
+	} {
+		if !strings.Contains(controlText, want) {
+			t.Fatalf("control child IDL missing %q", want)
+		}
 	}
 }
 

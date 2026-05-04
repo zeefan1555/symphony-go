@@ -61,10 +61,7 @@ func TestStateRouteReturnsEmptyRuntimeState(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	resp, err := http.Get(baseURL + "/api/v1/state")
-	if err != nil {
-		t.Fatalf("GET /api/v1/state: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/get-state", "{}")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -72,35 +69,37 @@ func TestStateRouteReturnsEmptyRuntimeState(t *testing.T) {
 	}
 
 	var body struct {
-		GeneratedAt string `json:"generated_at"`
-		Counts      struct {
-			Running  int `json:"running"`
-			Retrying int `json:"retrying"`
-		} `json:"counts"`
-		Running  []json.RawMessage `json:"running"`
-		Retrying []json.RawMessage `json:"retrying"`
-		Polling  struct {
-			IntervalMS int `json:"interval_ms"`
-		} `json:"polling"`
+		State struct {
+			GeneratedAt string `json:"generated_at"`
+			Counts      struct {
+				Running  int `json:"running"`
+				Retrying int `json:"retrying"`
+			} `json:"counts"`
+			Running  []json.RawMessage `json:"running"`
+			Retrying []json.RawMessage `json:"retrying"`
+			Polling  struct {
+				IntervalMS int `json:"interval_ms"`
+			} `json:"polling"`
+		} `json:"state"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if body.GeneratedAt != "2026-05-04T01:02:03Z" {
-		t.Fatalf("generated_at = %q, want fixed timestamp", body.GeneratedAt)
+	if body.State.GeneratedAt != "2026-05-04T01:02:03Z" {
+		t.Fatalf("generated_at = %q, want fixed timestamp", body.State.GeneratedAt)
 	}
-	if body.Counts.Running != 0 || body.Counts.Retrying != 0 {
-		t.Fatalf("counts = %#v, want zero counts", body.Counts)
+	if body.State.Counts.Running != 0 || body.State.Counts.Retrying != 0 {
+		t.Fatalf("counts = %#v, want zero counts", body.State.Counts)
 	}
-	if body.Running == nil || len(body.Running) != 0 {
-		t.Fatalf("running = %#v, want empty JSON array", body.Running)
+	if body.State.Running == nil || len(body.State.Running) != 0 {
+		t.Fatalf("running = %#v, want empty JSON array", body.State.Running)
 	}
-	if body.Retrying == nil || len(body.Retrying) != 0 {
-		t.Fatalf("retrying = %#v, want empty JSON array", body.Retrying)
+	if body.State.Retrying == nil || len(body.State.Retrying) != 0 {
+		t.Fatalf("retrying = %#v, want empty JSON array", body.State.Retrying)
 	}
-	if body.Polling.IntervalMS != 30000 {
-		t.Fatalf("polling.interval_ms = %d, want 30000", body.Polling.IntervalMS)
+	if body.State.Polling.IntervalMS != 30000 {
+		t.Fatalf("polling.interval_ms = %d, want 30000", body.State.Polling.IntervalMS)
 	}
 }
 
@@ -155,10 +154,7 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	resp, err := http.Get(baseURL + "/api/v1/state")
-	if err != nil {
-		t.Fatalf("GET /api/v1/state: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/get-state", "{}")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -166,63 +162,66 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 	}
 
 	var body struct {
-		Counts struct {
-			Running  int `json:"running"`
-			Retrying int `json:"retrying"`
-		} `json:"counts"`
-		Running []struct {
-			IssueID         string `json:"issue_id"`
-			IssueIdentifier string `json:"issue_identifier"`
-			State           string `json:"state"`
-			WorkspacePath   string `json:"workspace_path"`
-			SessionID       string `json:"session_id"`
-			PID             int    `json:"pid"`
-			TurnCount       int    `json:"turn_count"`
-			LastEvent       string `json:"last_event"`
-			LastMessage     string `json:"last_message"`
-			StartedAt       string `json:"started_at"`
-			LastEventAt     string `json:"last_event_at"`
-			Tokens          struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
-				TotalTokens  int `json:"total_tokens"`
-			} `json:"tokens"`
-			RuntimeSeconds float64 `json:"runtime_seconds"`
-		} `json:"running"`
-		Retrying []struct {
-			IssueID         string `json:"issue_id"`
-			IssueIdentifier string `json:"issue_identifier"`
-			Attempt         int    `json:"attempt"`
-			DueAt           string `json:"due_at"`
-			Error           string `json:"error"`
-			WorkspacePath   string `json:"workspace_path"`
-		} `json:"retrying"`
-		CodexTotals struct {
-			InputTokens    int     `json:"input_tokens"`
-			OutputTokens   int     `json:"output_tokens"`
-			TotalTokens    int     `json:"total_tokens"`
-			SecondsRunning float64 `json:"seconds_running"`
-		} `json:"codex_totals"`
-		Polling struct {
-			Checking     bool   `json:"checking"`
-			LastPollAt   string `json:"last_poll_at"`
-			NextPollAt   string `json:"next_poll_at"`
-			NextPollInMS int64  `json:"next_poll_in_ms"`
-			IntervalMS   int    `json:"interval_ms"`
-		} `json:"polling"`
-		LastError string `json:"last_error"`
+		State struct {
+			Counts struct {
+				Running  int `json:"running"`
+				Retrying int `json:"retrying"`
+			} `json:"counts"`
+			Running []struct {
+				IssueID         string `json:"issue_id"`
+				IssueIdentifier string `json:"issue_identifier"`
+				State           string `json:"state"`
+				WorkspacePath   string `json:"workspace_path"`
+				SessionID       string `json:"session_id"`
+				PID             int    `json:"pid"`
+				TurnCount       int    `json:"turn_count"`
+				LastEvent       string `json:"last_event"`
+				LastMessage     string `json:"last_message"`
+				StartedAt       string `json:"started_at"`
+				LastEventAt     string `json:"last_event_at"`
+				Tokens          struct {
+					InputTokens  int `json:"input_tokens"`
+					OutputTokens int `json:"output_tokens"`
+					TotalTokens  int `json:"total_tokens"`
+				} `json:"tokens"`
+				RuntimeSeconds float64 `json:"runtime_seconds"`
+			} `json:"running"`
+			Retrying []struct {
+				IssueID         string `json:"issue_id"`
+				IssueIdentifier string `json:"issue_identifier"`
+				Attempt         int    `json:"attempt"`
+				DueAt           string `json:"due_at"`
+				Error           string `json:"error"`
+				WorkspacePath   string `json:"workspace_path"`
+			} `json:"retrying"`
+			CodexTotals struct {
+				InputTokens    int     `json:"input_tokens"`
+				OutputTokens   int     `json:"output_tokens"`
+				TotalTokens    int     `json:"total_tokens"`
+				SecondsRunning float64 `json:"seconds_running"`
+			} `json:"codex_totals"`
+			Polling struct {
+				Checking     bool   `json:"checking"`
+				LastPollAt   string `json:"last_poll_at"`
+				NextPollAt   string `json:"next_poll_at"`
+				NextPollInMS int64  `json:"next_poll_in_ms"`
+				IntervalMS   int    `json:"interval_ms"`
+			} `json:"polling"`
+			LastError string `json:"last_error"`
+		} `json:"state"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if body.Counts.Running != 1 || body.Counts.Retrying != 1 {
-		t.Fatalf("counts = %#v, want running=1 retrying=1", body.Counts)
+	state := body.State
+	if state.Counts.Running != 1 || state.Counts.Retrying != 1 {
+		t.Fatalf("counts = %#v, want running=1 retrying=1", state.Counts)
 	}
-	if len(body.Running) != 1 {
-		t.Fatalf("running len = %d, want 1", len(body.Running))
+	if len(state.Running) != 1 {
+		t.Fatalf("running len = %d, want 1", len(state.Running))
 	}
-	running := body.Running[0]
+	running := state.Running[0]
 	if running.IssueIdentifier != "ZEE-47" || running.State != "In Progress" || running.WorkspacePath != "/tmp/ZEE-47" {
 		t.Fatalf("running entry = %#v, want ZEE-47 projection", running)
 	}
@@ -239,27 +238,27 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 		t.Fatalf("running metrics = %#v, want token/runtime projection", running)
 	}
 
-	if len(body.Retrying) != 1 {
-		t.Fatalf("retrying len = %d, want 1", len(body.Retrying))
+	if len(state.Retrying) != 1 {
+		t.Fatalf("retrying len = %d, want 1", len(state.Retrying))
 	}
-	retry := body.Retrying[0]
+	retry := state.Retrying[0]
 	if retry.IssueIdentifier != "ZEE-48" || retry.Attempt != 2 || retry.DueAt != "2026-05-04T01:02:48Z" {
 		t.Fatalf("retry entry = %#v, want retry projection", retry)
 	}
 	if retry.Error != "no available orchestrator slots" || retry.WorkspacePath != "/tmp/ZEE-48" {
 		t.Fatalf("retry details = %#v, want error/workspace projection", retry)
 	}
-	if body.CodexTotals.TotalTokens != 150 || body.CodexTotals.SecondsRunning != 300.25 {
-		t.Fatalf("codex totals = %#v, want projected totals", body.CodexTotals)
+	if state.CodexTotals.TotalTokens != 150 || state.CodexTotals.SecondsRunning != 300.25 {
+		t.Fatalf("codex totals = %#v, want projected totals", state.CodexTotals)
 	}
-	if !body.Polling.Checking || body.Polling.NextPollInMS != 20000 || body.Polling.IntervalMS != 30000 {
-		t.Fatalf("polling = %#v, want projected polling state", body.Polling)
+	if !state.Polling.Checking || state.Polling.NextPollInMS != 20000 || state.Polling.IntervalMS != 30000 {
+		t.Fatalf("polling = %#v, want projected polling state", state.Polling)
 	}
-	if body.Polling.LastPollAt != "2026-05-04T01:01:53Z" || body.Polling.NextPollAt != "2026-05-04T01:02:23Z" {
-		t.Fatalf("polling timestamps = %#v, want RFC3339 timestamps", body.Polling)
+	if state.Polling.LastPollAt != "2026-05-04T01:01:53Z" || state.Polling.NextPollAt != "2026-05-04T01:02:23Z" {
+		t.Fatalf("polling timestamps = %#v, want RFC3339 timestamps", state.Polling)
 	}
-	if body.LastError != "last error" {
-		t.Fatalf("last_error = %q, want last error", body.LastError)
+	if state.LastError != "last error" {
+		t.Fatalf("last_error = %q, want last error", state.LastError)
 	}
 }
 
@@ -285,10 +284,7 @@ func TestIssueRouteReturnsRunningDetail(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	resp, err := http.Get(baseURL + "/api/v1/ZEE-48")
-	if err != nil {
-		t.Fatalf("GET /api/v1/ZEE-48: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/get-issue", `{"issue_identifier":"ZEE-48"}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -296,32 +292,34 @@ func TestIssueRouteReturnsRunningDetail(t *testing.T) {
 	}
 
 	var body struct {
-		IssueID         string `json:"issue_id"`
-		IssueIdentifier string `json:"issue_identifier"`
-		Status          string `json:"status"`
-		Running         struct {
-			SessionID      string  `json:"session_id"`
-			TurnCount      int     `json:"turn_count"`
-			LastEvent      string  `json:"last_event"`
-			StartedAt      string  `json:"started_at"`
-			RuntimeSeconds float64 `json:"runtime_seconds"`
-			Tokens         struct {
-				TotalTokens int `json:"total_tokens"`
-			} `json:"tokens"`
-		} `json:"running"`
+		Issue struct {
+			IssueID         string `json:"issue_id"`
+			IssueIdentifier string `json:"issue_identifier"`
+			Status          string `json:"status"`
+			Running         struct {
+				SessionID      string  `json:"session_id"`
+				TurnCount      int     `json:"turn_count"`
+				LastEvent      string  `json:"last_event"`
+				StartedAt      string  `json:"started_at"`
+				RuntimeSeconds float64 `json:"runtime_seconds"`
+				Tokens         struct {
+					TotalTokens int `json:"total_tokens"`
+				} `json:"tokens"`
+			} `json:"running"`
+		} `json:"issue"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if body.IssueID != "issue-id" || body.IssueIdentifier != "ZEE-48" || body.Status != "running" {
-		t.Fatalf("issue detail = %#v, want running ZEE-48", body)
+	if body.Issue.IssueID != "issue-id" || body.Issue.IssueIdentifier != "ZEE-48" || body.Issue.Status != "running" {
+		t.Fatalf("issue detail = %#v, want running ZEE-48", body.Issue)
 	}
-	if body.Running.SessionID != "thread-1" || body.Running.TurnCount != 3 {
-		t.Fatalf("running detail = %#v, want session and turn count", body.Running)
+	if body.Issue.Running.SessionID != "thread-1" || body.Issue.Running.TurnCount != 3 {
+		t.Fatalf("running detail = %#v, want session and turn count", body.Issue.Running)
 	}
-	if body.Running.StartedAt != "2026-05-04T01:00:03Z" || body.Running.Tokens.TotalTokens != 15 {
-		t.Fatalf("running metrics = %#v, want timestamp and tokens", body.Running)
+	if body.Issue.Running.StartedAt != "2026-05-04T01:00:03Z" || body.Issue.Running.Tokens.TotalTokens != 15 {
+		t.Fatalf("running metrics = %#v, want timestamp and tokens", body.Issue.Running)
 	}
 }
 
@@ -340,10 +338,7 @@ func TestIssueRouteReturnsRetryingDetail(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	resp, err := http.Get(baseURL + "/api/v1/ZEE-49")
-	if err != nil {
-		t.Fatalf("GET /api/v1/ZEE-49: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/get-issue", `{"issue_identifier":"ZEE-49"}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -351,24 +346,26 @@ func TestIssueRouteReturnsRetryingDetail(t *testing.T) {
 	}
 
 	var body struct {
-		IssueIdentifier string `json:"issue_identifier"`
-		Status          string `json:"status"`
-		Retry           struct {
-			Attempt       int    `json:"attempt"`
-			DueAt         string `json:"due_at"`
-			Error         string `json:"error"`
-			WorkspacePath string `json:"workspace_path"`
-		} `json:"retry"`
+		Issue struct {
+			IssueIdentifier string `json:"issue_identifier"`
+			Status          string `json:"status"`
+			Retry           struct {
+				Attempt       int    `json:"attempt"`
+				DueAt         string `json:"due_at"`
+				Error         string `json:"error"`
+				WorkspacePath string `json:"workspace_path"`
+			} `json:"retry"`
+		} `json:"issue"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if body.IssueIdentifier != "ZEE-49" || body.Status != "retrying" {
-		t.Fatalf("issue detail = %#v, want retrying ZEE-49", body)
+	if body.Issue.IssueIdentifier != "ZEE-49" || body.Issue.Status != "retrying" {
+		t.Fatalf("issue detail = %#v, want retrying ZEE-49", body.Issue)
 	}
-	if body.Retry.Attempt != 2 || body.Retry.DueAt != "2026-05-04T01:02:48Z" || body.Retry.Error != "rate limited" {
-		t.Fatalf("retry detail = %#v, want retry projection", body.Retry)
+	if body.Issue.Retry.Attempt != 2 || body.Issue.Retry.DueAt != "2026-05-04T01:02:48Z" || body.Issue.Retry.Error != "rate limited" {
+		t.Fatalf("retry detail = %#v, want retry projection", body.Issue.Retry)
 	}
 }
 
@@ -377,10 +374,7 @@ func TestIssueRouteReturnsErrorEnvelope(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	resp, err := http.Get(baseURL + "/api/v1/ZEE-404")
-	if err != nil {
-		t.Fatalf("GET /api/v1/ZEE-404: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/get-issue", `{"issue_identifier":"ZEE-404"}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNotFound {
@@ -406,10 +400,7 @@ func TestIssueRouteReturnsInvalidIdentifierEnvelope(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	resp, err := http.Get(baseURL + "/api/v1/%20")
-	if err != nil {
-		t.Fatalf("GET /api/v1/%%20: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/get-issue", `{}`)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusBadRequest {
@@ -436,10 +427,7 @@ func TestRefreshRouteQueuesPoll(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	resp, err := http.Post(baseURL+"/api/v1/refresh", "application/json", strings.NewReader("{}"))
-	if err != nil {
-		t.Fatalf("POST /api/v1/refresh: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/refresh", "{}")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusAccepted {
@@ -467,10 +455,7 @@ func TestRefreshRouteReturnsAlreadyPending(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	resp, err := http.Post(baseURL+"/api/v1/refresh", "application/json", strings.NewReader("{}"))
-	if err != nil {
-		t.Fatalf("POST /api/v1/refresh: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/refresh", "{}")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusAccepted {
@@ -493,28 +478,18 @@ func TestRefreshRouteReturnsErrorEnvelope(t *testing.T) {
 	tests := []struct {
 		name       string
 		service    *control.Service
-		method     string
 		wantStatus int
 		wantCode   string
 	}{
 		{
-			name:       "unsupported method",
-			service:    control.NewService(&refreshSnapshotProvider{}),
-			method:     http.MethodGet,
-			wantStatus: http.StatusMethodNotAllowed,
-			wantCode:   "unsupported_method",
-		},
-		{
 			name:       "refresh unavailable",
 			service:    control.NewService(snapshotProvider{snapshot: observability.NewSnapshot()}),
-			method:     http.MethodPost,
 			wantStatus: http.StatusServiceUnavailable,
 			wantCode:   "refresh_unavailable",
 		},
 		{
 			name:       "refresh failed",
 			service:    control.NewService(&refreshSnapshotProvider{err: errors.New("poll queue closed")}),
-			method:     http.MethodPost,
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "refresh_failed",
 		},
@@ -524,15 +499,7 @@ func TestRefreshRouteReturnsErrorEnvelope(t *testing.T) {
 			server := hertzserver.New(tt.service)
 			baseURL := startTestServer(t, server)
 
-			req, err := http.NewRequest(tt.method, baseURL+"/api/v1/refresh", strings.NewReader("{}"))
-			if err != nil {
-				t.Fatalf("new request: %v", err)
-			}
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("%s /api/v1/refresh: %v", tt.method, err)
-			}
+			resp := postJSON(t, baseURL, "/api/v1/control/refresh", "{}")
 			defer resp.Body.Close()
 
 			if resp.StatusCode != tt.wantStatus {
@@ -560,16 +527,7 @@ func TestScaffoldRouteCallsAuthoredControlService(t *testing.T) {
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
 
-	req, err := http.NewRequest(http.MethodGet, baseURL+"/api/v1/scaffold", nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("GET /api/v1/scaffold: %v", err)
-	}
+	resp := postJSON(t, baseURL, "/api/v1/control/get-scaffold", "{}")
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -585,6 +543,16 @@ func TestScaffoldRouteCallsAuthoredControlService(t *testing.T) {
 	if body.Status != "ok" {
 		t.Fatalf("response status = %q, want ok", body.Status)
 	}
+}
+
+func postJSON(t *testing.T, baseURL, path, body string) *http.Response {
+	t.Helper()
+
+	resp, err := http.Post(baseURL+path, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", path, err)
+	}
+	return resp
 }
 
 func startTestServer(t *testing.T, server *hertzserver.Server) string {
