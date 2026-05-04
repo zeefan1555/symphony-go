@@ -14,14 +14,26 @@ if ! command -v thriftgo >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p "$repo_root/internal/generated/hertz/control"
-cd "$repo_root/internal/generated/hertz/control"
+tmp_dir="$(mktemp -d)"
+cleanup() {
+  rm -rf "$tmp_dir"
+}
+trap cleanup EXIT
 
 hz new \
-  --force \
-  --handler_dir handler \
-  --model_dir model \
-  --router_dir router \
+  --module github.com/zeefan1555/symphony-go \
+  --out_dir "$tmp_dir" \
+  --handler_dir biz/handler \
+  --model_dir biz/model \
   --idl "$repo_root/idl/control/http.thrift"
 
-perl -pi -e 's/[ \t]+$//' .gitignore
+find "$tmp_dir/biz/router" -type f -name '*.go' -exec perl -pi -e 's/^package Http$/package http/' {} +
+
+rm -rf "$repo_root/biz/handler" "$repo_root/biz/model" "$repo_root/biz/router/control"
+mkdir -p "$repo_root/biz/router"
+cp -R "$tmp_dir/biz/handler" "$repo_root/biz/handler"
+cp -R "$tmp_dir/biz/model" "$repo_root/biz/model"
+cp -R "$tmp_dir/biz/router/control" "$repo_root/biz/router/control"
+
+find "$repo_root/biz" -type f -name '*.go' -exec perl -pi -e 's/[ \t]+$//' {} +
+find "$repo_root/biz" -type f -name '*.go' -exec chmod 0644 {} +

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	model "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/model"
+	model "github.com/zeefan1555/symphony-go/biz/model/control/model"
 )
 
 type ScaffoldStatus struct {

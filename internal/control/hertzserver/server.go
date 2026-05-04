@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
+	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control/model"
+	"github.com/zeefan1555/symphony-go/biz/router"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
-	controlmodel "github.com/zeefan1555/symphony-go/internal/generated/hertz/control/model/control/model"
-	"github.com/zeefan1555/symphony-go/internal/generated/hertz/control/router"
 	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
 )
 
