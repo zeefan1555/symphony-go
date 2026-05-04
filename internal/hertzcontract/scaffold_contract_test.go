@@ -232,7 +232,7 @@ func TestGeneratedHertzScaffoldStaysGeneratedOnly(t *testing.T) {
 			"internal/workspace",
 			"internal/codex",
 			"internal/workflow",
-			"internal/linear",
+			"internal/issuetracker",
 		} {
 			if strings.Contains(content, forbidden) {
 				t.Fatalf("%s imports %s; generated scaffold must not own business logic", path, forbidden)
