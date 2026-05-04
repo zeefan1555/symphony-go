@@ -1,6 +1,6 @@
 # 内部架构脚手架 IDL 与 Hertz 生成契约
 
-本文档固化第一版内部架构脚手架 IDL 的目录、生成命令和边界检查。它只描述内部子系统能力边界，不把这些能力默认暴露为外部 HTTP 控制面。
+本文档固化第一版内部架构脚手架 IDL 的目录、生成命令和边界检查。它描述内部子系统能力边界；当某个能力被明确纳入诊断控制面 API 时，外部 HTTP 路由仍必须通过 `idl/main.thrift` 和平铺领域 IDL 注册，而不是直接暴露 scaffold service。
 
 ## 目录契约
 
@@ -24,13 +24,13 @@ make hertz-scaffold-generate
 
 `make hertz-scaffold-generate` 调用 `scripts/hertz_scaffold_generate.sh`，脚本使用 `hz model` 读取 `idl/scaffold/orchestrator.thrift`、`idl/scaffold/workspace.thrift`、`idl/scaffold/codex_session.thrift` 和 `idl/scaffold/workflow.thrift`，并把生成结果写入 `internal/generated/hertz/scaffold/`。
 
-生成结束后脚本会运行 `scripts/check_generated_hertz_boundary.sh`。该检查确认 `internal/generated/hertz/` 与标准 `biz` 生成外壳下的 Go 文件都带有生成代码头；其中生成 model/router 不能导入 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/service` 或 `internal/issuetracker` 等核心/adapter 包。脚本同时检查 `internal/service/` 不导入 Hertz `app.RequestContext`，也不直接依赖 issue tracker adapter。
+生成结束后脚本会运行 `scripts/check_generated_hertz_boundary.sh`。该检查确认 `internal/generated/hertz/` 与标准 `biz` 生成外壳下的 Go 文件都带有生成代码头；其中生成 model、router 和 handler 外壳不能直接导入 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/service` 或 `internal/issuetracker` 等核心/adapter 包。脚本同时检查 `internal/service/` 不导入 Hertz `app.RequestContext`，也不直接依赖 issue tracker adapter。
 
 ## 边界说明
 
 内部架构脚手架 IDL 是给维护者和 agent 看的实现边界地图。它按运行子系统分文件，帮助后续能力从 IDL 开始，再进入生成模型、手写 adapter/service 和现有核心包。
 
-控制面 IDL 位于 `idl/control/`，只描述 operator-facing HTTP 控制面。控制面 IDL 可以带 Hertz route annotations；内部架构脚手架 IDL 不允许出现 `api.get`、`api.post` 或 `api.path` 这类 HTTP route annotations。
+控制面 IDL 现在由根目录 `idl/` 的 `main.thrift` 与平铺领域 IDL 组成，用来承载诊断控制面 API。`idl/main.thrift` 是唯一 service 和所有业务 POST 接口 route annotations 的来源；平铺领域 IDL 只定义专属 Req/Resp 和嵌套模型。内部架构脚手架 IDL 不允许出现 `api.get`、`api.post` 或 `api.path` 这类 HTTP route annotations。
 
 生成代码位于 `internal/generated/hertz/`，可被命令覆盖。手写 adapter/service 不放在生成目录内；后续 slice 应把 adapter 放在对应手写目录中，并通过小接口委托到现有核心包。
 

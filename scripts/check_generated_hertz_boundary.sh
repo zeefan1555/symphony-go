@@ -57,7 +57,7 @@ check_internal_service_boundary() {
 }
 
 check_generated_tree "$repo_root/internal/generated/hertz" "internal generated Hertz tree" yes
-check_generated_tree "$repo_root/biz/handler" "biz handler shell" no
+check_generated_tree "$repo_root/biz/handler" "biz handler shell" yes
 check_generated_tree "$repo_root/biz/model" "biz model shell" yes
 check_generated_tree "$repo_root/biz/router" "biz router shell" yes
 check_internal_service_boundary
