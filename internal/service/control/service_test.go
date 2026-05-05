@@ -10,8 +10,8 @@ import (
 	"time"
 
 	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
-	"github.com/zeefan1555/symphony-go/internal/observability"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )

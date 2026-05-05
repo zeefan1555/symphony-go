@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/observability"
+	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
 )
 
 type Options struct {
