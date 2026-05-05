@@ -14,6 +14,7 @@
 - `docs/adr/`，用于读取架构决策，如果存在。
 - 排查重复工作流失败或用户纠正时，读取 `docs/optimization/` 和 `lesson.md`。
 - 不要把 `docs/architecture/symphony-go-architecture.md` 作为默认参考源；它是历史实验文档，不是当前权威架构说明。
+- `docs/plan/` 和 `docs/superpowers/plans/` 是历史计划归档；除非任务明确要求复盘旧计划，不要把其中的旧目录名或旧 import 示例当作当前权威结构。
 
 如果某个可选文件不存在，静默继续；除非当前任务确实需要，否则不要主动建议创建。
 

@@ -10,4 +10,4 @@ Symphony Go will use `idl/main.thrift` as the only Hertz generation entry for bu
 
 ## Consequences
 
-All business HTTP routes registered from the main IDL use POST action-style paths so local operator, TUI, agent, and smoke-harness callers can share one calling convention. Internal scaffold capabilities become local diagnostic control-plane APIs rather than stable product APIs. Hertz owns interface contracts, route registration, generated models, and handler skeletons; handwritten service and adapter layers remain the authority for business behaviour and side effects.
+All business HTTP routes registered from the main IDL use POST action-style paths so local operator, TUI, agent, and smoke-harness callers can share one calling convention. Internal scaffold capabilities become local diagnostic control-plane APIs rather than stable product APIs. Hertz owns interface contracts, route registration, generated models, and handler skeletons; handwritten service and transport layers remain the authority for business behaviour and side effects.

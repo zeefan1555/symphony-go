@@ -2,7 +2,7 @@
 
 Status: superseded in part by ADR-0002
 
-Symphony Go remains a long-running listener service that polls Linear and runs issue work through the orchestrator; external APIs are transport adapters over that core, not the core itself. For the first external control plane, we will use Hertz because the current SPEC already defines an HTTP/dashboard-oriented extension and the initial consumers are humans, browsers, curl, and local operator tooling. Shared IDL models should stay transport-neutral, while Hertz-specific route annotations belong in an HTTP-specific IDL layer so a future Kitex RPC adapter can reuse the same control semantics without moving orchestrator logic into transport code.
+Symphony Go remains a long-running listener service that polls Linear and runs issue work through the orchestrator; external APIs are transport layers over that core, not the core itself. For the first external control plane, we will use Hertz because the current SPEC already defines an HTTP/dashboard-oriented extension and the initial consumers are humans, browsers, curl, and local operator tooling. Shared IDL models should stay transport-neutral, while Hertz-specific route annotations belong in an HTTP-specific IDL layer so a future Kitex RPC transport can reuse the same control semantics without moving orchestrator logic into transport code.
 
 ## Considered Options
 

@@ -103,6 +103,16 @@
 - 如果确实需要共享实现，必须保证根目录入口仍能一眼看懂关键行为，并说明为什么值得拆分。
 - 新增工具脚本时默认放在最接近使用者的位置；只有内部辅助、非直接入口才放入 `scripts/`。
 
+### internal 目录长期边界
+
+- `internal/service/...` 承载 Symphony 核心业务能力，包括 issue run 调度、workspace lifecycle、Codex session、workflow 语义和 control semantics。
+- `internal/runtime/...` 承载本地 daemon 运行支撑，包括配置解析、日志事件、观测快照和进程级偏好。
+- `internal/integration/...` 承载第三方系统接入，包括 Linear issue tracker client、fake、状态推进和 blocker normalization。
+- `internal/transport/...` 承载入站协议层，包括 Hertz HTTP hook/server、HTTP error envelope 和协议模型转换。
+- `biz/...` 是标准 Hertz 生成外壳，是控制面生成模型、handler skeleton 和 router 的权威来源；不要把手写业务逻辑放入 `biz/model` 或 `biz/router`。
+- 旧顶层 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/control`、`internal/config`、`internal/logging`、`internal/observability`、`internal/issuetracker`、`internal/generated`、`internal/types` 只允许作为迁移期遗留或兼容 shim；新增业务逻辑必须落到上述长期边界。
+- 不使用 `adapter` 或 `platform` 作为长期目录名；如果能力无法归入现有语义根，先更新 PRD 或创建 follow-up，不临时新增顶层目录。
+
 ### 测试和构建
 
 - 验证本仓 Go 代码时优先使用 `./test.sh` 和 `./build.sh`。
