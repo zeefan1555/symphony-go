@@ -3,8 +3,8 @@ package scaffold
 import (
 	"context"
 
-	"github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/model"
-	"github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/orchestrator"
+	"github.com/zeefan1555/symphony-go/biz/model/common"
+	"github.com/zeefan1555/symphony-go/biz/model/orchestrator"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 )
 
@@ -20,7 +20,7 @@ func NewAdapter(provider SnapshotProvider) *Adapter {
 	return &Adapter{provider: provider}
 }
 
-func (a *Adapter) ProjectIssueRun(ctx context.Context, request *orchestrator.IssueRunProjectionRequest) (*orchestrator.IssueRunProjection, error) {
+func (a *Adapter) ProjectIssueRun(ctx context.Context, request *orchestrator.ProjectIssueRunReq) (*orchestrator.IssueRunProjection, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (a *Adapter) ProjectIssueRun(ctx context.Context, request *orchestrator.Iss
 		issueIdentifier = request.IssueIdentifier
 	}
 	return &orchestrator.IssueRunProjection{
-		Boundary: &model.CapabilityBoundary{
+		Boundary: &common.CapabilityBoundary{
 			Name:               "orchestrator.issue_run_projection",
 			Purpose:            "Project issue-run control state from the handwritten orchestrator runtime.",
 			HandwrittenAdapter: "internal/orchestrator/scaffold",

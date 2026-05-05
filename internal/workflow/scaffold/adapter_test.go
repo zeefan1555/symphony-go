@@ -7,18 +7,21 @@ import (
 	"strings"
 	"testing"
 
-	generated "github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/workflow"
+	generated "github.com/zeefan1555/symphony-go/biz/model/workflow"
 )
 
-func TestAdapterImplementsGeneratedWorkflowScaffold(t *testing.T) {
-	var _ generated.WorkflowScaffold = (*Adapter)(nil)
+func TestAdapterExposesStandardWorkflowDiagnosticMethods(t *testing.T) {
+	var _ interface {
+		LoadWorkflow(context.Context, *generated.LoadWorkflowReq) (*generated.WorkflowSummary, error)
+		RenderWorkflowPrompt(context.Context, *generated.RenderWorkflowPromptReq) (*generated.WorkflowRenderResult, error)
+	} = (*Adapter)(nil)
 }
 
 func TestLoadWorkflowDelegatesToWorkflowLoader(t *testing.T) {
 	path := writeWorkflow(t)
 	adapter := NewAdapter()
 
-	summary, err := adapter.LoadWorkflow(context.Background(), &generated.WorkflowLoadRequest{WorkflowPath: path})
+	summary, err := adapter.LoadWorkflow(context.Background(), &generated.LoadWorkflowReq{WorkflowPath: path})
 	if err != nil {
 		t.Fatalf("LoadWorkflow() error = %v", err)
 	}
@@ -40,7 +43,7 @@ func TestRenderWorkflowPromptDelegatesToWorkflowRender(t *testing.T) {
 	path := writeWorkflow(t)
 	adapter := NewAdapter()
 
-	rendered, err := adapter.RenderWorkflowPrompt(context.Background(), &generated.WorkflowRenderRequest{
+	rendered, err := adapter.RenderWorkflowPrompt(context.Background(), &generated.RenderWorkflowPromptReq{
 		WorkflowPath:     path,
 		IssueIdentifier:  "ZEE-59",
 		IssueTitle:       "Workflow tracer",

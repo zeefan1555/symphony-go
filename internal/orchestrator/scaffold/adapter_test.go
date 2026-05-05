@@ -5,12 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/orchestrator"
+	"github.com/zeefan1555/symphony-go/biz/model/orchestrator"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 )
 
-func TestAdapterImplementsGeneratedOrchestratorScaffold(t *testing.T) {
-	var _ orchestrator.OrchestratorScaffold = (*Adapter)(nil)
+func TestAdapterExposesStandardOrchestratorDiagnosticMethod(t *testing.T) {
+	var _ interface {
+		ProjectIssueRun(context.Context, *orchestrator.ProjectIssueRunReq) (*orchestrator.IssueRunProjection, error)
+	} = (*Adapter)(nil)
 }
 
 func TestProjectIssueRunDelegatesToSnapshotProvider(t *testing.T) {
@@ -23,7 +25,7 @@ func TestProjectIssueRunDelegatesToSnapshotProvider(t *testing.T) {
 	}}
 	adapter := NewAdapter(provider)
 
-	projection, err := adapter.ProjectIssueRun(context.Background(), &orchestrator.IssueRunProjectionRequest{
+	projection, err := adapter.ProjectIssueRun(context.Background(), &orchestrator.ProjectIssueRunReq{
 		IssueIdentifier: "ZEE-56",
 	})
 	if err != nil {
@@ -49,7 +51,7 @@ func TestProjectIssueRunDelegatesToSnapshotProvider(t *testing.T) {
 func TestProjectIssueRunReturnsQueuedForMissingIssue(t *testing.T) {
 	adapter := NewAdapter(snapshotProvider{snapshot: observability.NewSnapshot()})
 
-	projection, err := adapter.ProjectIssueRun(context.Background(), &orchestrator.IssueRunProjectionRequest{
+	projection, err := adapter.ProjectIssueRun(context.Background(), &orchestrator.ProjectIssueRunReq{
 		IssueIdentifier: "ZEE-404",
 	})
 	if err != nil {

@@ -3,9 +3,9 @@ package scaffold
 import (
 	"context"
 
+	generated "github.com/zeefan1555/symphony-go/biz/model/codexsession"
+	"github.com/zeefan1555/symphony-go/biz/model/common"
 	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
-	generated "github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/codexsession"
-	"github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/model"
 	"github.com/zeefan1555/symphony-go/internal/types"
 )
 
@@ -21,7 +21,7 @@ func NewAdapter(runner Runner) *Adapter {
 	return &Adapter{runner: runner}
 }
 
-func (a *Adapter) RunTurn(ctx context.Context, request *generated.CodexTurnRequest) (*generated.CodexTurnSummary, error) {
+func (a *Adapter) RunTurn(ctx context.Context, request *generated.RunTurnReq) (*generated.CodexTurnSummary, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (a *Adapter) RunTurn(ctx context.Context, request *generated.CodexTurnReque
 		return nil, err
 	}
 	return &generated.CodexTurnSummary{
-		Boundary: &model.CapabilityBoundary{
+		Boundary: &common.CapabilityBoundary{
 			Name:               "codex_session.turn",
 			Purpose:            "Run a single Codex turn through the handwritten Codex runner without exposing app-server protocol details.",
 			HandwrittenAdapter: "internal/codex/scaffold",
