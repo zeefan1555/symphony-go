@@ -311,7 +311,7 @@ def extract_metrics(events: list[dict[str, Any]], log_path: Path, issue: str | N
     metrics.merge_state_ms = millis_between(merge_started_at, metrics.merging_to_done_at)
     metrics.state_flow = " > ".join(state_flow)
     metrics.workpad_phases = ",".join(workpad_phases)
-    metrics.success = str(metrics.final_state in {"Human Review", "Done"} and bool(metrics.commit)).lower()
+    metrics.success = str(metrics.final_state == "Done" and bool(metrics.commit)).lower()
     return metrics
 
 

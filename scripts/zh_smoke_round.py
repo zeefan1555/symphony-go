@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,12 +19,17 @@ ISSUE_TEMPLATE = """中文冒烟测试：固定时间戳任务
 
 请使用中文冒烟 benchmark workflow 处理：
 
-- 只改 `SMOKE.md`
-- 写入一行 `中文冒烟测试时间戳：<timestamp>`
-- 运行 `rg -n '^中文冒烟测试时间戳：' SMOKE.md`
+- 只改 `docs/smoke/pr-merge-fast-path-smoke.md`
+- 在文件末尾追加一组新的冒烟记录：
+  - `Timestamp: {timestamp}`
+  - `Issue: <本 issue identifier>`
+  - `Note: PR merge fast path smoke; the change was made in the issue worktree and merged through the PR flow.`
+- 运行 `rg -n "Issue: <本 issue identifier>" docs/smoke/pr-merge-fast-path-smoke.md`
 - 运行 `git diff --check`
 - 创建一个本地 commit
-- 不创建 PR，不 push
+- 进入 `AI Review`，review 通过后进入 `Merging`
+- 在 `Merging` 阶段通过 PR merge flow 创建或更新 PR、等待检查并 merge
+- PR merge 完成后把 issue 移动到 `Done`，由框架自动清理 issue worktree
 - 所有 Workpad、状态说明和最终回复使用中文
 """
 
@@ -121,6 +127,7 @@ def resolve_targets(endpoint: str, api_key: str, project_slug: str, team_name: s
 
 
 def create_issue(endpoint: str, api_key: str, targets: dict[str, str], title: str) -> dict[str, str]:
+    timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
     data = graphql(
         endpoint,
         api_key,
@@ -138,7 +145,7 @@ def create_issue(endpoint: str, api_key: str, targets: dict[str, str], title: st
                 "projectId": targets["project_id"],
                 "stateId": targets["state_id"],
                 "title": title,
-                "description": ISSUE_TEMPLATE,
+                "description": ISSUE_TEMPLATE.format(timestamp=timestamp),
             }
         },
     )

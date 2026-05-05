@@ -34,7 +34,7 @@ description: "外层中文冒烟实验 harness：控制 Symphony Go 创建固定
 | 指标 | 判定 |
 | --- | --- |
 | `success` | 必须为 `true` |
-| `changed_files` | 应该只有 `SMOKE.md` |
+| `changed_files` | 应该只有 `docs/smoke/pr-merge-fast-path-smoke.md` |
 | `ai_review_result` | 应为 `passed` |
 | `last_total_tokens` | 单次上下文 token，越低越好；优先用它判断单轮复杂度 |
 | `total_tokens` | Codex 多次 token event 的累计值，只用于估算总消耗，不单独作为优化成败依据 |
@@ -162,7 +162,7 @@ tail -n 40 ../.codex/skills/zh-smoke-harness/experiments/rounds.md
 按优先级判断问题：
 
 1. `success=false`：先修状态流、merge、AI Review 或工作区问题。
-2. `changed_files` 不是 `SMOKE.md`：先收紧 workflow prompt 或 AI Review 规则。
+2. `changed_files` 不是 `docs/smoke/pr-merge-fast-path-smoke.md`：先收紧 workflow prompt 或 AI Review 规则。
 3. `ai_review_result=failed`：先看失败原因，决定是否改 review 规则或 issue prompt。
 4. `last_total_tokens` 高：优先缩短通用 prompt、减少无关上下文、降低 reasoning effort。
 5. `total_tokens` 高但 `last_total_tokens` 稳定：先看 `token_events`，通常是回合内事件次数变多。
@@ -228,7 +228,7 @@ tail -n 3 ../.codex/skills/zh-smoke-harness/experiments/results.tsv
 保留条件：
 
 - `success=true`
-- `changed_files=SMOKE.md`
+- `changed_files=docs/smoke/pr-merge-fast-path-smoke.md`
 - `ai_review_result=passed`
 - 至少一个主要指标变好：`total_tokens`、`turn_duration_ms`、`merge_duration_ms` 或 TUI 可读性
 - 没有新增 Backoff、错误状态或额外文件改动
