@@ -584,9 +584,9 @@ func TestOrchestratorRouteReturnsIssueRunProjection(t *testing.T) {
 	if body.Projection.Boundary.Name != "orchestrator.issue_run_projection" {
 		t.Fatalf("boundary name = %q, want orchestrator issue-run projection", body.Projection.Boundary.Name)
 	}
-	wantAdapter := "internal/service/" + "orchestrator/scaffold"
+	wantAdapter := "internal/service/control"
 	if body.Projection.Boundary.HandwrittenAdapter != wantAdapter {
-		t.Fatalf("adapter = %q, want orchestrator scaffold adapter", body.Projection.Boundary.HandwrittenAdapter)
+		t.Fatalf("adapter = %q, want control service", body.Projection.Boundary.HandwrittenAdapter)
 	}
 	if body.Projection.IssueIdentifier != "ZEE-56" || body.Projection.RuntimeState != "running" {
 		t.Fatalf("projection = %#v, want running ZEE-56", body.Projection)
@@ -801,7 +801,7 @@ func TestCodexSessionRouteDelegatesToControlService(t *testing.T) {
 	if len(runner.request.Prompts) != 1 || runner.request.Prompts[0].Text != "Implement the requested slice." {
 		t.Fatalf("prompts = %#v", runner.request.Prompts)
 	}
-	if body.Summary.Boundary.Name != "codex_session.turn" || body.Summary.Boundary.HandwrittenAdapter != "internal/service/codex/scaffold" {
+	if body.Summary.Boundary.Name != "codex_session.turn" || body.Summary.Boundary.HandwrittenAdapter != "internal/service/control" {
 		t.Fatalf("boundary = %#v, want codex session turn boundary", body.Summary.Boundary)
 	}
 	if body.Summary.SessionID != "session-1" || body.Summary.TurnCount != 1 {

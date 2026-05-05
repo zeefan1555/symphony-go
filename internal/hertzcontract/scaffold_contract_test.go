@@ -18,6 +18,10 @@ func TestOldInternalGeneratedScaffoldChainIsRetired(t *testing.T) {
 	for _, retiredPath := range []string{
 		"scripts/hertz_scaffold_generate.sh",
 		"internal/generated",
+		"internal/service/codex/scaffold",
+		"internal/service/orchestrator/scaffold",
+		"internal/service/workflow/scaffold",
+		"internal/service/workspace/scaffold",
 		"idl/scaffold",
 	} {
 		if _, err := os.Stat(filepath.Join(repo, retiredPath)); err == nil {
