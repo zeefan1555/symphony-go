@@ -3,8 +3,8 @@ package scaffold
 import (
 	"context"
 
-	"github.com/zeefan1555/symphony-go/biz/model/common"
-	generated "github.com/zeefan1555/symphony-go/biz/model/workflow"
+	"github.com/zeefan1555/symphony-go/gen/hertz/model/common"
+	generated "github.com/zeefan1555/symphony-go/gen/hertz/model/workflow"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	coreworkflow "github.com/zeefan1555/symphony-go/internal/service/workflow"
 )

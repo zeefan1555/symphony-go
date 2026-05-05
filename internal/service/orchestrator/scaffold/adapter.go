@@ -3,8 +3,8 @@ package scaffold
 import (
 	"context"
 
-	"github.com/zeefan1555/symphony-go/biz/model/common"
-	"github.com/zeefan1555/symphony-go/biz/model/orchestrator"
+	"github.com/zeefan1555/symphony-go/gen/hertz/model/common"
+	"github.com/zeefan1555/symphony-go/gen/hertz/model/orchestrator"
 	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
 )
 

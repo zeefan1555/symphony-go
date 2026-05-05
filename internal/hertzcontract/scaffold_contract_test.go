@@ -54,7 +54,7 @@ func TestStandardHertzIDLDefinesOrchestratorDiagnosticEntry(t *testing.T) {
 
 func TestOrchestratorScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 	repo := "../../"
-	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
+	controlRoute := readFile(t, filepath.Join(repo, "gen/hertz/router/api/main.go"))
 
 	for _, want := range []string{
 		`_v1.Group("/orchestrator"`,
@@ -102,7 +102,7 @@ func TestStandardHertzIDLDefinesWorkspaceDiagnosticEntries(t *testing.T) {
 
 func TestWorkspaceScaffoldIsExposedAsDiagnosticRoutes(t *testing.T) {
 	repo := "../../"
-	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
+	controlRoute := readFile(t, filepath.Join(repo, "gen/hertz/router/api/main.go"))
 
 	for _, want := range []string{
 		`_v1.Group("/workspace"`,
@@ -161,7 +161,7 @@ func TestStandardHertzIDLDefinesCodexSessionDiagnosticEntry(t *testing.T) {
 
 func TestCodexSessionScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 	repo := "../../"
-	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
+	controlRoute := readFile(t, filepath.Join(repo, "gen/hertz/router/api/main.go"))
 
 	for _, want := range []string{
 		`_v1.Group("/codex-session"`,
@@ -204,7 +204,7 @@ func TestStandardHertzIDLDefinesWorkflowDiagnosticEntries(t *testing.T) {
 
 func TestWorkflowScaffoldIsExposedAsDiagnosticRoutes(t *testing.T) {
 	repo := "../../"
-	controlRoute := readFile(t, filepath.Join(repo, "biz/router/api/main.go"))
+	controlRoute := readFile(t, filepath.Join(repo, "gen/hertz/router/api/main.go"))
 
 	for _, want := range []string{
 		`_v1.Group("/workflow"`,
@@ -243,8 +243,8 @@ func TestHertzGenerationArchitectureDecisionDocumentsGenHertzShell(t *testing.T)
 	}
 
 	for name, text := range map[string]string{
-		"CONTEXT.md":                    contextDoc,
-		"control-plane-hertz-idl.md":    controlDoc,
+		"CONTEXT.md":                     contextDoc,
+		"control-plane-hertz-idl.md":     controlDoc,
 		"internal-scaffold-hertz-idl.md": scaffoldDoc,
 	} {
 		if !strings.Contains(text, "`gen/hertz/...`") {
@@ -274,9 +274,9 @@ func TestGeneratedHertzBoundaryCheckCoversBizAndServiceBoundaries(t *testing.T) 
 
 	checkScript := readFile(t, filepath.Join(repo, "scripts/check_generated_hertz_boundary.sh"))
 	for _, want := range []string{
-		"biz/handler",
-		"biz/model",
-		"biz/router",
+		"gen/hertz/handler",
+		"gen/hertz/model",
+		"gen/hertz/router",
 		"internal/service",
 		"github.com/cloudwego/hertz/pkg/app",
 		"app\\.RequestContext",

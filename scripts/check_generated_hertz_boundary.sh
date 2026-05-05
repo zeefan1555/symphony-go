@@ -56,7 +56,7 @@ check_internal_service_boundary() {
   done < <(find "$root" -type f -name '*.go' | sort)
 }
 
-check_generated_tree "$repo_root/biz/handler" "biz handler shell" yes
-check_generated_tree "$repo_root/biz/model" "biz model shell" yes
-check_generated_tree "$repo_root/biz/router" "biz router shell" yes
+check_generated_tree "$repo_root/gen/hertz/handler" "gen hertz handler shell" yes
+check_generated_tree "$repo_root/gen/hertz/model" "gen hertz model shell" yes
+check_generated_tree "$repo_root/gen/hertz/router" "gen hertz router shell" yes
 check_internal_service_boundary
