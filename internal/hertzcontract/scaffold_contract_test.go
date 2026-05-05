@@ -271,6 +271,27 @@ func TestRepositoryUsesLocalModulePath(t *testing.T) {
 	}
 }
 
+func TestInternalPackagesDoNotKeepThinDocFiles(t *testing.T) {
+	repo := "../../"
+	var docFiles []string
+	err := filepath.WalkDir(filepath.Join(repo, "internal"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || entry.Name() != "doc.go" {
+			return nil
+		}
+		docFiles = append(docFiles, strings.TrimPrefix(path, repo))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk internal: %v", err)
+	}
+	if len(docFiles) > 0 {
+		t.Fatalf("thin internal doc.go files must be removed: %v", docFiles)
+	}
+}
+
 func TestGeneratedHertzBoundaryCheckOnlyCoversAuthoritativeGeneratedShell(t *testing.T) {
 	repo := "../../"
 	checkScript := readFile(t, filepath.Join(repo, "scripts/check_generated_hertz_boundary.sh"))
