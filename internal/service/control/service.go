@@ -9,7 +9,7 @@ import (
 
 	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/observability"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	coreworkflow "github.com/zeefan1555/symphony-go/internal/workflow"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
@@ -140,7 +140,7 @@ func (s *Service) ResolveWorkspacePath(ctx context.Context, issueIdentifier stri
 	if s == nil || s.workspace == nil {
 		return WorkspacePreparation{}, ErrWorkspaceManagerRequired
 	}
-	path, err := s.workspace.PathForIssue(types.Issue{Identifier: issueIdentifier})
+	path, err := s.workspace.PathForIssue(issuemodel.Issue{Identifier: issueIdentifier})
 	if err != nil {
 		return WorkspacePreparation{}, err
 	}
@@ -171,7 +171,7 @@ func (s *Service) PrepareWorkspace(ctx context.Context, issueIdentifier string) 
 	if s == nil || s.workspace == nil {
 		return WorkspacePreparation{}, ErrWorkspaceManagerRequired
 	}
-	path, _, err := s.workspace.Ensure(ctx, types.Issue{Identifier: issueIdentifier})
+	path, _, err := s.workspace.Ensure(ctx, issuemodel.Issue{Identifier: issueIdentifier})
 	if err != nil {
 		return WorkspacePreparation{}, err
 	}
@@ -236,7 +236,7 @@ func (s *Service) RenderWorkflowPrompt(ctx context.Context, input WorkflowRender
 		value := input.Attempt
 		attempt = &value
 	}
-	prompt, err := coreworkflow.Render(loaded.PromptTemplate, types.Issue{
+	prompt, err := coreworkflow.Render(loaded.PromptTemplate, issuemodel.Issue{
 		Identifier:  input.IssueIdentifier,
 		Title:       input.IssueTitle,
 		Description: input.IssueDescription,
@@ -262,7 +262,7 @@ func (s *Service) RunCodexTurn(ctx context.Context, input CodexTurnInput) (Codex
 	}
 	result, err := s.runner.RunSession(ctx, corecodex.SessionRequest{
 		WorkspacePath: input.WorkspacePath,
-		Issue:         types.Issue{Identifier: input.IssueIdentifier},
+		Issue:         issuemodel.Issue{Identifier: input.IssueIdentifier},
 		Prompts: []corecodex.TurnPrompt{{
 			Text: input.PromptText,
 		}},

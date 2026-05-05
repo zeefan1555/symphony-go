@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 type runningIssue struct {
@@ -22,7 +22,7 @@ type eligibilityState struct {
 	aiReview       bool
 }
 
-func candidateEligible(issue types.Issue, state eligibilityState) (bool, string) {
+func candidateEligible(issue issuemodel.Issue, state eligibilityState) (bool, string) {
 	if issue.ID == "" || issue.Identifier == "" || issue.Title == "" || issue.State == "" {
 		return false, "missing_required_issue_field"
 	}
@@ -86,7 +86,7 @@ func availableSlotsForState(stateName string, state eligibilityState) int {
 	return globalAvailable
 }
 
-func sortCandidates(issues []types.Issue) {
+func sortCandidates(issues []issuemodel.Issue) {
 	sort.SliceStable(issues, func(i, j int) bool {
 		left, right := issues[i], issues[j]
 		lp, rp := prioritySortValue(left.Priority), prioritySortValue(right.Priority)

@@ -8,20 +8,21 @@ import (
 	"strings"
 
 	"github.com/zeefan1555/symphony-go/internal/config"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	"gopkg.in/yaml.v3"
 )
 
 var variablePattern = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}`)
 var attemptBlockPattern = regexp.MustCompile(`(?s)\{%[[:space:]]*if[[:space:]]+attempt[[:space:]]*%\}(.*?)\{%[[:space:]]*endif[[:space:]]*%\}`)
 
-func Load(path string) (*types.Workflow, error) {
+func Load(path string) (*runtimeconfig.Workflow, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read workflow: %w", err)
 	}
 	cfgBytes, prompt := splitFrontMatter(content)
-	var cfg types.Config
+	var cfg runtimeconfig.Config
 	if len(bytes.TrimSpace(cfgBytes)) > 0 {
 		if err := yaml.Unmarshal(cfgBytes, &cfg); err != nil {
 			return nil, fmt.Errorf("parse workflow front matter: %w", err)
@@ -31,10 +32,10 @@ func Load(path string) (*types.Workflow, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &types.Workflow{Config: resolved, PromptTemplate: strings.TrimSpace(string(prompt))}, nil
+	return &runtimeconfig.Workflow{Config: resolved, PromptTemplate: strings.TrimSpace(string(prompt))}, nil
 }
 
-func Render(template string, issue types.Issue, attempt *int) (string, error) {
+func Render(template string, issue issuemodel.Issue, attempt *int) (string, error) {
 	rendered := attemptBlockPattern.ReplaceAllStringFunc(template, func(match string) string {
 		if attempt == nil {
 			return ""
@@ -75,7 +76,7 @@ func splitFrontMatter(content []byte) ([]byte, []byte) {
 	return []byte(strings.Join(lines[1:], "\n")), nil
 }
 
-func templateValue(key string, issue types.Issue, attempt *int) (string, bool) {
+func templateValue(key string, issue issuemodel.Issue, attempt *int) (string, bool) {
 	switch key {
 	case "attempt":
 		if attempt == nil {

@@ -7,16 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 func TestEnsureRunsAfterCreateOnceWithUTF8Env(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
-	manager := New(root, types.HooksConfig{
+	manager := New(root, runtimeconfig.HooksConfig{
 		AfterCreate: `printf '%s\n' "$LANG|$LC_ALL|中文" > hook.txt`,
 		TimeoutMS:   5000,
 	})
-	issue := types.Issue{Identifier: "ZEE-中文"}
+	issue := issuemodel.Issue{Identifier: "ZEE-中文"}
 	workspacePath, created, err := manager.Ensure(context.Background(), issue)
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +43,7 @@ func TestEnsureRunsAfterCreateOnceWithUTF8Env(t *testing.T) {
 
 func TestHookObserverReceivesLifecycleEventsWithIssueContext(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
-	manager := New(root, types.HooksConfig{
+	manager := New(root, runtimeconfig.HooksConfig{
 		AfterCreate: `printf 'hook-output'`,
 		TimeoutMS:   5000,
 	})
@@ -50,7 +51,7 @@ func TestHookObserverReceivesLifecycleEventsWithIssueContext(t *testing.T) {
 	manager.SetHookObserver(func(event HookEvent) {
 		events = append(events, event)
 	})
-	issue := types.Issue{ID: "issue-id", Identifier: "ZEE-HOOK"}
+	issue := issuemodel.Issue{ID: "issue-id", Identifier: "ZEE-HOOK"}
 	_, created, err := manager.Ensure(WithHookIssue(context.Background(), issue), issue)
 	if err != nil {
 		t.Fatal(err)
@@ -82,8 +83,8 @@ func TestHookObserverReceivesLifecycleEventsWithIssueContext(t *testing.T) {
 
 func TestPathForIssueStaysInsideRoot(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
-	manager := New(root, types.HooksConfig{})
-	path, err := manager.PathForIssue(types.Issue{Identifier: "../ZEE/unsafe"})
+	manager := New(root, runtimeconfig.HooksConfig{})
+	path, err := manager.PathForIssue(issuemodel.Issue{Identifier: "../ZEE/unsafe"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +97,7 @@ func TestPathForIssueStaysInsideRoot(t *testing.T) {
 	if err := manager.ValidateWorkspacePath(path); err != nil {
 		t.Fatal(err)
 	}
-	workspacePath, created, err := manager.Ensure(context.Background(), types.Issue{Identifier: "../ZEE/unsafe"})
+	workspacePath, created, err := manager.Ensure(context.Background(), issuemodel.Issue{Identifier: "../ZEE/unsafe"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,8 +111,8 @@ func TestPathForIssueStaysInsideRoot(t *testing.T) {
 
 func TestPathForIssueSanitizesDotDotIdentifierInsideRoot(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
-	manager := New(root, types.HooksConfig{})
-	path, err := manager.PathForIssue(types.Issue{Identifier: ".."})
+	manager := New(root, runtimeconfig.HooksConfig{})
+	path, err := manager.PathForIssue(issuemodel.Issue{Identifier: ".."})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,12 +129,12 @@ func TestPathForIssueSanitizesDotDotIdentifierInsideRoot(t *testing.T) {
 
 func TestBeforeRunAndAfterRunHookSemantics(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
-	manager := New(root, types.HooksConfig{
+	manager := New(root, runtimeconfig.HooksConfig{
 		BeforeRun: `printf before >> order.txt`,
 		AfterRun:  `printf after >> order.txt; exit 9`,
 		TimeoutMS: 5000,
 	})
-	issue := types.Issue{Identifier: "ZEE-HOOKS"}
+	issue := issuemodel.Issue{Identifier: "ZEE-HOOKS"}
 	workspacePath, _, err := manager.Ensure(context.Background(), issue)
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +157,7 @@ func TestBeforeRunAndAfterRunHookSemantics(t *testing.T) {
 
 func TestValidateWorkspacePathRejectsEscapes(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
-	manager := New(root, types.HooksConfig{})
+	manager := New(root, runtimeconfig.HooksConfig{})
 	err := manager.ValidateWorkspacePath(filepath.Join(filepath.Dir(root), "outside"))
 	if err == nil {
 		t.Fatal("expected escaped workspace path to be rejected")
@@ -178,8 +179,8 @@ func TestEnsureReplacesSymlinkWorkspaceEscapingRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manager := New(root, types.HooksConfig{})
-	workspacePath, created, err := manager.Ensure(context.Background(), types.Issue{Identifier: "ZEE"})
+	manager := New(root, runtimeconfig.HooksConfig{})
+	workspacePath, created, err := manager.Ensure(context.Background(), issuemodel.Issue{Identifier: "ZEE"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +217,7 @@ func TestValidateAndBeforeRunRejectSymlinkWorkspaceEscapingRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manager := New(root, types.HooksConfig{
+	manager := New(root, runtimeconfig.HooksConfig{
 		BeforeRun: `printf ran > hook.txt`,
 		TimeoutMS: 5000,
 	})
@@ -249,7 +250,7 @@ func TestRemoveSymlinkWorkspaceRemovesOnlyLink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manager := New(root, types.HooksConfig{
+	manager := New(root, runtimeconfig.HooksConfig{
 		BeforeRemove: `printf ran > hook.txt`,
 		TimeoutMS:    5000,
 	})

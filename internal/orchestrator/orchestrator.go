@@ -12,15 +12,16 @@ import (
 	"github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/logging"
 	"github.com/zeefan1555/symphony-go/internal/observability"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	"github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
 type Tracker interface {
-	FetchActiveIssues(context.Context, []string) ([]types.Issue, error)
-	FetchIssuesByStates(context.Context, []string) ([]types.Issue, error)
-	FetchIssue(context.Context, string) (types.Issue, error)
-	FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error)
+	FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error)
+	FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error)
+	FetchIssue(context.Context, string) (issuemodel.Issue, error)
+	FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error)
 	UpdateIssueState(context.Context, string, string) error
 }
 
@@ -35,20 +36,20 @@ const (
 var errNoRetryNeeded = errors.New("no retry needed")
 
 type WorkflowReloader interface {
-	Current() *types.Workflow
-	ReloadIfChanged() (*types.Workflow, bool, error)
+	Current() *runtimeconfig.Workflow
+	ReloadIfChanged() (*runtimeconfig.Workflow, bool, error)
 	CommitCandidate()
 }
 
 type Options struct {
-	Workflow         *types.Workflow
+	Workflow         *runtimeconfig.Workflow
 	Reloader         WorkflowReloader
 	Tracker          Tracker
-	TrackerFactory   func(types.TrackerConfig) (Tracker, error)
+	TrackerFactory   func(runtimeconfig.TrackerConfig) (Tracker, error)
 	Workspace        *workspace.Manager
-	WorkspaceFactory func(types.WorkspaceConfig, types.HooksConfig) *workspace.Manager
+	WorkspaceFactory func(runtimeconfig.WorkspaceConfig, runtimeconfig.HooksConfig) *workspace.Manager
 	Runner           AgentRunner
-	RunnerFactory    func(types.CodexConfig) AgentRunner
+	RunnerFactory    func(runtimeconfig.CodexConfig) AgentRunner
 	NewTimer         func(time.Duration, func()) *time.Timer
 	Logger           *logging.Logger
 	Once             bool
@@ -72,7 +73,7 @@ type Orchestrator struct {
 }
 
 type runtimeSnapshot struct {
-	workflow    *types.Workflow
+	workflow    *runtimeconfig.Workflow
 	tracker     Tracker
 	workspace   *workspace.Manager
 	runner      AgentRunner
@@ -81,7 +82,7 @@ type runtimeSnapshot struct {
 }
 
 type terminalCleanup struct {
-	issue types.Issue
+	issue issuemodel.Issue
 	entry observability.RunningEntry
 }
 
@@ -275,7 +276,7 @@ func (o *Orchestrator) detectStalledRunning() {
 		if last.IsZero() || now.Sub(last) <= timeout {
 			continue
 		}
-		issue := types.Issue{
+		issue := issuemodel.Issue{
 			ID:         entry.IssueID,
 			Identifier: entry.IssueIdentifier,
 			State:      entry.State,
@@ -283,7 +284,7 @@ func (o *Orchestrator) detectStalledRunning() {
 		err := fmt.Errorf("stalled after %s", timeout)
 		o.scheduleRetry(issue, 1, retryFailure, err)
 		o.cancelRunning(entry.IssueID)
-		o.logIssue(types.Issue{ID: entry.IssueID, Identifier: entry.IssueIdentifier}, "worker_stalled", err.Error(), nil)
+		o.logIssue(issuemodel.Issue{ID: entry.IssueID, Identifier: entry.IssueIdentifier}, "worker_stalled", err.Error(), nil)
 	}
 }
 
@@ -320,7 +321,7 @@ func (o *Orchestrator) updateRunningState(issueID, state string) {
 	}
 }
 
-func (o *Orchestrator) markPendingTerminalCleanup(issue types.Issue, entry observability.RunningEntry) {
+func (o *Orchestrator) markPendingTerminalCleanup(issue issuemodel.Issue, entry observability.RunningEntry) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.pendingTerminalCleanup[issue.ID] = terminalCleanup{issue: issue, entry: entry}
@@ -336,7 +337,7 @@ func (o *Orchestrator) popPendingTerminalCleanup(issueID string) (terminalCleanu
 	return cleanup, ok
 }
 
-func (o *Orchestrator) cleanupWorkspace(ctx context.Context, manager *workspace.Manager, issue types.Issue, entry observability.RunningEntry) error {
+func (o *Orchestrator) cleanupWorkspace(ctx context.Context, manager *workspace.Manager, issue issuemodel.Issue, entry observability.RunningEntry) error {
 	path := entry.WorkspacePath
 	if path == "" {
 		var err error
@@ -406,7 +407,7 @@ func (o *Orchestrator) globalSlotsAvailable() int {
 	return available
 }
 
-func (o *Orchestrator) claimIssue(issue types.Issue) {
+func (o *Orchestrator) claimIssue(issue issuemodel.Issue) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.claimed[issue.ID] = true
@@ -501,7 +502,7 @@ func (o *Orchestrator) refreshWorkflow() bool {
 	return false
 }
 
-func (o *Orchestrator) reloadDependencies(loaded *types.Workflow) (Tracker, *workspace.Manager, AgentRunner, error) {
+func (o *Orchestrator) reloadDependencies(loaded *runtimeconfig.Workflow) (Tracker, *workspace.Manager, AgentRunner, error) {
 	opts := o.currentOptions()
 	tracker := opts.Tracker
 	if opts.TrackerFactory != nil {
@@ -549,7 +550,7 @@ func (o *Orchestrator) logWorkspaceHook(event workspace.HookEvent) {
 	if event.Err != nil {
 		fields["error"] = logPreview(event.Err.Error(), 200)
 	}
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         event.IssueID,
 		Identifier: event.IssueIdentifier,
 	}
@@ -568,12 +569,12 @@ func (o *Orchestrator) logWorkspaceHook(event workspace.HookEvent) {
 	o.log("", logEvent, message, fields)
 }
 
-func (o *Orchestrator) dispatchIssue(ctx context.Context, issue types.Issue, attempt int) bool {
+func (o *Orchestrator) dispatchIssue(ctx context.Context, issue issuemodel.Issue, attempt int) bool {
 	_, ok := o.dispatchIssueDone(ctx, issue, attempt)
 	return ok
 }
 
-func (o *Orchestrator) dispatchIssueDone(ctx context.Context, issue types.Issue, attempt int) (<-chan struct{}, bool) {
+func (o *Orchestrator) dispatchIssueDone(ctx context.Context, issue issuemodel.Issue, attempt int) (<-chan struct{}, bool) {
 	o.mu.Lock()
 	if o.serviceDoneLocked() {
 		o.mu.Unlock()
@@ -625,7 +626,7 @@ func (o *Orchestrator) dispatchIssueDone(ctx context.Context, issue types.Issue,
 	return done, true
 }
 
-func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue types.Issue, attempt int, err error) {
+func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue issuemodel.Issue, attempt int, err error) {
 	o.removeRunning(issue.ID)
 	o.mu.Lock()
 	if cancel := o.runningCancel[issue.ID]; cancel != nil {
@@ -667,7 +668,7 @@ func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue types.Issue, attem
 	o.scheduleRetry(issue, 1, retryContinuation, nil)
 }
 
-func (o *Orchestrator) cleanupTerminalIssueAfterExit(ctx context.Context, rt runtimeSnapshot, issue types.Issue) bool {
+func (o *Orchestrator) cleanupTerminalIssueAfterExit(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue) bool {
 	refreshed, err := rt.tracker.FetchIssue(ctx, issue.ID)
 	if err != nil {
 		o.logIssue(issue, "terminal_cleanup_check_failed", err.Error(), nil)
@@ -706,7 +707,7 @@ func (o *Orchestrator) handleRetry(issueID string) {
 		return
 	}
 
-	var issue types.Issue
+	var issue issuemodel.Issue
 	found := false
 	for _, candidate := range issues {
 		if candidate.ID == issueID {
@@ -755,7 +756,7 @@ func (o *Orchestrator) handleRetry(issueID string) {
 	o.signalPollNow()
 }
 
-func (o *Orchestrator) retryIssue(issueID string) (types.Issue, int, bool) {
+func (o *Orchestrator) retryIssue(issueID string) (issuemodel.Issue, int, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
@@ -765,13 +766,13 @@ func (o *Orchestrator) retryIssue(issueID string) (types.Issue, int, bool) {
 			if attempt < 1 {
 				attempt = entry.Attempt
 			}
-			return types.Issue{
+			return issuemodel.Issue{
 				ID:         entry.IssueID,
 				Identifier: entry.IssueIdentifier,
 			}, attempt, true
 		}
 	}
-	return types.Issue{}, 0, false
+	return issuemodel.Issue{}, 0, false
 }
 
 func (o *Orchestrator) signalPollNow() {
@@ -793,11 +794,11 @@ func (o *Orchestrator) RequestRefresh(ctx context.Context) (bool, error) {
 	}
 }
 
-func (o *Orchestrator) handleIssue(ctx context.Context, issue types.Issue) error {
+func (o *Orchestrator) handleIssue(ctx context.Context, issue issuemodel.Issue) error {
 	return o.runAgent(ctx, issue, 0)
 }
 
-func (o *Orchestrator) runAgent(ctx context.Context, issue types.Issue, attempt int) error {
+func (o *Orchestrator) runAgent(ctx context.Context, issue issuemodel.Issue, attempt int) error {
 	err := o.runAgentWith(ctx, o.currentRuntime(), issue, attempt)
 	if errors.Is(err, errNoRetryNeeded) {
 		return nil
@@ -868,7 +869,7 @@ func (o *Orchestrator) log(issue, event, message string, fields map[string]any) 
 	}
 }
 
-func (o *Orchestrator) logIssue(issue types.Issue, event, message string, fields map[string]any) {
+func (o *Orchestrator) logIssue(issue issuemodel.Issue, event, message string, fields map[string]any) {
 	if o.opts.Logger == nil {
 		return
 	}

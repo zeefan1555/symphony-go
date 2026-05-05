@@ -12,7 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 const pollQuery = `
@@ -107,7 +108,7 @@ type Client struct {
 	HTTPClient  *http.Client
 }
 
-func New(cfg types.TrackerConfig) (*Client, error) {
+func New(cfg runtimeconfig.TrackerConfig) (*Client, error) {
 	apiKey := cfg.APIKey
 	if apiKey == "" {
 		apiKey = os.Getenv("LINEAR_API_KEY")
@@ -130,15 +131,15 @@ func New(cfg types.TrackerConfig) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) FetchActiveIssues(ctx context.Context, states []string) ([]types.Issue, error) {
+func (c *Client) FetchActiveIssues(ctx context.Context, states []string) ([]issuemodel.Issue, error) {
 	return c.FetchIssuesByStates(ctx, states)
 }
 
-func (c *Client) FetchIssuesByStates(ctx context.Context, states []string) ([]types.Issue, error) {
+func (c *Client) FetchIssuesByStates(ctx context.Context, states []string) ([]issuemodel.Issue, error) {
 	if len(states) == 0 {
-		return []types.Issue{}, nil
+		return []issuemodel.Issue{}, nil
 	}
-	var issues []types.Issue
+	var issues []issuemodel.Issue
 	var after *string
 	for {
 		var body struct {
@@ -165,21 +166,21 @@ func (c *Client) FetchIssuesByStates(ctx context.Context, states []string) ([]ty
 	}
 }
 
-func (c *Client) FetchIssue(ctx context.Context, id string) (types.Issue, error) {
+func (c *Client) FetchIssue(ctx context.Context, id string) (issuemodel.Issue, error) {
 	var body struct {
 		Data struct {
 			Issue rawIssue `json:"issue"`
 		} `json:"data"`
 	}
 	if err := c.GraphQL(ctx, issueByIDQuery, map[string]any{"id": id}, &body); err != nil {
-		return types.Issue{}, err
+		return issuemodel.Issue{}, err
 	}
 	return normalizeIssue(body.Data.Issue), nil
 }
 
-func (c *Client) FetchIssueStatesByIDs(ctx context.Context, ids []string) ([]types.Issue, error) {
+func (c *Client) FetchIssueStatesByIDs(ctx context.Context, ids []string) ([]issuemodel.Issue, error) {
 	if len(ids) == 0 {
-		return []types.Issue{}, nil
+		return []issuemodel.Issue{}, nil
 	}
 	var body struct {
 		Data struct {
@@ -383,33 +384,33 @@ type rawIssueConnection struct {
 	} `json:"pageInfo"`
 }
 
-func normalizeIssues(raw []rawIssue) []types.Issue {
-	issues := make([]types.Issue, 0, len(raw))
+func normalizeIssues(raw []rawIssue) []issuemodel.Issue {
+	issues := make([]issuemodel.Issue, 0, len(raw))
 	for _, item := range raw {
 		issues = append(issues, normalizeIssue(item))
 	}
 	return issues
 }
 
-func normalizeIssue(raw rawIssue) types.Issue {
+func normalizeIssue(raw rawIssue) issuemodel.Issue {
 	labels := make([]string, 0, len(raw.Labels.Nodes))
 	for _, label := range raw.Labels.Nodes {
 		if label.Name != "" {
 			labels = append(labels, strings.ToLower(label.Name))
 		}
 	}
-	blockers := make([]types.BlockerRef, 0, len(raw.InverseRelations.Nodes))
+	blockers := make([]issuemodel.BlockerRef, 0, len(raw.InverseRelations.Nodes))
 	for _, relation := range raw.InverseRelations.Nodes {
 		if relation.Type != "blocks" || relation.Issue == nil {
 			continue
 		}
-		blockers = append(blockers, types.BlockerRef{
+		blockers = append(blockers, issuemodel.BlockerRef{
 			ID:         relation.Issue.ID,
 			Identifier: relation.Issue.Identifier,
 			State:      relation.Issue.State.Name,
 		})
 	}
-	return types.Issue{
+	return issuemodel.Issue{
 		ID:          raw.ID,
 		Identifier:  raw.Identifier,
 		Title:       raw.Title,

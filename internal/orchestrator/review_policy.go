@@ -3,7 +3,7 @@ package orchestrator
 import (
 	"strings"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 )
 
 const (
@@ -17,7 +17,7 @@ type reviewPolicy struct {
 	allowManualAIReview bool
 }
 
-func effectiveReviewPolicy(agent types.AgentConfig) reviewPolicy {
+func effectiveReviewPolicy(agent runtimeconfig.AgentConfig) reviewPolicy {
 	cfg := agent.ReviewPolicy
 	mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
 	if mode == "" {
@@ -32,7 +32,7 @@ func effectiveReviewPolicy(agent types.AgentConfig) reviewPolicy {
 	}
 }
 
-func legacyReviewPolicy(review types.AIReviewConfig) reviewPolicy {
+func legacyReviewPolicy(review runtimeconfig.AIReviewConfig) reviewPolicy {
 	policy := reviewPolicy{
 		mode: reviewPolicyHuman,
 	}

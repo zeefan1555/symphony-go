@@ -134,7 +134,7 @@
   - `docs/optimization/symphony-issue-run.md`
 - Validation:
   - 通过：`git diff --check`
-  - 通过：`go test ./internal/config ./internal/orchestrator ./internal/workflow ./internal/types`
+  - 通过：`go test ./internal/config ./internal/orchestrator ./internal/workflow ./internal/runtime/config ./internal/service/issue`
   - 通过：`CGO_ENABLED=0 go test ./...`
 - Follow-up:
   - 下一次真实 issue-run 后，用该 issue 的 human log、JSONL log、Linear workpad 和 git evidence 追加一条运行级复盘记录。

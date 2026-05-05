@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 )
 
 const stableLoadAttempts = 3
@@ -14,10 +14,10 @@ const stableLoadAttempts = 3
 type Reloader struct {
 	path           string
 	mu             sync.RWMutex
-	current        *types.Workflow
+	current        *runtimeconfig.Workflow
 	modTime        time.Time
 	size           int64
-	pending        *types.Workflow
+	pending        *runtimeconfig.Workflow
 	pendingModTime time.Time
 	pendingSize    int64
 }
@@ -26,7 +26,7 @@ func NewReloader(path string) (*Reloader, error) {
 	return newReloader(path, os.Stat, Load)
 }
 
-func newReloader(path string, stat func(string) (os.FileInfo, error), load func(string) (*types.Workflow, error)) (*Reloader, error) {
+func newReloader(path string, stat func(string) (os.FileInfo, error), load func(string) (*runtimeconfig.Workflow, error)) (*Reloader, error) {
 	loaded, info, err := loadStableWorkflow(path, stat, load)
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func newReloader(path string, stat func(string) (os.FileInfo, error), load func(
 	}, nil
 }
 
-func loadStableWorkflow(path string, stat func(string) (os.FileInfo, error), load func(string) (*types.Workflow, error)) (*types.Workflow, os.FileInfo, error) {
+func loadStableWorkflow(path string, stat func(string) (os.FileInfo, error), load func(string) (*runtimeconfig.Workflow, error)) (*runtimeconfig.Workflow, os.FileInfo, error) {
 	for attempt := 0; attempt < stableLoadAttempts; attempt++ {
 		before, err := stat(path)
 		if err != nil {
@@ -64,13 +64,13 @@ func sameFileInfo(left, right os.FileInfo) bool {
 	return left.ModTime().Equal(right.ModTime()) && left.Size() == right.Size()
 }
 
-func (r *Reloader) Current() *types.Workflow {
+func (r *Reloader) Current() *runtimeconfig.Workflow {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return cloneWorkflow(r.current)
 }
 
-func (r *Reloader) ReloadIfChanged() (*types.Workflow, bool, error) {
+func (r *Reloader) ReloadIfChanged() (*runtimeconfig.Workflow, bool, error) {
 	info, err := os.Stat(r.path)
 	if err != nil {
 		return nil, false, err
@@ -105,7 +105,7 @@ func (r *Reloader) CommitCandidate() {
 	r.pending = nil
 }
 
-func cloneWorkflow(input *types.Workflow) *types.Workflow {
+func cloneWorkflow(input *runtimeconfig.Workflow) *runtimeconfig.Workflow {
 	if input == nil {
 		return nil
 	}

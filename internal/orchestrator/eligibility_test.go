@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 func TestSortCandidatesUsesPriorityCreatedAtIdentifier(t *testing.T) {
@@ -14,7 +14,7 @@ func TestSortCandidatesUsesPriorityCreatedAtIdentifier(t *testing.T) {
 	p1 := 1
 	p2 := 2
 	p5 := 5
-	issues := []types.Issue{
+	issues := []issuemodel.Issue{
 		{ID: "d", Identifier: "ZEE-4", Title: "D", State: "Todo", Priority: &p0, CreatedAt: &old},
 		{ID: "c", Identifier: "ZEE-3", Title: "C", State: "Todo", Priority: &p2, CreatedAt: &old},
 		{ID: "b", Identifier: "ZEE-2", Title: "B", State: "Todo", Priority: &p1, CreatedAt: &newer},
@@ -34,12 +34,12 @@ func TestSortCandidatesUsesPriorityCreatedAtIdentifier(t *testing.T) {
 }
 
 func TestTodoBlockedByNonTerminalIsNotEligible(t *testing.T) {
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "i1",
 		Identifier: "ZEE-1",
 		Title:      "Blocked",
 		State:      "Todo",
-		BlockedBy:  []types.BlockerRef{{Identifier: "ZEE-0", State: "In Progress"}},
+		BlockedBy:  []issuemodel.BlockerRef{{Identifier: "ZEE-0", State: "In Progress"}},
 	}
 
 	ok, reason := candidateEligible(issue, eligibilityState{
@@ -57,12 +57,12 @@ func TestTodoBlockedByNonTerminalIsNotEligible(t *testing.T) {
 }
 
 func TestLowercaseTodoBlockedByNonTerminalIsNotEligible(t *testing.T) {
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "i1",
 		Identifier: "ZEE-1",
 		Title:      "Blocked",
 		State:      "todo",
-		BlockedBy:  []types.BlockerRef{{Identifier: "ZEE-0", State: "In Progress"}},
+		BlockedBy:  []issuemodel.BlockerRef{{Identifier: "ZEE-0", State: "In Progress"}},
 	}
 
 	ok, reason := candidateEligible(issue, eligibilityState{
@@ -80,7 +80,7 @@ func TestLowercaseTodoBlockedByNonTerminalIsNotEligible(t *testing.T) {
 }
 
 func TestReviewWaitStateIsNotDispatchEligible(t *testing.T) {
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "i1",
 		Identifier: "ZEE-1",
 		Title:      "Review",
@@ -102,7 +102,7 @@ func TestReviewWaitStateIsNotDispatchEligible(t *testing.T) {
 }
 
 func TestManualAIReviewStateIsDispatchEligible(t *testing.T) {
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "i1",
 		Identifier: "ZEE-1",
 		Title:      "Review",

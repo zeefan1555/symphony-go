@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 )
 
 func TestReloaderKeepsLastGoodWorkflowAfterInvalidEdit(t *testing.T) {
@@ -90,9 +90,9 @@ func TestNewReloaderRetriesWhenFileChangesDuringInitialLoad(t *testing.T) {
 		fakeFileInfo{modTime: newTime, size: 20},
 		fakeFileInfo{modTime: newTime, size: 20},
 	}
-	loads := []*types.Workflow{
-		{Config: types.Config{Polling: types.PollingConfig{IntervalMS: 1000}}, PromptTemplate: "old"},
-		{Config: types.Config{Polling: types.PollingConfig{IntervalMS: 2000}}, PromptTemplate: "new"},
+	loads := []*runtimeconfig.Workflow{
+		{Config: runtimeconfig.Config{Polling: runtimeconfig.PollingConfig{IntervalMS: 1000}}, PromptTemplate: "old"},
+		{Config: runtimeconfig.Config{Polling: runtimeconfig.PollingConfig{IntervalMS: 2000}}, PromptTemplate: "new"},
 	}
 	statCalls := 0
 	loadCalls := 0
@@ -104,7 +104,7 @@ func TestNewReloaderRetriesWhenFileChangesDuringInitialLoad(t *testing.T) {
 		info := stats[statCalls]
 		statCalls++
 		return info, nil
-	}, func(string) (*types.Workflow, error) {
+	}, func(string) (*runtimeconfig.Workflow, error) {
 		if loadCalls >= len(loads) {
 			return nil, errors.New("unexpected load")
 		}

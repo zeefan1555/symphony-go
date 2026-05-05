@@ -13,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	"github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
@@ -24,7 +25,7 @@ const (
 )
 
 type Runner struct {
-	Config types.CodexConfig
+	Config runtimeconfig.CodexConfig
 }
 
 type Event struct {
@@ -42,7 +43,7 @@ type Result struct {
 
 type SessionRequest struct {
 	WorkspacePath string
-	Issue         types.Issue
+	Issue         issuemodel.Issue
 	Prompts       []TurnPrompt
 	AfterTurn     func(context.Context, Result, int) (TurnPrompt, bool, error)
 }
@@ -51,7 +52,7 @@ type TurnPrompt struct {
 	Text         string
 	Continuation bool
 	Attempt      *int
-	Issue        *types.Issue
+	Issue        *issuemodel.Issue
 }
 
 type SessionResult struct {
@@ -61,11 +62,11 @@ type SessionResult struct {
 	PID       int
 }
 
-func New(cfg types.CodexConfig) *Runner {
+func New(cfg runtimeconfig.CodexConfig) *Runner {
 	return &Runner{Config: cfg}
 }
 
-func (r *Runner) Run(ctx context.Context, workspacePath string, prompt string, issue types.Issue, onEvent func(Event)) (Result, error) {
+func (r *Runner) Run(ctx context.Context, workspacePath string, prompt string, issue issuemodel.Issue, onEvent func(Event)) (Result, error) {
 	result, err := r.RunSession(ctx, SessionRequest{
 		WorkspacePath: workspacePath,
 		Issue:         issue,
@@ -201,7 +202,7 @@ func (r *Runner) startSession(ctx context.Context, workspacePath string) (*sessi
 	return s, nil
 }
 
-func (r *Runner) turnSandboxPolicy(workspacePath string, issue types.Issue) map[string]any {
+func (r *Runner) turnSandboxPolicy(workspacePath string, issue issuemodel.Issue) map[string]any {
 	policy := map[string]any{}
 	for key, value := range r.Config.TurnSandboxPolicy {
 		policy[key] = value
@@ -309,7 +310,7 @@ func (s *session) startThread(cwd string, approvalPolicy any, sandbox string) (s
 	return threadID, nil
 }
 
-func (s *session) startTurn(id int, cwd string, prompt string, issue types.Issue, approvalPolicy any, sandboxPolicy map[string]any) (string, error) {
+func (s *session) startTurn(id int, cwd string, prompt string, issue issuemodel.Issue, approvalPolicy any, sandboxPolicy map[string]any) (string, error) {
 	if err := s.send(map[string]any{
 		"method": "turn/start",
 		"id":     id,

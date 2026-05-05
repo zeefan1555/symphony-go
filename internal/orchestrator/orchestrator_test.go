@@ -17,13 +17,14 @@ import (
 	"github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/logging"
 	"github.com/zeefan1555/symphony-go/internal/observability"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	"github.com/zeefan1555/symphony-go/internal/workflow"
 	"github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
 func TestSnapshotStartsWithEmptyCollections(t *testing.T) {
-	o := New(Options{Workflow: &types.Workflow{Config: types.Config{}}})
+	o := New(Options{Workflow: &runtimeconfig.Workflow{Config: runtimeconfig.Config{}}})
 
 	snapshot := o.Snapshot()
 	if snapshot.Running == nil {
@@ -35,7 +36,7 @@ func TestSnapshotStartsWithEmptyCollections(t *testing.T) {
 }
 
 func TestRequestRefreshSignalsPollWithoutBlocking(t *testing.T) {
-	o := New(Options{Workflow: &types.Workflow{Config: types.Config{}}})
+	o := New(Options{Workflow: &runtimeconfig.Workflow{Config: runtimeconfig.Config{}}})
 
 	queued, err := o.RequestRefresh(context.Background())
 	if err != nil {
@@ -72,7 +73,7 @@ func TestSnapshotTracksCodexEventTokens(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-123",
 		Title:      "snapshot test",
@@ -84,9 +85,9 @@ func TestSnapshotTracksCodexEventTokens(t *testing.T) {
 		release:      make(chan struct{}),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{MaxTurns: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -162,7 +163,7 @@ func TestLogIssueWritesStructuredAndLegacyIssueFields(t *testing.T) {
 	}
 	o := New(Options{Logger: logger})
 
-	issue := types.Issue{ID: "issue-id", Identifier: "ZEE-8"}
+	issue := issuemodel.Issue{ID: "issue-id", Identifier: "ZEE-8"}
 	o.logIssue(issue, "dispatch_skipped", "claimed", nil)
 	if err := logger.Close(); err != nil {
 		t.Fatal(err)
@@ -188,23 +189,23 @@ func TestPollAddsRetryEntryWhenWorkspacePreparationFails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-FAIL",
 		Title:      "workspace failure",
 		State:      "In Progress",
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Polling: types.PollingConfig{IntervalMS: 5000},
-				Agent:   types.AgentConfig{MaxTurns: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Polling: runtimeconfig.PollingConfig{IntervalMS: 5000},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
 		Tracker: &snapshotTracker{issue: issue},
-		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), types.HooksConfig{
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), runtimeconfig.HooksConfig{
 			AfterCreate: "echo workspace failed >&2; exit 7",
 		}),
 		Runner: &snapshotRunner{
@@ -242,7 +243,7 @@ func TestPollDispatchesTwoIssuesConcurrently(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issues := []types.Issue{
+	issues := []issuemodel.Issue{
 		{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"},
 		{ID: "issue-2", Identifier: "ZEE-2", Title: "two", State: "In Progress"},
 	}
@@ -251,10 +252,10 @@ func TestPollDispatchesTwoIssuesConcurrently(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 2},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 2},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -287,20 +288,20 @@ func TestRunOnceWaitsForDispatchedWorkerCompletion(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	runner := &blockingRunner{
 		started: make(chan string, 1),
 		release: make(chan struct{}),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
-		Tracker:   &listTracker{issues: []types.Issue{issue}},
+		Tracker:   &listTracker{issues: []issuemodel.Issue{issue}},
 		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
 		Runner:    runner,
 		Once:      true,
@@ -338,20 +339,20 @@ func TestPollDoesNotDispatchClaimedIssueTwice(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	runner := &blockingRunner{
 		started: make(chan string, 2),
 		release: make(chan struct{}),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 2},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 2},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
-		Tracker:   &listTracker{issues: []types.Issue{issue, issue}},
+		Tracker:   &listTracker{issues: []issuemodel.Issue{issue, issue}},
 		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
 		Runner:    runner,
 	})
@@ -377,20 +378,20 @@ func TestDispatchIssueClaimsIssueDirectly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	runner := &blockingRunner{
 		started: make(chan string, 1),
 		release: make(chan struct{}),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
-		Tracker:   &listTracker{issues: []types.Issue{issue}},
+		Tracker:   &listTracker{issues: []issuemodel.Issue{issue}},
 		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
 		Runner:    runner,
 	})
@@ -414,13 +415,13 @@ func TestWorkerNormalExitSchedulesContinuationRetry(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	timerFactory, delays := captureRetryTimers()
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxRetryBackoffMS: 60_000},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxRetryBackoffMS: 60_000},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -447,14 +448,14 @@ func TestWorkerTurnRefreshDoesNotAutoHandoffOrEnterRetryQueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	tracker := &snapshotTracker{issue: issue}
 	timerFactory, delays := captureRetryTimers()
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress", "Human Review"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxRetryBackoffMS: 60_000},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress", "Human Review"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxRetryBackoffMS: 60_000},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -494,18 +495,18 @@ func TestWorkerFailureSchedulesFirstBackoffRetry(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	timerFactory, delays := captureRetryTimers()
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxRetryBackoffMS: 60_000},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxRetryBackoffMS: 60_000},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
-		Tracker: &listTracker{issues: []types.Issue{issue}},
-		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), types.HooksConfig{
+		Tracker: &listTracker{issues: []issuemodel.Issue{issue}},
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), runtimeconfig.HooksConfig{
 			AfterCreate: "echo workspace failed >&2; exit 7",
 		}),
 		Runner:   noCommitRunner{},
@@ -529,17 +530,17 @@ func TestHandleRetryFetchErrorRequeuesAndKeepsClaim(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	timerFactory, delays := captureRetryTimers()
 	tracker := &listTracker{
-		issues:         []types.Issue{issue},
+		issues:         []issuemodel.Issue{issue},
 		fetchActiveErr: errors.New("linear unavailable"),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxRetryBackoffMS: 60_000},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxRetryBackoffMS: 60_000},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -586,17 +587,17 @@ func TestCanceledWorkerDoesNotScheduleRetry(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	timerFactory, delays := captureRetryTimers()
 	runner := &blockingRunner{
 		started: make(chan string, 1),
 		release: make(chan struct{}),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -627,18 +628,18 @@ func TestCanceledWorkerDoesNotScheduleRetry(t *testing.T) {
 
 func TestHandleRetryDoesNotDispatchAfterRunContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	timerFactory, _ := captureRetryTimers()
 	runner := &countingRunner{started: make(chan string, 1)}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
-		Tracker:   &listTracker{issues: []types.Issue{issue}},
+		Tracker:   &listTracker{issues: []issuemodel.Issue{issue}},
 		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
 		Runner:    runner,
 		NewTimer:  timerFactory,
@@ -669,7 +670,7 @@ func TestConcurrentRetryTimersHonorGlobalSlots(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issues := []types.Issue{
+	issues := []issuemodel.Issue{
 		{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"},
 		{ID: "issue-2", Identifier: "ZEE-2", Title: "two", State: "In Progress"},
 	}
@@ -678,10 +679,10 @@ func TestConcurrentRetryTimersHonorGlobalSlots(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Agent:   types.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -751,7 +752,7 @@ func TestReconcileTerminalStateCancelsWorkerAndCleansWorkspace(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-TERM", Title: "terminal", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TERM", Title: "terminal", State: "In Progress"}
 	runner := &terminalBlockingRunner{
 		started:        make(chan string, 1),
 		cancelObserved: make(chan struct{}),
@@ -759,16 +760,16 @@ func TestReconcileTerminalStateCancelsWorkerAndCleansWorkspace(t *testing.T) {
 	}
 	workspaceManager := workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook())
 	tracker := &reconciliationTracker{
-		stateIssues: []types.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}},
+		stateIssues: []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}},
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
 					TerminalStates: []string{"Done"},
 				},
-				Agent: types.AgentConfig{MaxTurns: 1},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -827,25 +828,25 @@ func TestReconcileTerminalCleanupUsesWorkerWorkspaceAfterReload(t *testing.T) {
 
 	oldRoot := filepath.Join(t.TempDir(), "old")
 	newRoot := filepath.Join(t.TempDir(), "new")
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-RELOAD", Title: "reload", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-RELOAD", Title: "reload", State: "In Progress"}
 	runner := &terminalBlockingRunner{
 		started:        make(chan string, 1),
 		cancelObserved: make(chan struct{}),
 		release:        make(chan struct{}),
 	}
 	tracker := &reconciliationTracker{
-		stateIssues: []types.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}},
+		stateIssues: []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}},
 	}
 	reloader := &sequenceReloader{
-		current: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		current: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
 					TerminalStates: []string{"Done"},
 				},
-				Polling:   types.PollingConfig{IntervalMS: 50},
-				Workspace: types.WorkspaceConfig{Root: newRoot},
-				Agent:     types.AgentConfig{MaxTurns: 1},
+				Polling:   runtimeconfig.PollingConfig{IntervalMS: 50},
+				Workspace: runtimeconfig.WorkspaceConfig{Root: newRoot},
+				Agent:     runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "new {{ issue.identifier }}",
 		},
@@ -853,14 +854,14 @@ func TestReconcileTerminalCleanupUsesWorkerWorkspaceAfterReload(t *testing.T) {
 	}
 	workspaceManager := workspace.New(oldRoot, gitSeedHook())
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
 					TerminalStates: []string{"Done"},
 				},
-				Polling: types.PollingConfig{IntervalMS: 50},
-				Agent:   types.AgentConfig{MaxTurns: 1},
+				Polling: runtimeconfig.PollingConfig{IntervalMS: 50},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "old {{ issue.identifier }}",
 		},
@@ -868,7 +869,7 @@ func TestReconcileTerminalCleanupUsesWorkerWorkspaceAfterReload(t *testing.T) {
 		Tracker:   tracker,
 		Workspace: workspaceManager,
 		Runner:    runner,
-		WorkspaceFactory: func(cfg types.WorkspaceConfig, hooks types.HooksConfig) *workspace.Manager {
+		WorkspaceFactory: func(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *workspace.Manager {
 			return workspace.New(cfg.Root, hooks)
 		},
 	})
@@ -924,21 +925,21 @@ func TestWorkerExitTerminalStateCleansWorkspace(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-DONE-EXIT", Title: "terminal after exit", State: "Merging"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-DONE-EXIT", Title: "terminal after exit", State: "Merging"}
 	workspaceManager := workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook())
 	workspacePath, err := workspaceManager.PathForIssue(issue)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tracker := &recordingTracker{issue: types.Issue{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}}
+	tracker := &recordingTracker{issue: issuemodel.Issue{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"Merging"},
 					TerminalStates: []string{"Done"},
 				},
-				Agent: types.AgentConfig{MaxTurns: 1},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -968,23 +969,23 @@ func TestReconcileNonActiveStateCancelsWorkerWithoutWorkspaceCleanup(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-REVIEW", Title: "review", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-REVIEW", Title: "review", State: "In Progress"}
 	runner := &blockingRunner{
 		started: make(chan string, 1),
 		release: make(chan struct{}),
 	}
 	workspaceManager := workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook())
 	tracker := &reconciliationTracker{
-		stateIssues: []types.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "In Review"}},
+		stateIssues: []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "In Review"}},
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
 					TerminalStates: []string{"Done"},
 				},
-				Agent: types.AgentConfig{MaxTurns: 1},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -1022,21 +1023,21 @@ func TestReconcileStalledWorkerCancelsAndSchedulesRetry(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-STALL", Title: "stall", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-STALL", Title: "stall", State: "In Progress"}
 	timerFactory, delays := captureRetryTimers()
 	runner := &blockingRunner{
 		started: make(chan string, 1),
 		release: make(chan struct{}),
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
 					TerminalStates: []string{"Done"},
 				},
-				Agent: types.AgentConfig{MaxTurns: 1, MaxRetryBackoffMS: 60_000},
-				Codex: types.CodexConfig{StallTimeoutMS: 100},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1, MaxRetryBackoffMS: 60_000},
+				Codex: runtimeconfig.CodexConfig{StallTimeoutMS: 100},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -1094,9 +1095,9 @@ func TestReconcileStalledWorkerCancelsAndSchedulesRetry(t *testing.T) {
 func TestStartupCleanupRemovesTerminalWorkspaces(t *testing.T) {
 	ctx := context.Background()
 	root := filepath.Join(t.TempDir(), "worktrees")
-	terminalIssue := types.Issue{ID: "issue-1", Identifier: "ZEE-DONE", Title: "done", State: "Done"}
-	otherIssue := types.Issue{ID: "issue-2", Identifier: "ZEE-ACTIVE", Title: "active", State: "In Progress"}
-	workspaceManager := workspace.New(root, types.HooksConfig{BeforeRemove: "printf cleanup", TimeoutMS: 5000})
+	terminalIssue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-DONE", Title: "done", State: "Done"}
+	otherIssue := issuemodel.Issue{ID: "issue-2", Identifier: "ZEE-ACTIVE", Title: "active", State: "In Progress"}
+	workspaceManager := workspace.New(root, runtimeconfig.HooksConfig{BeforeRemove: "printf cleanup", TimeoutMS: 5000})
 	terminalPath, err := workspaceManager.PathForIssue(terminalIssue)
 	if err != nil {
 		t.Fatal(err)
@@ -1111,16 +1112,16 @@ func TestStartupCleanupRemovesTerminalWorkspaces(t *testing.T) {
 	if err := os.MkdirAll(otherPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	tracker := &reconciliationTracker{terminalIssues: []types.Issue{terminalIssue}}
+	tracker := &reconciliationTracker{terminalIssues: []issuemodel.Issue{terminalIssue}}
 	logPath := filepath.Join(t.TempDir(), "logs", "run.jsonl")
 	logger, err := logging.New(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{TerminalStates: []string{"Done", "Canceled"}},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{TerminalStates: []string{"Done", "Canceled"}},
 			},
 		},
 		Tracker:   tracker,
@@ -1165,37 +1166,37 @@ func TestWorkflowReloadWhileWorkerRunningIsRaceFree(t *testing.T) {
 
 	oldRoot := filepath.Join(t.TempDir(), "old")
 	newRoot := filepath.Join(t.TempDir(), "new")
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	runner := &blockingRunner{
 		started: make(chan string, 1),
 		release: make(chan struct{}),
 	}
 	reloader := &sequenceReloader{
-		current: &types.Workflow{
-			Config: types.Config{
-				Tracker:   types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Polling:   types.PollingConfig{IntervalMS: 50},
-				Workspace: types.WorkspaceConfig{Root: newRoot},
-				Agent:     types.AgentConfig{MaxTurns: 1},
+		current: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker:   runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Polling:   runtimeconfig.PollingConfig{IntervalMS: 50},
+				Workspace: runtimeconfig.WorkspaceConfig{Root: newRoot},
+				Agent:     runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "new {{ issue.identifier }}",
 		},
 		errs: []error{nil},
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Polling: types.PollingConfig{IntervalMS: 50},
-				Agent:   types.AgentConfig{MaxTurns: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Polling: runtimeconfig.PollingConfig{IntervalMS: 50},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "old {{ issue.identifier }}",
 		},
 		Reloader:  reloader,
-		Tracker:   &listTracker{issues: []types.Issue{issue}},
+		Tracker:   &listTracker{issues: []issuemodel.Issue{issue}},
 		Workspace: workspace.New(oldRoot, gitSeedHook()),
 		Runner:    runner,
-		WorkspaceFactory: func(cfg types.WorkspaceConfig, hooks types.HooksConfig) *workspace.Manager {
+		WorkspaceFactory: func(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *workspace.Manager {
 			return workspace.New(cfg.Root, hooks)
 		},
 	})
@@ -1218,12 +1219,12 @@ func TestRunAgentRendersRetryAttemptOnlyForRetryFirstPrompt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
 	template := "work on {{ issue.identifier }}{% if attempt %}\nretry {{ attempt }}{% endif %}"
 	firstRunner := &promptCaptureRunner{}
 	first := New(Options{
-		Workflow: &types.Workflow{
-			Config:         types.Config{Agent: types.AgentConfig{MaxTurns: 1}},
+		Workflow: &runtimeconfig.Workflow{
+			Config:         runtimeconfig.Config{Agent: runtimeconfig.AgentConfig{MaxTurns: 1}},
 			PromptTemplate: template,
 		},
 		Tracker:   &snapshotTracker{issue: issue},
@@ -1239,8 +1240,8 @@ func TestRunAgentRendersRetryAttemptOnlyForRetryFirstPrompt(t *testing.T) {
 
 	retryRunner := &promptCaptureRunner{}
 	retry := New(Options{
-		Workflow: &types.Workflow{
-			Config:         types.Config{Agent: types.AgentConfig{MaxTurns: 1}},
+		Workflow: &runtimeconfig.Workflow{
+			Config:         runtimeconfig.Config{Agent: runtimeconfig.AgentConfig{MaxTurns: 1}},
 			PromptTemplate: template,
 		},
 		Tracker:   &snapshotTracker{issue: issue},
@@ -1259,23 +1260,23 @@ func TestRunAgentContinuesInSameSessionWithoutResendingOriginalPrompt(t *testing
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{ID: "issue-1", Identifier: "ZEE-CONT", Title: "continue", State: "In Progress"}
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-CONT", Title: "continue", State: "In Progress"}
 	tracker := &sequenceIssueTracker{
 		initial: issue,
-		refreshed: []types.Issue{
+		refreshed: []issuemodel.Issue{
 			{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "In Progress"},
 			{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"},
 		},
 	}
 	runner := &continuationSessionRunner{}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
 					TerminalStates: []string{"Done"},
 				},
-				Agent: types.AgentConfig{MaxTurns: 2},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 2},
 			},
 			PromptTemplate: "original workflow prompt for {{ issue.identifier }}",
 		},
@@ -1311,7 +1312,7 @@ func TestRunAgentDoesNotMoveToHumanReviewAfterLocalCommit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-COMMIT",
 		Title:      "commit smoke",
@@ -1319,9 +1320,9 @@ func TestRunAgentDoesNotMoveToHumanReviewAfterLocalCommit(t *testing.T) {
 	}
 	tracker := &snapshotTracker{issue: issue}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{MaxTurns: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -1343,7 +1344,7 @@ func TestRunAgentReviewPolicyAIDoesNotMoveThroughAIReviewAfterCommit(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-AI-REVIEW",
 		Title:      "ai review smoke",
@@ -1351,11 +1352,11 @@ func TestRunAgentReviewPolicyAIDoesNotMoveThroughAIReviewAfterCommit(t *testing.
 	}
 	tracker := &snapshotTracker{issue: issue}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 1,
-					ReviewPolicy: types.ReviewPolicyConfig{
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
 						Mode:                 "ai",
 						OnAIFail:             "rework",
 						ExpectedChangedFiles: []string{"README.md"},
@@ -1382,7 +1383,7 @@ func TestRunAgentReviewPolicyHumanDoesNotMoveImplementationToHumanReview(t *test
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-MANUAL-AI",
 		Title:      "manual ai review smoke",
@@ -1390,11 +1391,11 @@ func TestRunAgentReviewPolicyHumanDoesNotMoveImplementationToHumanReview(t *test
 	}
 	tracker := &snapshotTracker{issue: issue}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 1,
-					ReviewPolicy: types.ReviewPolicyConfig{
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
 						Mode:                "human",
 						AllowManualAIReview: true,
 						OnAIFail:            "rework",
@@ -1421,7 +1422,7 @@ func TestAIReviewStateDoesNotUseManualPolicyTransition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-MANUAL-AI",
 		Title:      "manual ai review smoke",
@@ -1430,11 +1431,11 @@ func TestAIReviewStateDoesNotUseManualPolicyTransition(t *testing.T) {
 	tracker := &recordingTracker{issue: issue}
 	runner := &recordingRunner{}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 1,
-					ReviewPolicy: types.ReviewPolicyConfig{
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
 						Mode:                "human",
 						AllowManualAIReview: true,
 						OnAIFail:            "rework",
@@ -1464,7 +1465,7 @@ func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER",
 		Title:      "reviewer agent smoke",
@@ -1472,11 +1473,11 @@ func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
 	}
 	tracker := &recordingTracker{issue: issue}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 1,
-					ReviewPolicy: types.ReviewPolicyConfig{
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
 						Mode:                "human",
 						AllowManualAIReview: true,
 						OnAIFail:            "rework",
@@ -1503,7 +1504,7 @@ func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER-MERGE",
 		Title:      "reviewer to merge smoke",
@@ -1512,14 +1513,14 @@ func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 	tracker := &recordingTracker{issue: issue}
 	runner := &reviewThenMergeRunner{tracker: tracker}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
 				},
-				Agent: types.AgentConfig{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 2,
-					ReviewPolicy: types.ReviewPolicyConfig{
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
 						Mode:                "human",
 						AllowManualAIReview: true,
 						OnAIFail:            "rework",
@@ -1561,7 +1562,7 @@ func TestReviewerPassFinalAutoPromotesToMergingContinuation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER-PASS",
 		Title:      "reviewer pass smoke",
@@ -1570,14 +1571,14 @@ func TestReviewerPassFinalAutoPromotesToMergingContinuation(t *testing.T) {
 	tracker := &recordingTracker{issue: issue}
 	runner := &reviewPassThenMergeRunner{tracker: tracker}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
 				},
-				Agent: types.AgentConfig{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 2,
-					ReviewPolicy: types.ReviewPolicyConfig{
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
 						Mode:     "auto",
 						OnAIFail: "rework",
 					},
@@ -1615,7 +1616,7 @@ func TestReviewerMergingContinuationRespectsMaxTurns(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER-MERGE-STUCK",
 		Title:      "reviewer merge stuck smoke",
@@ -1624,12 +1625,12 @@ func TestReviewerMergingContinuationRespectsMaxTurns(t *testing.T) {
 	tracker := &recordingTracker{issue: issue}
 	runner := &stuckMergingRunner{tracker: tracker, maxPrompts: 2}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
 				},
-				Agent: types.AgentConfig{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 2,
 				},
 			},
@@ -1653,7 +1654,7 @@ func TestRunAgentReviewPolicyAutoStopsWhenAgentMovesToAIReview(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:          "issue-id",
 		Identifier:  "ZEE-AI-MERGE",
 		Title:       "ai merge smoke",
@@ -1662,11 +1663,11 @@ func TestRunAgentReviewPolicyAutoStopsWhenAgentMovesToAIReview(t *testing.T) {
 	}
 	tracker := &recordingTracker{issue: issue}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 1,
-					ReviewPolicy: types.ReviewPolicyConfig{
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
 						Mode:                 "auto",
 						OnAIFail:             "rework",
 						ExpectedChangedFiles: []string{"README.md"},
@@ -1694,7 +1695,7 @@ func TestRunAgentDoesNotAutoPromoteAfterCommitWhenAgentMovesToAIReview(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-AGENT-REVIEW",
 		Title:      "agent owned review transition",
@@ -1702,11 +1703,11 @@ func TestRunAgentDoesNotAutoPromoteAfterCommitWhenAgentMovesToAIReview(t *testin
 	}
 	tracker := &recordingTracker{issue: issue}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 1,
-					ReviewPolicy: types.ReviewPolicyConfig{
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
 						Mode:     "auto",
 						OnAIFail: "rework",
 					},
@@ -1732,7 +1733,7 @@ func TestMergingStateUsesWorkflowPrompt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-NO-MERGE-SKILL",
 		Title:      "no merge skill",
@@ -1741,8 +1742,8 @@ func TestMergingStateUsesWorkflowPrompt(t *testing.T) {
 	tracker := &recordingTracker{issue: issue}
 	runner := &recordingRunner{}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config:         types.Config{},
+		Workflow: &runtimeconfig.Workflow{
+			Config:         runtimeconfig.Config{},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
 		Tracker:   tracker,
@@ -1766,9 +1767,9 @@ func TestMergingStateUsesWorkflowPrompt(t *testing.T) {
 
 func TestEffectiveMergeTargetUsesWorkflowUnlessOverridden(t *testing.T) {
 	opts := Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Merge: types.MergeConfig{Target: "release"},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Merge: runtimeconfig.MergeConfig{Target: "release"},
 			},
 		},
 	}
@@ -1786,7 +1787,7 @@ func TestRunAgentDoesNotMoveToReviewWithoutCommit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-NOCOMMIT",
 		Title:      "no commit smoke",
@@ -1794,9 +1795,9 @@ func TestRunAgentDoesNotMoveToReviewWithoutCommit(t *testing.T) {
 	}
 	tracker := &snapshotTracker{issue: issue}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{MaxTurns: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
@@ -1818,7 +1819,7 @@ func TestRunAgentRunsBeforeAndAfterHooksAroundRunner(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-HOOK-ORDER",
 		Title:      "hook order smoke",
@@ -1826,14 +1827,14 @@ func TestRunAgentRunsBeforeAndAfterHooksAroundRunner(t *testing.T) {
 	}
 	tracker := &snapshotTracker{issue: issue}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{MaxTurns: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
 		Tracker: tracker,
-		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), types.HooksConfig{
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), runtimeconfig.HooksConfig{
 			AfterCreate: gitSeedHook().AfterCreate,
 			BeforeRun:   `printf before >> order.txt`,
 			AfterRun:    `printf after >> order.txt; exit 9`,
@@ -1867,21 +1868,21 @@ func TestRunAgentLogsWorkspaceHookEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	issue := types.Issue{
+	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-HOOK-LOG",
 		Title:      "hook log smoke",
 		State:      "In Progress",
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Agent: types.AgentConfig{MaxTurns: 1},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},
 		Tracker: &snapshotTracker{issue: issue},
-		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), types.HooksConfig{
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), runtimeconfig.HooksConfig{
 			AfterCreate: gitSeedHook().AfterCreate + "\nprintf after-create",
 			BeforeRun:   `printf before > order.txt`,
 			AfterRun:    `printf after >> order.txt`,
@@ -1922,20 +1923,20 @@ func TestRunAgentLogsWorkspaceHookEvents(t *testing.T) {
 func TestPollKeepsReloadErrorVisibleAfterTrackerSuccess(t *testing.T) {
 	ctx := context.Background()
 	reloader := &sequenceReloader{
-		current: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Polling: types.PollingConfig{IntervalMS: 2000},
+		current: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Polling: runtimeconfig.PollingConfig{IntervalMS: 2000},
 			},
 			PromptTemplate: "updated",
 		},
 		errs: []error{errors.New("invalid workflow"), nil},
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker: types.TrackerConfig{ActiveStates: []string{"In Progress"}},
-				Polling: types.PollingConfig{IntervalMS: 1000},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Polling: runtimeconfig.PollingConfig{IntervalMS: 1000},
 			},
 			PromptTemplate: "original",
 		},
@@ -1974,40 +1975,40 @@ func TestRefreshWorkflowRebuildsDependenciesFromFactories(t *testing.T) {
 	oldRoot := filepath.Join(t.TempDir(), "old")
 	newRoot := filepath.Join(t.TempDir(), "new")
 	reloader := &sequenceReloader{
-		current: &types.Workflow{
-			Config: types.Config{
-				Tracker:   types.TrackerConfig{ProjectSlug: "new-project"},
-				Polling:   types.PollingConfig{IntervalMS: 2000},
-				Workspace: types.WorkspaceConfig{Root: newRoot},
-				Hooks:     types.HooksConfig{AfterCreate: "new-hook"},
-				Codex:     types.CodexConfig{Command: "new-codex"},
+		current: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker:   runtimeconfig.TrackerConfig{ProjectSlug: "new-project"},
+				Polling:   runtimeconfig.PollingConfig{IntervalMS: 2000},
+				Workspace: runtimeconfig.WorkspaceConfig{Root: newRoot},
+				Hooks:     runtimeconfig.HooksConfig{AfterCreate: "new-hook"},
+				Codex:     runtimeconfig.CodexConfig{Command: "new-codex"},
 			},
 			PromptTemplate: "new prompt",
 		},
 		errs: []error{nil},
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker:   types.TrackerConfig{ProjectSlug: "old-project"},
-				Polling:   types.PollingConfig{IntervalMS: 1000},
-				Workspace: types.WorkspaceConfig{Root: oldRoot},
-				Hooks:     types.HooksConfig{AfterCreate: "old-hook"},
-				Codex:     types.CodexConfig{Command: "old-codex"},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker:   runtimeconfig.TrackerConfig{ProjectSlug: "old-project"},
+				Polling:   runtimeconfig.PollingConfig{IntervalMS: 1000},
+				Workspace: runtimeconfig.WorkspaceConfig{Root: oldRoot},
+				Hooks:     runtimeconfig.HooksConfig{AfterCreate: "old-hook"},
+				Codex:     runtimeconfig.CodexConfig{Command: "old-codex"},
 			},
 			PromptTemplate: "old prompt",
 		},
 		Reloader:  reloader,
 		Tracker:   configTracker{projectSlug: "old-project"},
-		Workspace: workspace.New(oldRoot, types.HooksConfig{AfterCreate: "old-hook"}),
+		Workspace: workspace.New(oldRoot, runtimeconfig.HooksConfig{AfterCreate: "old-hook"}),
 		Runner:    configRunner{command: "old-codex"},
-		TrackerFactory: func(cfg types.TrackerConfig) (Tracker, error) {
+		TrackerFactory: func(cfg runtimeconfig.TrackerConfig) (Tracker, error) {
 			return configTracker{projectSlug: cfg.ProjectSlug}, nil
 		},
-		WorkspaceFactory: func(cfg types.WorkspaceConfig, hooks types.HooksConfig) *workspace.Manager {
+		WorkspaceFactory: func(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *workspace.Manager {
 			return workspace.New(cfg.Root, hooks)
 		},
-		RunnerFactory: func(cfg types.CodexConfig) AgentRunner {
+		RunnerFactory: func(cfg runtimeconfig.CodexConfig) AgentRunner {
 			return configRunner{command: cfg.Command}
 		},
 	})
@@ -2041,39 +2042,39 @@ func TestRefreshWorkflowFactoryFailureDoesNotHalfApply(t *testing.T) {
 	oldTracker := configTracker{projectSlug: "old-project"}
 	oldRunner := configRunner{command: "old-codex"}
 	reloader := &sequenceReloader{
-		current: &types.Workflow{
-			Config: types.Config{
-				Tracker:   types.TrackerConfig{ProjectSlug: "new-project"},
-				Polling:   types.PollingConfig{IntervalMS: 2000},
-				Workspace: types.WorkspaceConfig{Root: newRoot},
-				Codex:     types.CodexConfig{Command: "new-codex"},
+		current: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker:   runtimeconfig.TrackerConfig{ProjectSlug: "new-project"},
+				Polling:   runtimeconfig.PollingConfig{IntervalMS: 2000},
+				Workspace: runtimeconfig.WorkspaceConfig{Root: newRoot},
+				Codex:     runtimeconfig.CodexConfig{Command: "new-codex"},
 			},
 			PromptTemplate: "new prompt",
 		},
 		errs: []error{nil},
 	}
 	o := New(Options{
-		Workflow: &types.Workflow{
-			Config: types.Config{
-				Tracker:   types.TrackerConfig{ProjectSlug: "old-project"},
-				Polling:   types.PollingConfig{IntervalMS: 1000},
-				Workspace: types.WorkspaceConfig{Root: oldRoot},
-				Codex:     types.CodexConfig{Command: "old-codex"},
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker:   runtimeconfig.TrackerConfig{ProjectSlug: "old-project"},
+				Polling:   runtimeconfig.PollingConfig{IntervalMS: 1000},
+				Workspace: runtimeconfig.WorkspaceConfig{Root: oldRoot},
+				Codex:     runtimeconfig.CodexConfig{Command: "old-codex"},
 			},
 			PromptTemplate: "old prompt",
 		},
 		Reloader:  reloader,
 		Tracker:   oldTracker,
-		Workspace: workspace.New(oldRoot, types.HooksConfig{}),
+		Workspace: workspace.New(oldRoot, runtimeconfig.HooksConfig{}),
 		Runner:    oldRunner,
-		TrackerFactory: func(types.TrackerConfig) (Tracker, error) {
+		TrackerFactory: func(runtimeconfig.TrackerConfig) (Tracker, error) {
 			return nil, errors.New("tracker factory failed")
 		},
-		WorkspaceFactory: func(types.WorkspaceConfig, types.HooksConfig) *workspace.Manager {
+		WorkspaceFactory: func(runtimeconfig.WorkspaceConfig, runtimeconfig.HooksConfig) *workspace.Manager {
 			t.Fatal("workspace factory must not run after tracker failure")
 			return nil
 		},
-		RunnerFactory: func(types.CodexConfig) AgentRunner {
+		RunnerFactory: func(runtimeconfig.CodexConfig) AgentRunner {
 			t.Fatal("runner factory must not run after tracker failure")
 			return nil
 		},
@@ -2124,9 +2125,9 @@ func TestRefreshWorkflowRetriesFactoryFailureWithoutFileTouch(t *testing.T) {
 		Workflow:  loaded,
 		Reloader:  reloader,
 		Tracker:   configTracker{projectSlug: "old-project"},
-		Workspace: workspace.New(oldRoot, types.HooksConfig{}),
+		Workspace: workspace.New(oldRoot, runtimeconfig.HooksConfig{}),
 		Runner:    configRunner{command: "old-codex"},
-		TrackerFactory: func(cfg types.TrackerConfig) (Tracker, error) {
+		TrackerFactory: func(cfg runtimeconfig.TrackerConfig) (Tracker, error) {
 			err := factoryErrs[0]
 			factoryErrs = factoryErrs[1:]
 			if err != nil {
@@ -2134,10 +2135,10 @@ func TestRefreshWorkflowRetriesFactoryFailureWithoutFileTouch(t *testing.T) {
 			}
 			return configTracker{projectSlug: cfg.ProjectSlug}, nil
 		},
-		WorkspaceFactory: func(cfg types.WorkspaceConfig, hooks types.HooksConfig) *workspace.Manager {
+		WorkspaceFactory: func(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *workspace.Manager {
 			return workspace.New(cfg.Root, hooks)
 		},
-		RunnerFactory: func(cfg types.CodexConfig) AgentRunner {
+		RunnerFactory: func(cfg runtimeconfig.CodexConfig) AgentRunner {
 			return configRunner{command: cfg.Command}
 		},
 	})
@@ -2187,28 +2188,28 @@ codex:
 }
 
 type snapshotTracker struct {
-	issue        types.Issue
+	issue        issuemodel.Issue
 	updatedState string
 }
 
-func (t *snapshotTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
-	return []types.Issue{t.issue}, nil
+func (t *snapshotTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
+	return []issuemodel.Issue{t.issue}, nil
 }
 
-func (t *snapshotTracker) FetchIssuesByStates(context.Context, []string) ([]types.Issue, error) {
-	return []types.Issue{t.issue}, nil
+func (t *snapshotTracker) FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error) {
+	return []issuemodel.Issue{t.issue}, nil
 }
 
-func (t *snapshotTracker) FetchIssue(context.Context, string) (types.Issue, error) {
+func (t *snapshotTracker) FetchIssue(context.Context, string) (issuemodel.Issue, error) {
 	issue := t.issue
 	issue.State = "Done"
 	return issue, nil
 }
 
-func (t *snapshotTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error) {
+func (t *snapshotTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
 	issue := t.issue
 	issue.State = "Done"
-	return []types.Issue{issue}, nil
+	return []issuemodel.Issue{issue}, nil
 }
 
 func (t *snapshotTracker) UpdateIssueState(_ context.Context, _ string, state string) error {
@@ -2217,24 +2218,24 @@ func (t *snapshotTracker) UpdateIssueState(_ context.Context, _ string, state st
 }
 
 type recordingTracker struct {
-	issue  types.Issue
+	issue  issuemodel.Issue
 	states []string
 }
 
-func (t *recordingTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
-	return []types.Issue{t.issue}, nil
+func (t *recordingTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
+	return []issuemodel.Issue{t.issue}, nil
 }
 
-func (t *recordingTracker) FetchIssuesByStates(context.Context, []string) ([]types.Issue, error) {
+func (t *recordingTracker) FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
-func (t *recordingTracker) FetchIssue(context.Context, string) (types.Issue, error) {
+func (t *recordingTracker) FetchIssue(context.Context, string) (issuemodel.Issue, error) {
 	return t.issue, nil
 }
 
-func (t *recordingTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error) {
-	return []types.Issue{t.issue}, nil
+func (t *recordingTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
+	return []issuemodel.Issue{t.issue}, nil
 }
 
 func (t *recordingTracker) UpdateIssueState(_ context.Context, _ string, state string) error {
@@ -2244,20 +2245,20 @@ func (t *recordingTracker) UpdateIssueState(_ context.Context, _ string, state s
 }
 
 type sequenceIssueTracker struct {
-	initial         types.Issue
-	refreshed       []types.Issue
+	initial         issuemodel.Issue
+	refreshed       []issuemodel.Issue
 	fetchIssueCalls int
 }
 
-func (t *sequenceIssueTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
-	return []types.Issue{t.initial}, nil
+func (t *sequenceIssueTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
+	return []issuemodel.Issue{t.initial}, nil
 }
 
-func (t *sequenceIssueTracker) FetchIssuesByStates(context.Context, []string) ([]types.Issue, error) {
+func (t *sequenceIssueTracker) FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
-func (t *sequenceIssueTracker) FetchIssue(context.Context, string) (types.Issue, error) {
+func (t *sequenceIssueTracker) FetchIssue(context.Context, string) (issuemodel.Issue, error) {
 	t.fetchIssueCalls++
 	if len(t.refreshed) == 0 {
 		return t.initial, nil
@@ -2267,7 +2268,7 @@ func (t *sequenceIssueTracker) FetchIssue(context.Context, string) (types.Issue,
 	return issue, nil
 }
 
-func (t *sequenceIssueTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error) {
+func (t *sequenceIssueTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
@@ -2277,19 +2278,19 @@ func (t *sequenceIssueTracker) UpdateIssueState(context.Context, string, string)
 
 type emptyTracker struct{}
 
-func (emptyTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
+func (emptyTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
-func (emptyTracker) FetchIssuesByStates(context.Context, []string) ([]types.Issue, error) {
+func (emptyTracker) FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
-func (emptyTracker) FetchIssue(context.Context, string) (types.Issue, error) {
-	return types.Issue{}, nil
+func (emptyTracker) FetchIssue(context.Context, string) (issuemodel.Issue, error) {
+	return issuemodel.Issue{}, nil
 }
 
-func (emptyTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error) {
+func (emptyTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
@@ -2301,19 +2302,19 @@ type configTracker struct {
 	projectSlug string
 }
 
-func (configTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
+func (configTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
-func (configTracker) FetchIssuesByStates(context.Context, []string) ([]types.Issue, error) {
+func (configTracker) FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
-func (configTracker) FetchIssue(context.Context, string) (types.Issue, error) {
-	return types.Issue{}, nil
+func (configTracker) FetchIssue(context.Context, string) (issuemodel.Issue, error) {
+	return issuemodel.Issue{}, nil
 }
 
-func (configTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error) {
+func (configTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
@@ -2330,16 +2331,16 @@ func (configRunner) RunSession(context.Context, codex.SessionRequest, func(codex
 }
 
 type sequenceReloader struct {
-	current   *types.Workflow
+	current   *runtimeconfig.Workflow
 	errs      []error
 	committed int
 }
 
-func (r *sequenceReloader) Current() *types.Workflow {
+func (r *sequenceReloader) Current() *runtimeconfig.Workflow {
 	return r.current
 }
 
-func (r *sequenceReloader) ReloadIfChanged() (*types.Workflow, bool, error) {
+func (r *sequenceReloader) ReloadIfChanged() (*runtimeconfig.Workflow, bool, error) {
 	if len(r.errs) == 0 {
 		return nil, false, nil
 	}
@@ -2362,25 +2363,25 @@ type snapshotRunner struct {
 
 type listTracker struct {
 	mu             sync.Mutex
-	issues         []types.Issue
+	issues         []issuemodel.Issue
 	fetchActiveErr error
 	updatedState   string
 }
 
-func (t *listTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
+func (t *listTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.fetchActiveErr != nil {
 		return nil, t.fetchActiveErr
 	}
-	return append([]types.Issue(nil), t.issues...), nil
+	return append([]issuemodel.Issue(nil), t.issues...), nil
 }
 
-func (t *listTracker) FetchIssuesByStates(context.Context, []string) ([]types.Issue, error) {
+func (t *listTracker) FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error) {
 	return t.FetchActiveIssues(context.Background(), nil)
 }
 
-func (t *listTracker) FetchIssue(_ context.Context, issueID string) (types.Issue, error) {
+func (t *listTracker) FetchIssue(_ context.Context, issueID string) (issuemodel.Issue, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for _, issue := range t.issues {
@@ -2388,10 +2389,10 @@ func (t *listTracker) FetchIssue(_ context.Context, issueID string) (types.Issue
 			return issue, nil
 		}
 	}
-	return types.Issue{}, nil
+	return issuemodel.Issue{}, nil
 }
 
-func (t *listTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error) {
+func (t *listTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
 	return nil, nil
 }
 
@@ -2409,37 +2410,37 @@ func (t *listTracker) UpdateIssueState(_ context.Context, issueID string, state 
 
 type reconciliationTracker struct {
 	mu             sync.Mutex
-	activeIssues   []types.Issue
-	stateIssues    []types.Issue
-	terminalIssues []types.Issue
+	activeIssues   []issuemodel.Issue
+	stateIssues    []issuemodel.Issue
+	terminalIssues []issuemodel.Issue
 	callLog        []string
 	states         []string
 }
 
-func (t *reconciliationTracker) FetchActiveIssues(context.Context, []string) ([]types.Issue, error) {
+func (t *reconciliationTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.callLog = append(t.callLog, "FetchActiveIssues")
-	return append([]types.Issue(nil), t.activeIssues...), nil
+	return append([]issuemodel.Issue(nil), t.activeIssues...), nil
 }
 
-func (t *reconciliationTracker) FetchIssuesByStates(_ context.Context, states []string) ([]types.Issue, error) {
+func (t *reconciliationTracker) FetchIssuesByStates(_ context.Context, states []string) ([]issuemodel.Issue, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.callLog = append(t.callLog, "FetchIssuesByStates")
 	t.states = append([]string(nil), states...)
-	return append([]types.Issue(nil), t.terminalIssues...), nil
+	return append([]issuemodel.Issue(nil), t.terminalIssues...), nil
 }
 
-func (t *reconciliationTracker) FetchIssue(context.Context, string) (types.Issue, error) {
-	return types.Issue{}, nil
+func (t *reconciliationTracker) FetchIssue(context.Context, string) (issuemodel.Issue, error) {
+	return issuemodel.Issue{}, nil
 }
 
-func (t *reconciliationTracker) FetchIssueStatesByIDs(context.Context, []string) ([]types.Issue, error) {
+func (t *reconciliationTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.callLog = append(t.callLog, "FetchIssueStatesByIDs")
-	return append([]types.Issue(nil), t.stateIssues...), nil
+	return append([]issuemodel.Issue(nil), t.stateIssues...), nil
 }
 
 func (t *reconciliationTracker) UpdateIssueState(context.Context, string, string) error {
@@ -2849,8 +2850,8 @@ func (e *gitTestError) Error() string {
 	return "git " + strings.Join(e.args, " ") + ": " + e.err.Error() + ": " + e.output
 }
 
-func gitSeedHook() types.HooksConfig {
-	return types.HooksConfig{AfterCreate: `
+func gitSeedHook() runtimeconfig.HooksConfig {
+	return runtimeconfig.HooksConfig{AfterCreate: `
 git init
 git config user.email symphony-go@example.invalid
 git config user.name "Symphony Go Test"
@@ -2860,8 +2861,8 @@ git commit -m seed
 `}
 }
 
-func gitWorktreeHook(repoRoot string) types.HooksConfig {
-	return types.HooksConfig{AfterCreate: fmt.Sprintf(`
+func gitWorktreeHook(repoRoot string) runtimeconfig.HooksConfig {
+	return runtimeconfig.HooksConfig{AfterCreate: fmt.Sprintf(`
 workspace="$(pwd -P)"
 cd %s
 rm -rf "$workspace"

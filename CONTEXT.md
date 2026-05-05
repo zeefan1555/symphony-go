@@ -140,7 +140,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - `internal/transport/...`：入站协议层，包括 Hertz HTTP hook/server、HTTP error envelope 和协议模型转换。
 - `biz/...`：标准 Hertz 生成外壳，是控制面生成模型、handler skeleton 和 router 的权威来源。
 
-迁移顺序为：先统一文档和边界检查；再退役旧 `internal/generated` scaffold 生成链；再拆分顶层 `internal/types`；再迁移 runtime、integration 和 transport；最后收口 service-rooted 业务迁移与 smoke。迁移期间允许 shim，但 shim 只能转发到新归属，不得承载新增业务逻辑。
+迁移顺序为：先统一文档和边界检查；再退役旧 `internal/generated` scaffold 生成链；再拆分顶层 `internal/types`；再迁移 runtime、integration 和 transport；最后收口 service-rooted 业务迁移与 smoke。当前旧 `internal/generated` 与 `internal/types` 已删除；迁移期间仍允许其他旧顶层 shim，但 shim 只能转发到新归属，不得承载新增业务逻辑。
 
 不再把 `adapter` 或 `platform` 作为长期目录名：前者不能清楚表达第三方系统接入，后者不能清楚表达本地运行支撑。若某个能力无法归入上述语义根，应先更新 PRD 或创建 follow-up，再新增目录。
 

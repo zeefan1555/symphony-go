@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 func TestRunnerSendsChinesePromptAndGitWritableRoots(t *testing.T) {
@@ -37,7 +38,7 @@ printf '%s\n' '{"method":"turn/completed"}'
 	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	runner := New(types.CodexConfig{
+	runner := New(runtimeconfig.CodexConfig{
 		Command:           fake,
 		ApprovalPolicy:    "never",
 		ThreadSandbox:     "workspace-write",
@@ -46,7 +47,7 @@ printf '%s\n' '{"method":"turn/completed"}'
 		ReadTimeoutMS:     5000,
 	})
 	t.Setenv("TRACE_FILE", trace)
-	result, err := runner.Run(context.Background(), workspacePath, "zeefan 中文 smoke test", types.Issue{Identifier: "ZEE-8", Title: "中文标题"}, nil)
+	result, err := runner.Run(context.Background(), workspacePath, "zeefan 中文 smoke test", issuemodel.Issue{Identifier: "ZEE-8", Title: "中文标题"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,15 +79,15 @@ func TestMergingTurnSandboxIncludesMainCheckoutRoot(t *testing.T) {
 	worktreePath := filepath.Join(t.TempDir(), "ZEE-TEST")
 	git(t, repoRoot, "worktree", "add", "-b", "symphony-go/ZEE-TEST", worktreePath)
 
-	runner := New(types.CodexConfig{
+	runner := New(runtimeconfig.CodexConfig{
 		TurnSandboxPolicy: map[string]any{"type": "workspaceWrite"},
 	})
-	implementationRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, types.Issue{State: "In Progress"})["writableRoots"])
+	implementationRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, issuemodel.Issue{State: "In Progress"})["writableRoots"])
 	if containsString(implementationRoots, canonicalRepoRoot) {
 		t.Fatalf("implementation roots unexpectedly include main checkout root %q: %#v", canonicalRepoRoot, implementationRoots)
 	}
 
-	mergingRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, types.Issue{State: "Merging"})["writableRoots"])
+	mergingRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, issuemodel.Issue{State: "Merging"})["writableRoots"])
 	for _, want := range []string{worktreePath, filepath.Join(canonicalRepoRoot, ".git"), canonicalRepoRoot} {
 		if !containsString(mergingRoots, want) {
 			t.Fatalf("merging roots missing %q: %#v", want, mergingRoots)
@@ -132,7 +133,7 @@ printf '%s\n' '{"method":"turn/completed"}'
 		t.Fatal(err)
 	}
 	t.Setenv("TRACE_FILE", trace)
-	runner := New(types.CodexConfig{
+	runner := New(runtimeconfig.CodexConfig{
 		Command:           fake,
 		ApprovalPolicy:    "never",
 		ThreadSandbox:     "workspace-write",
@@ -140,10 +141,10 @@ printf '%s\n' '{"method":"turn/completed"}'
 		TurnTimeoutMS:     5000,
 		ReadTimeoutMS:     5000,
 	})
-	mergingIssue := types.Issue{Identifier: "ZEE-CONTINUE", Title: "merge continuation", State: "Merging"}
+	mergingIssue := issuemodel.Issue{Identifier: "ZEE-CONTINUE", Title: "merge continuation", State: "Merging"}
 	_, err = runner.RunSession(context.Background(), SessionRequest{
 		WorkspacePath: worktreePath,
-		Issue:         types.Issue{Identifier: "ZEE-CONTINUE", Title: "review continuation", State: "AI Review"},
+		Issue:         issuemodel.Issue{Identifier: "ZEE-CONTINUE", Title: "review continuation", State: "AI Review"},
 		Prompts: []TurnPrompt{
 			{Text: "review prompt"},
 			{Text: "merge prompt", Continuation: true, Issue: &mergingIssue},
@@ -191,7 +192,7 @@ printf '%s\n' '{"method":"turn/completed"}'
 		t.Fatal(err)
 	}
 	t.Setenv("TRACE_FILE", trace)
-	runner := New(types.CodexConfig{
+	runner := New(runtimeconfig.CodexConfig{
 		Command:        fake,
 		ApprovalPolicy: "never",
 		ThreadSandbox:  "workspace-write",
@@ -200,7 +201,7 @@ printf '%s\n' '{"method":"turn/completed"}'
 	})
 	result, err := runner.RunSession(context.Background(), SessionRequest{
 		WorkspacePath: workspacePath,
-		Issue:         types.Issue{Identifier: "ZEE-1", Title: "continue"},
+		Issue:         issuemodel.Issue{Identifier: "ZEE-1", Title: "continue"},
 		Prompts: []TurnPrompt{
 			{Text: "first prompt"},
 			{Text: "continue prompt", Continuation: true},

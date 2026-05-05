@@ -5,7 +5,7 @@ import (
 
 	"github.com/zeefan1555/symphony-go/biz/model/common"
 	generated "github.com/zeefan1555/symphony-go/biz/model/workspace"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
@@ -48,7 +48,7 @@ func (a *Adapter) PrepareWorkspace(ctx context.Context, request *generated.Prepa
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	issue := types.Issue{}
+	issue := issuemodel.Issue{}
 	if request != nil {
 		issue.Identifier = request.IssueIdentifier
 	}
@@ -79,7 +79,7 @@ func (a *Adapter) CleanupWorkspace(ctx context.Context, request *generated.Clean
 }
 
 func (a *Adapter) pathForIssue(issueIdentifier string) (string, error) {
-	issue := types.Issue{Identifier: issueIdentifier}
+	issue := issuemodel.Issue{Identifier: issueIdentifier}
 	return a.manager.PathForIssue(issue)
 }
 

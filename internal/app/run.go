@@ -20,9 +20,9 @@ import (
 	"github.com/zeefan1555/symphony-go/internal/logging"
 	"github.com/zeefan1555/symphony-go/internal/observability"
 	"github.com/zeefan1555/symphony-go/internal/orchestrator"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
 	"github.com/zeefan1555/symphony-go/internal/tui"
-	"github.com/zeefan1555/symphony-go/internal/types"
 	"github.com/zeefan1555/symphony-go/internal/workflow"
 	"github.com/zeefan1555/symphony-go/internal/workspace"
 )
@@ -48,7 +48,7 @@ type ServerOptions struct {
 
 type Runtime struct {
 	Options        Options
-	Loaded         *types.Workflow
+	Loaded         *runtimeconfig.Workflow
 	Service        runtimeService
 	ControlServer  controlServer
 	ControlAddress string
@@ -137,13 +137,13 @@ func NewRuntime(opts Options) (*Runtime, error) {
 		Tracker:   tracker,
 		Workspace: manager,
 		Runner:    runner,
-		TrackerFactory: func(cfg types.TrackerConfig) (orchestrator.Tracker, error) {
+		TrackerFactory: func(cfg runtimeconfig.TrackerConfig) (orchestrator.Tracker, error) {
 			return linear.New(cfg)
 		},
-		WorkspaceFactory: func(cfg types.WorkspaceConfig, hooks types.HooksConfig) *workspace.Manager {
+		WorkspaceFactory: func(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *workspace.Manager {
 			return workspace.New(cfg.Root, hooks)
 		},
-		RunnerFactory: func(cfg types.CodexConfig) orchestrator.AgentRunner {
+		RunnerFactory: func(cfg runtimeconfig.CodexConfig) orchestrator.AgentRunner {
 			return codex.New(cfg)
 		},
 		Logger:      log,
@@ -270,7 +270,7 @@ func (o *Options) applyDefaults() {
 	}
 }
 
-func resolveServerOptions(workflow types.ServerConfig, opts ServerOptions) ServerOptions {
+func resolveServerOptions(workflow runtimeconfig.ServerConfig, opts ServerOptions) ServerOptions {
 	if opts.PortExplicit {
 		opts.Enabled = true
 	} else if workflow.PortSet {

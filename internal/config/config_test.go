@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 )
 
 func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
@@ -15,8 +15,8 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 	workflowPath := filepath.Join(dir, "WORKFLOW.md")
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{
 			Kind:        "linear",
 			ProjectSlug: "demo",
 		},
@@ -85,9 +85,9 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 
 func TestResolvePreservesExplicitMergeTarget(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
-		Merge:   types.MergeConfig{Target: "release"},
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Merge:   runtimeconfig.MergeConfig{Target: "release"},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -102,8 +102,8 @@ func TestResolveUsesAppConfigMergeTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeAppConfig(t, dir, "release")
 
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
 	}, filepath.Join(dir, "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -121,9 +121,9 @@ func TestResolveAppConfigMergeTargetOverridesWorkflowWithWarning(t *testing.T) {
 	dir := t.TempDir()
 	writeAppConfig(t, dir, "release")
 
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
-		Merge:   types.MergeConfig{Target: "main"},
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Merge:   runtimeconfig.MergeConfig{Target: "main"},
 	}, filepath.Join(dir, "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -148,8 +148,8 @@ func TestResolveDoesNotUseEnvironmentAsAppConfigOverride(t *testing.T) {
 	dir := t.TempDir()
 	writeAppConfig(t, dir, "config-release")
 
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
 	}, filepath.Join(dir, "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -161,9 +161,9 @@ func TestResolveDoesNotUseEnvironmentAsAppConfigOverride(t *testing.T) {
 
 func TestResolvePreservesExplicitServerPortZero(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
-		Server:  types.ServerConfig{Port: 0, PortSet: true},
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Server:  runtimeconfig.ServerConfig{Port: 0, PortSet: true},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -181,8 +181,8 @@ func TestResolveUsesExplicitEnvIndirectionOnly(t *testing.T) {
 	workflowPath := filepath.Join(dir, "WORKFLOW.md")
 	t.Setenv("LINEAR_TOKEN_FOR_TEST", "lin_from_env")
 
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{
 			Kind:        "linear",
 			APIKey:      "$LINEAR_TOKEN_FOR_TEST",
 			ProjectSlug: "demo",
@@ -206,9 +206,9 @@ func TestResolvePreservesExplicitCodexStallTimeout(t *testing.T) {
 		{name: "negative", raw: -1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resolved, err := Resolve(types.Config{
-				Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
-				Codex: types.CodexConfig{
+			resolved, err := Resolve(runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+				Codex: runtimeconfig.CodexConfig{
 					StallTimeoutMS:    tc.raw,
 					StallTimeoutMSSet: true,
 				},
@@ -225,8 +225,8 @@ func TestResolvePreservesExplicitCodexStallTimeout(t *testing.T) {
 
 func TestResolveDefaultsAbsentCodexStallTimeout(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -238,9 +238,9 @@ func TestResolveDefaultsAbsentCodexStallTimeout(t *testing.T) {
 
 func TestResolvePreservesProgrammaticPositiveCodexStallTimeout(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
-		Codex:   types.CodexConfig{StallTimeoutMS: 100},
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Codex:   runtimeconfig.CodexConfig{StallTimeoutMS: 100},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -251,8 +251,8 @@ func TestResolvePreservesProgrammaticPositiveCodexStallTimeout(t *testing.T) {
 }
 
 func TestResolveRejectsInvalidDispatchConfig(t *testing.T) {
-	_, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "github"},
+	_, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "github"},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err == nil {
 		t.Fatal("expected unsupported tracker error")
@@ -266,21 +266,21 @@ func TestResolveRejectsInvalidReviewPolicy(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	for _, tc := range []struct {
 		name   string
-		policy types.ReviewPolicyConfig
+		policy runtimeconfig.ReviewPolicyConfig
 	}{
 		{
 			name:   "mode",
-			policy: types.ReviewPolicyConfig{Mode: "robot"},
+			policy: runtimeconfig.ReviewPolicyConfig{Mode: "robot"},
 		},
 		{
 			name:   "on_ai_fail",
-			policy: types.ReviewPolicyConfig{Mode: "ai", OnAIFail: "ignore"},
+			policy: runtimeconfig.ReviewPolicyConfig{Mode: "ai", OnAIFail: "ignore"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Resolve(types.Config{
-				Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
-				Agent:   types.AgentConfig{ReviewPolicy: tc.policy},
+			_, err := Resolve(runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+				Agent:   runtimeconfig.AgentConfig{ReviewPolicy: tc.policy},
 			}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 			if err == nil {
 				t.Fatal("expected invalid review policy error")
@@ -294,9 +294,9 @@ func TestResolveRejectsInvalidReviewPolicy(t *testing.T) {
 
 func TestResolveNormalizesPerStateConcurrency(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
-	resolved, err := Resolve(types.Config{
-		Tracker: types.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
-		Agent: types.AgentConfig{
+	resolved, err := Resolve(runtimeconfig.Config{
+		Tracker: runtimeconfig.TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Agent: runtimeconfig.AgentConfig{
 			MaxConcurrentAgentsByState: map[string]int{
 				"Todo":        2,
 				"In Progress": 1,
