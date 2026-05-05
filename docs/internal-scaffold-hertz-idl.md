@@ -34,6 +34,6 @@ make hertz-generate
 
 控制面 IDL 现在由根目录 `idl/` 的 `main.thrift` 与平铺领域 IDL 组成，用来承载诊断控制面 API。`idl/main.thrift` 是唯一 service 和所有业务 POST 接口 route annotations 的来源；平铺领域 IDL 只定义专属 Req/Resp 和嵌套模型。内部架构脚手架 IDL 不允许出现 `api.get`、`api.post` 或 `api.path` 这类 HTTP route annotations。
 
-旧 scaffold 生成代码是已退役遗留，不能再被命令重建。手写传输层和业务服务层不放在生成目录内；后续 slice 应把 HTTP 入站协议逻辑放到 transport 语义边界，并通过小接口委托到业务服务或迁移期核心包。
+旧 scaffold 生成代码是已退役遗留，不能再被命令重建。手写传输层和业务服务层不放在生成目录内；HTTP 入站协议逻辑放到 transport 语义边界，并通过 Hertz 绑定层委托到 `internal/service/control`。
 
-手写传输层和业务服务层负责类型转换、错误语义和调用现有业务能力。orchestrator、workspace、Codex runner、workflow loader、Linear tracker 和日志在迁移期间可能仍由现有顶层包提供，但这些顶层包只允许作为兼容 shim 或待迁移遗留；新增业务逻辑必须落到 ZEE-76 定义的 service、runtime、integration 或 transport 语义边界。
+手写传输层和业务服务层负责类型转换、错误语义和调用现有业务能力。orchestrator、workspace、Codex runner、workflow loader、Linear tracker 和日志能力必须落到 ZEE-76 定义的 service、runtime、integration 或 transport 语义边界。
