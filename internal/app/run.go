@@ -14,17 +14,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/integration/linear"
-	"github.com/zeefan1555/symphony-go/internal/orchestrator"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	"github.com/zeefan1555/symphony-go/internal/runtime/logging"
 	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
+	"github.com/zeefan1555/symphony-go/internal/service/codex"
 	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
+	"github.com/zeefan1555/symphony-go/internal/service/orchestrator"
+	"github.com/zeefan1555/symphony-go/internal/service/workflow"
+	"github.com/zeefan1555/symphony-go/internal/service/workspace"
 	"github.com/zeefan1555/symphony-go/internal/transport/hertzserver"
 	"github.com/zeefan1555/symphony-go/internal/tui"
-	"github.com/zeefan1555/symphony-go/internal/workflow"
-	"github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
 type Options struct {

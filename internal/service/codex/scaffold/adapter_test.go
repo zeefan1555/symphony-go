@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	generated "github.com/zeefan1555/symphony-go/biz/model/codexsession"
-	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
+	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
 )
 
 func TestAdapterExposesStandardCodexSessionDiagnosticMethod(t *testing.T) {
@@ -50,7 +50,7 @@ func TestRunTurnDelegatesToRunner(t *testing.T) {
 	if summary.Boundary == nil {
 		t.Fatal("summary boundary is nil")
 	}
-	if summary.Boundary.HandwrittenAdapter != "internal/codex/scaffold" {
+	if summary.Boundary.HandwrittenAdapter != "internal/service/codex/scaffold" {
 		t.Fatalf("adapter = %q", summary.Boundary.HandwrittenAdapter)
 	}
 	if summary.SessionID != "session-1" || summary.TurnCount != 1 {

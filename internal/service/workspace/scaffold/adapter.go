@@ -6,7 +6,7 @@ import (
 	"github.com/zeefan1555/symphony-go/biz/model/common"
 	generated "github.com/zeefan1555/symphony-go/biz/model/workspace"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
+	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
 )
 
 type Adapter struct {
@@ -95,6 +95,6 @@ func workspaceBoundary() *common.CapabilityBoundary {
 	return &common.CapabilityBoundary{
 		Name:               "workspace.lifecycle",
 		Purpose:            "Resolve, validate, prepare, and clean up issue workspaces through the handwritten workspace manager.",
-		HandwrittenAdapter: "internal/workspace/scaffold",
+		HandwrittenAdapter: "internal/service/workspace/scaffold",
 	}
 }

@@ -26,7 +26,7 @@ make hertz-generate
 
 该入口以 `idl/main.thrift` 为唯一 service 来源，并通过根目录平铺领域 IDL 生成 `biz/model`、`biz/handler` 和 `biz/router`。旧 scaffold 生成命令已经删除；新增或修改诊断控制面接口时，先改根目录 IDL，再更新手写 service / transport 绑定。
 
-生成结束后应运行 `scripts/check_generated_hertz_boundary.sh`。该检查确认标准 `biz` 生成外壳下的 Go 文件都带有生成代码头；其中生成 model、router 和 handler 外壳不能直接导入 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/service` 或现有 issue tracker 接入包。脚本同时检查 `internal/service/` 不导入 Hertz `app.RequestContext`，也不直接依赖 issue tracker 集成。
+生成结束后应运行 `scripts/check_generated_hertz_boundary.sh`。该检查确认标准 `biz` 生成外壳下的 Go 文件都带有生成代码头；其中生成 model、router 和 handler 外壳不能直接导入 `internal/service/orchestrator`、`internal/service/workspace`、`internal/service/codex`、`internal/service/workflow`、`internal/service` 或现有 issue tracker 接入包。脚本同时检查 `internal/service/` 不导入 Hertz `app.RequestContext`，也不直接依赖 issue tracker 集成。
 
 ## 边界说明
 

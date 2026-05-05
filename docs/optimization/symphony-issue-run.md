@@ -18,10 +18,10 @@
   - 测试层：扩展 repo workflow contract，防止后续删除这些 Merging 快路径约束。
 - Files:
   - `WORKFLOW.md`
-  - `internal/workflow/workflow_test.go`
+  - `internal/service/workflow/workflow_test.go`
   - `docs/optimization/symphony-issue-run.md`
 - Validation:
-  - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/workflow`
+  - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/service/workflow`
   - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go make build`
 - Follow-up: 下一轮真实 issue-run 应重点看 `Merging` session start 到 PR script start 是否降到 90 秒内，以及 root main 是否自动同步。
 
@@ -37,10 +37,10 @@
   - 测试层：扩展 repo workflow contract，锁住快路径、跳过重审、先跑 PR script 和以 PR script/checks 为质量门槛的文案。
 - Files:
   - `WORKFLOW.md`
-  - `internal/workflow/workflow_test.go`
+  - `internal/service/workflow/workflow_test.go`
   - `docs/optimization/symphony-issue-run.md`
 - Validation:
-  - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/workflow`
+  - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/service/workflow`
   - 通过：`GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go make build`
 - Follow-up: 提交并推送后创建新的 Todo 冒烟 issue，观察 `Merging` 到 PR script 启动之间是否仍有明显等待。
 
@@ -57,11 +57,11 @@
 - Files:
   - `WORKFLOW.md`
   - `.codex/skills/symphony-issue-run/SKILL.md`
-  - `internal/workflow/workflow_test.go`
+  - `internal/service/workflow/workflow_test.go`
   - `docs/architecture/symphony-go-architecture.md`
   - `docs/optimization/symphony-issue-run.md`
 - Validation:
-  - `GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/workflow`
+  - `GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/service/workflow`
 - Follow-up: 重建 `bin/symphony-go` 后继续跑 `ZEE-74`，验证 `Merging` 是否走 PR script 而不是 root local merge。
 
 ## 2026-05-04 19:14 +08 - ZEE-74
@@ -76,11 +76,11 @@
   - 代码层：orchestrator 在 reviewer phase 捕获最终 `agentMessage`；当最终消息以 `Review: PASS`、`Conclusion: PASS` 或 `结论: PASS` 开头且 Linear 状态仍为 `AI Review` 时，自动执行 `AI Review -> Merging` 并在同一 session 追加 merge continuation prompt。
   - 测试层：新增回归用例覆盖 reviewer 只输出 `Review: PASS`、没有自行移动状态时，framework 仍继续进入 `Merging` 并执行后续 turn。
 - Files:
-  - `internal/orchestrator/agent_session.go`
-  - `internal/orchestrator/orchestrator_test.go`
+  - `internal/service/orchestrator/agent_session.go`
+  - `internal/service/orchestrator/orchestrator_test.go`
   - `docs/optimization/symphony-issue-run.md`
 - Validation:
-  - `GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/orchestrator`
+  - `GOROOT=/Users/yibeikongqiu/sdk/go1.22.12 GOCACHE=/private/tmp/symphony-go-gocache GO=/Users/yibeikongqiu/sdk/go1.22.12/bin/go ./test.sh ./internal/service/orchestrator`
 - Follow-up: 重建 `bin/symphony-go` 后继续跑 `ZEE-74`，验证 `AI Review -> Merging -> Done` 是否真的走通。
 
 ## 2026-05-02 16:36 +08 - ZEE-41
@@ -90,31 +90,31 @@
   - `.symphony/logs/run-20260502-155913.human.log` 多次记录 `response timeout waiting for id=2`，导致第一轮 listener 在 Codex thread handshake 前反复失败。
   - `.symphony/logs/run-20260502-161318.human.log` 记录 `16:23:43` child 在 `Merging` 执行 `git merge --no-ff` 时失败，错误为 `fatal: cannot create directory at 'docs/architecture': Operation not permitted`。
   - 同一日志 `16:24:41` 记录 child 按 blocker 规则把 issue 移到 `Human Review`；`16:26:04` 后 orchestrator 又按 commit handoff 记录 `In Progress -> AI Review -> Merging`，造成 Linear 面板看起来像多段重复流转。
-  - 当前 `WORKFLOW.md` 同时要求 child 在实现完成后移动到 `AI Review`，而 `internal/orchestrator/orchestrator.go` 也会在 turn 结束后基于 HEAD 变化执行同一 handoff，存在状态 owner 重叠。
-  - `internal/codex/runner.go` 只把 issue worktree 和 git metadata 加进 `workspaceWrite.writableRoots`；`Merging` prompt 要写 repo root 的 `main` checkout，权限边界不匹配。
+  - 当前 `WORKFLOW.md` 同时要求 child 在实现完成后移动到 `AI Review`，而 `internal/service/orchestrator/orchestrator.go` 也会在 turn 结束后基于 HEAD 变化执行同一 handoff，存在状态 owner 重叠。
+  - `internal/service/codex/runner.go` 只把 issue worktree 和 git metadata 加进 `workspaceWrite.writableRoots`；`Merging` prompt 要写 repo root 的 `main` checkout，权限边界不匹配。
 - Optimization:
   - Workflow 层：明确 `In Progress` / `Rework` agent turn 只提交、验证和写 workpad handoff，不自行切 `AI Review` / `Merging`；状态推进由 orchestrator 统一负责。
   - 代码层：仅当 issue state 为 `Merging` 时，把 git common-dir 对应的主 checkout root 加入 Codex turn writable roots，让 child 可以自己完成 local main merge、验证和 push。
   - 流程层：把这次用户纠正写入 `lesson.md`，后续 `symphony-issue-run` 不能把父会话手工 merge 当成正常成功路径；若需要人接管，必须先分类为 framework gap 并优化。
 - Files:
   - `WORKFLOW.md`
-  - `internal/codex/runner.go`
-  - `internal/codex/runner_test.go`
+  - `internal/service/codex/runner.go`
+  - `internal/service/codex/runner_test.go`
   - `docs/optimization/symphony-issue-run.md`
   - `lesson.md`
 - Validation:
   - `git diff --check`
-  - `./test.sh ./internal/codex ./internal/orchestrator`
+  - `./test.sh ./internal/service/codex ./internal/service/orchestrator`
   - `make build`
 - Follow-up: 下次用真实 issue-run 验证 `Merging` 不再进入 `Human Review`；如果仍出现 root merge 卡点，应把 local merge 下沉为 orchestrator first-class action，而不是继续依赖 prompt 执行。
 
 ## 2026-05-02 16:05 +08 - ZEE-41
 
 - Trigger: `ZEE-41` issue-scoped listener created the worktree but repeatedly failed before starting the Codex turn.
-- Evidence: `.symphony/logs/run-20260502-155913.human.log` recorded `response timeout waiting for id=2`; `internal/codex/runner.go:279` sends `thread/start` with id 2; `internal/runtime/config/config.go:94` defaulted `codex.read_timeout_ms` to 5000; current `WORKFLOW.md` did not override it.
+- Evidence: `.symphony/logs/run-20260502-155913.human.log` recorded `response timeout waiting for id=2`; `internal/service/codex/runner.go:279` sends `thread/start` with id 2; `internal/runtime/config/config.go:94` defaulted `codex.read_timeout_ms` to 5000; current `WORKFLOW.md` did not override it.
 - Optimization: Set `codex.read_timeout_ms: 60000` in `WORKFLOW.md` so the app-server startup/thread handshake has enough room in real unattended runs.
 - Files: `WORKFLOW.md`, `docs/optimization/symphony-issue-run.md`.
-- Validation: `git diff --check`; `./test.sh ./internal/runtime/config ./internal/workflow`; `make build`.
+- Validation: `git diff --check`; `./test.sh ./internal/runtime/config ./internal/service/workflow`; `make build`.
 - Follow-up: none unless the retry still stalls after the wider handshake timeout.
 
 ## 2026-05-02 11:29 +08 - repo-only
@@ -134,7 +134,7 @@
   - `docs/optimization/symphony-issue-run.md`
 - Validation:
   - 通过：`git diff --check`
-  - 通过：`go test ./internal/runtime/config ./internal/orchestrator ./internal/workflow ./internal/service/issue`
+  - 通过：`go test ./internal/runtime/config ./internal/service/orchestrator ./internal/service/workflow ./internal/service/issue`
   - 通过：`CGO_ENABLED=0 go test ./...`
 - Follow-up:
   - 下一次真实 issue-run 后，用该 issue 的 human log、JSONL log、Linear workpad 和 git evidence 追加一条运行级复盘记录。

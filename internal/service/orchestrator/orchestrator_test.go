@@ -14,13 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/codex"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	"github.com/zeefan1555/symphony-go/internal/runtime/logging"
 	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
+	"github.com/zeefan1555/symphony-go/internal/service/codex"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	"github.com/zeefan1555/symphony-go/internal/workflow"
-	"github.com/zeefan1555/symphony-go/internal/workspace"
+	"github.com/zeefan1555/symphony-go/internal/service/workflow"
+	"github.com/zeefan1555/symphony-go/internal/service/workspace"
 )
 
 func TestSnapshotStartsWithEmptyCollections(t *testing.T) {

@@ -15,7 +15,7 @@ import (
 
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	"github.com/zeefan1555/symphony-go/internal/workspace"
+	"github.com/zeefan1555/symphony-go/internal/service/workspace"
 )
 
 const (
