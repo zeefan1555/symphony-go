@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
+	"symphony-go/internal/runtime/observability"
 )
 
 func TestRenderSnapshotShowsCoreSections(t *testing.T) {

@@ -3,7 +3,7 @@ package orchestrator
 import (
 	"context"
 
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
+	issuemodel "symphony-go/internal/service/issue"
 )
 
 type agentPhase string

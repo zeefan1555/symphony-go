@@ -1,4 +1,4 @@
-module github.com/zeefan1555/symphony-go
+module symphony-go
 
 go 1.22
 

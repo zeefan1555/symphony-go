@@ -5,12 +5,12 @@ import (
 	"errors"
 	"sync"
 
-	codexsessionmodel "github.com/zeefan1555/symphony-go/gen/hertz/model/codexsession"
-	commonmodel "github.com/zeefan1555/symphony-go/gen/hertz/model/common"
-	controlmodel "github.com/zeefan1555/symphony-go/gen/hertz/model/control"
-	orchestratormodel "github.com/zeefan1555/symphony-go/gen/hertz/model/orchestrator"
-	workflowmodel "github.com/zeefan1555/symphony-go/gen/hertz/model/workflow"
-	workspacemodel "github.com/zeefan1555/symphony-go/gen/hertz/model/workspace"
+	codexsessionmodel "symphony-go/gen/hertz/model/codexsession"
+	commonmodel "symphony-go/gen/hertz/model/common"
+	controlmodel "symphony-go/gen/hertz/model/control"
+	orchestratormodel "symphony-go/gen/hertz/model/orchestrator"
+	workflowmodel "symphony-go/gen/hertz/model/workflow"
+	workspacemodel "symphony-go/gen/hertz/model/workspace"
 )
 
 type ControlService interface {

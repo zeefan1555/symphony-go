@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	runtimeconfig "symphony-go/internal/runtime/config"
 )
 
 func TestRetryDelayUsesContinuationAndCappedFailureBackoff(t *testing.T) {

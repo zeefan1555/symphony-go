@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
+	issuemodel "symphony-go/internal/service/issue"
 )
 
 func TestLoadAndRenderChineseWorkflow(t *testing.T) {

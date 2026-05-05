@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	"github.com/zeefan1555/symphony-go/internal/runtime/logging"
-	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
-	"github.com/zeefan1555/symphony-go/internal/service/codex"
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	"github.com/zeefan1555/symphony-go/internal/service/workspace"
+	runtimeconfig "symphony-go/internal/runtime/config"
+	"symphony-go/internal/runtime/logging"
+	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/service/codex"
+	issuemodel "symphony-go/internal/service/issue"
+	"symphony-go/internal/service/workspace"
 )
 
 type Tracker interface {

@@ -260,6 +260,17 @@ func TestHertzGenerationArchitectureDecisionDocumentsGenHertzShell(t *testing.T)
 	}
 }
 
+func TestRepositoryUsesLocalModulePath(t *testing.T) {
+	goMod := readFile(t, "../../go.mod")
+	if !strings.Contains(goMod, "module symphony-go\n") {
+		t.Fatalf("go.mod must use local module path symphony-go")
+	}
+	remoteModule := "github.com/zeefan1555/" + "symphony-go"
+	if strings.Contains(goMod, remoteModule) {
+		t.Fatalf("go.mod must not use the remote GitHub module path")
+	}
+}
+
 func TestGeneratedHertzBoundaryCheckOnlyCoversAuthoritativeGeneratedShell(t *testing.T) {
 	repo := "../../"
 	checkScript := readFile(t, filepath.Join(repo, "scripts/check_generated_hertz_boundary.sh"))

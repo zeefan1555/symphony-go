@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
+	runtimeconfig "symphony-go/internal/runtime/config"
+	issuemodel "symphony-go/internal/service/issue"
 )
 
 func TestRunnerSendsChinesePromptAndGitWritableRoots(t *testing.T) {

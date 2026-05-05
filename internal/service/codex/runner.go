@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	"github.com/zeefan1555/symphony-go/internal/service/workspace"
+	runtimeconfig "symphony-go/internal/runtime/config"
+	issuemodel "symphony-go/internal/service/issue"
+	"symphony-go/internal/service/workspace"
 )
 
 const (

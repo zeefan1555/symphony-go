@@ -5,7 +5,7 @@ package codexsession
 import (
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
-	"github.com/zeefan1555/symphony-go/gen/hertz/model/common"
+	"symphony-go/gen/hertz/model/common"
 )
 
 type RunTurnReq struct {

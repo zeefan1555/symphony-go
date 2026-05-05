@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
-	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
-	"github.com/zeefan1555/symphony-go/internal/service/control"
-	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
-	"github.com/zeefan1555/symphony-go/internal/transport/hertzserver"
+	runtimeconfig "symphony-go/internal/runtime/config"
+	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/service/codex"
+	"symphony-go/internal/service/control"
+	"symphony-go/internal/service/workspace"
+	"symphony-go/internal/transport/hertzserver"
 )
 
 type snapshotProvider struct {
@@ -32,8 +32,8 @@ type refreshSnapshotProvider struct {
 }
 
 type fakeCodexRunner struct {
-	request corecodex.SessionRequest
-	result  corecodex.SessionResult
+	request codex.SessionRequest
+	result  codex.SessionResult
 	err     error
 }
 
@@ -61,7 +61,7 @@ func (p *refreshSnapshotProvider) RequestRefresh(ctx context.Context) (bool, err
 	return result, nil
 }
 
-func (f *fakeCodexRunner) RunSession(ctx context.Context, request corecodex.SessionRequest, onEvent func(corecodex.Event)) (corecodex.SessionResult, error) {
+func (f *fakeCodexRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
 	f.request = request
 	return f.result, f.err
 }
@@ -595,7 +595,7 @@ func TestOrchestratorRouteReturnsIssueRunProjection(t *testing.T) {
 
 func TestWorkspaceRoutesDelegateToControlService(t *testing.T) {
 	root := t.TempDir()
-	manager := coreworkspace.New(root, runtimeconfig.HooksConfig{})
+	manager := workspace.New(root, runtimeconfig.HooksConfig{})
 	service := control.NewServiceWithWorkspace(snapshotProvider{snapshot: observability.NewSnapshot()}, manager)
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
@@ -617,7 +617,7 @@ func TestWorkspaceRoutesDelegateToControlService(t *testing.T) {
 	if err := json.NewDecoder(resolveResp.Body).Decode(&resolved); err != nil {
 		t.Fatalf("decode resolve response: %v", err)
 	}
-	wantPath := filepath.Join(root, coreworkspace.SafeIdentifier("../ZEE/unsafe"))
+	wantPath := filepath.Join(root, workspace.SafeIdentifier("../ZEE/unsafe"))
 	if resolved.Preparation.WorkspacePath != wantPath || !resolved.Preparation.ContainedInRoot {
 		t.Fatalf("resolved preparation = %#v, want contained path %q", resolved.Preparation, wantPath)
 	}
@@ -760,10 +760,10 @@ func TestWorkflowRoutesDelegateToControlService(t *testing.T) {
 }
 
 func TestCodexSessionRouteDelegatesToControlService(t *testing.T) {
-	runner := &fakeCodexRunner{result: corecodex.SessionResult{
+	runner := &fakeCodexRunner{result: codex.SessionResult{
 		SessionID: "session-1",
 		ThreadID:  "thread-1",
-		Turns: []corecodex.Result{{
+		Turns: []codex.Result{{
 			SessionID: "session-1",
 			ThreadID:  "thread-1",
 			TurnID:    "turn-1",

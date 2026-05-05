@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
+	runtimeconfig "symphony-go/internal/runtime/config"
+	issuemodel "symphony-go/internal/service/issue"
 )
 
 var unsafeIdentifierChars = regexp.MustCompile(`[^a-zA-Z0-9._-]`)

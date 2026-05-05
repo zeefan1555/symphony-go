@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
+	issuemodel "symphony-go/internal/service/issue"
 )
 
 func TestSortCandidatesUsesPriorityCreatedAtIdentifier(t *testing.T) {

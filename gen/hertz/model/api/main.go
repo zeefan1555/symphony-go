@@ -6,11 +6,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
-	"github.com/zeefan1555/symphony-go/gen/hertz/model/codexsession"
-	"github.com/zeefan1555/symphony-go/gen/hertz/model/control"
-	"github.com/zeefan1555/symphony-go/gen/hertz/model/orchestrator"
-	"github.com/zeefan1555/symphony-go/gen/hertz/model/workflow"
-	"github.com/zeefan1555/symphony-go/gen/hertz/model/workspace"
+	"symphony-go/gen/hertz/model/codexsession"
+	"symphony-go/gen/hertz/model/control"
+	"symphony-go/gen/hertz/model/orchestrator"
+	"symphony-go/gen/hertz/model/workflow"
+	"symphony-go/gen/hertz/model/workspace"
 )
 
 type SymphonyAPI interface {
