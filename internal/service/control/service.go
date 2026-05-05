@@ -397,7 +397,7 @@ func ProjectIssueRunState(state RuntimeState, issueIdentifier string) IssueRunPr
 		Boundary: CapabilityBoundary{
 			Name:               "orchestrator.issue_run_projection",
 			Purpose:            "Project issue-run control state from the handwritten orchestrator runtime.",
-			HandwrittenAdapter: "internal/service/orchestrator/scaffold",
+			HandwrittenAdapter: "internal/service/control",
 		},
 		IssueIdentifier: issueIdentifier,
 		RuntimeState:    runtimeState,
@@ -420,7 +420,7 @@ func WorkspaceBoundary() CapabilityBoundary {
 	return CapabilityBoundary{
 		Name:               "workspace.lifecycle",
 		Purpose:            "Resolve, validate, prepare, and clean up issue workspaces through the handwritten workspace manager.",
-		HandwrittenAdapter: "internal/service/workspace/scaffold",
+		HandwrittenAdapter: "internal/service/control",
 	}
 }
 
@@ -455,7 +455,7 @@ func WorkflowBoundary() CapabilityBoundary {
 	return CapabilityBoundary{
 		Name:               "workflow.load_render",
 		Purpose:            "Load workflow configuration and render prompts through the handwritten workflow package.",
-		HandwrittenAdapter: "internal/service/workflow/scaffold",
+		HandwrittenAdapter: "internal/service/control",
 	}
 }
 
@@ -483,7 +483,7 @@ func CodexSessionBoundary() CapabilityBoundary {
 	return CapabilityBoundary{
 		Name:               "codex_session.turn",
 		Purpose:            "Run a single Codex turn through the handwritten Codex runner without exposing app-server protocol details.",
-		HandwrittenAdapter: "internal/service/codex/scaffold",
+		HandwrittenAdapter: "internal/service/control",
 	}
 }
 
