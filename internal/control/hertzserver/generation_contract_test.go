@@ -83,9 +83,9 @@ func TestMaintainerWorkflowDocumentsReviewAndTransportBoundaries(t *testing.T) {
 	text := string(doc)
 
 	for _, want := range []string{
-		"优先 review IDL 契约和手写 adapter",
+		"优先 review IDL 契约和手写传输层",
 		"公共模型 IDL 不能依赖 Hertz route annotations",
-		"未来 Kitex 只能新增专用 adapter/IDL 层",
+		"未来 Kitex 只能新增专用 RPC 传输层和 IDL",
 		"第一版不实现 Kitex runtime",
 		"不把 `run --once --issue` 变成产品 API",
 	} {
@@ -272,7 +272,7 @@ func TestHertzScaffoldDoesNotOwnOrchestratorState(t *testing.T) {
 			}
 			for _, forbiddenImport := range forbiddenImports {
 				if strings.Contains(string(content), forbiddenImport) {
-					t.Fatalf("%s imports %s; Hertz scaffold must stay an adapter", path, forbiddenImport)
+					t.Fatalf("%s imports %s; Hertz scaffold must stay transport-only", path, forbiddenImport)
 				}
 			}
 			return nil
@@ -340,8 +340,14 @@ func childContractIDLPathByDomain() map[string]string {
 	}
 }
 
-func TestProductionCodeDoesNotImportOldHertzgenPath(t *testing.T) {
-	oldGeneratedPath := "internal/generated/hertz/" + "control"
+func TestProductionCodeDoesNotImportOldInternalGeneratedPath(t *testing.T) {
+	oldGeneratedRoot := "internal/" + "generated"
+	if _, err := os.Stat(filepath.Join("../../../", oldGeneratedRoot)); err == nil {
+		t.Fatalf("old internal generated root still exists: %s", oldGeneratedRoot)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat %s: %v", oldGeneratedRoot, err)
+	}
+
 	for _, root := range []string{
 		"../../../cmd",
 		"../../../internal",
@@ -351,7 +357,7 @@ func TestProductionCodeDoesNotImportOldHertzgenPath(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if entry.IsDir() || filepath.Ext(path) != ".go" {
+			if entry.IsDir() || filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
 				return nil
 			}
 
@@ -359,8 +365,8 @@ func TestProductionCodeDoesNotImportOldHertzgenPath(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if strings.Contains(string(content), oldGeneratedPath) {
-				t.Fatalf("%s imports old generated Hertz path", path)
+			if strings.Contains(string(content), oldGeneratedRoot) {
+				t.Fatalf("%s imports old internal generated path", path)
 			}
 			return nil
 		})

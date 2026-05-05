@@ -4,12 +4,14 @@ import (
 	"context"
 	"testing"
 
+	generated "github.com/zeefan1555/symphony-go/biz/model/codexsession"
 	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
-	generated "github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/codexsession"
 )
 
-func TestAdapterImplementsGeneratedCodexSessionScaffold(t *testing.T) {
-	var _ generated.CodexSessionScaffold = (*Adapter)(nil)
+func TestAdapterExposesStandardCodexSessionDiagnosticMethod(t *testing.T) {
+	var _ interface {
+		RunTurn(context.Context, *generated.RunTurnReq) (*generated.CodexTurnSummary, error)
+	} = (*Adapter)(nil)
 }
 
 func TestRunTurnDelegatesToRunner(t *testing.T) {
@@ -24,7 +26,7 @@ func TestRunTurnDelegatesToRunner(t *testing.T) {
 	}}
 	adapter := NewAdapter(runner)
 
-	summary, err := adapter.RunTurn(context.Background(), &generated.CodexTurnRequest{
+	summary, err := adapter.RunTurn(context.Background(), &generated.RunTurnReq{
 		IssueIdentifier: "ZEE-58",
 		WorkspacePath:   "/tmp/workspace",
 		PromptName:      "implementation",

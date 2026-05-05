@@ -7,59 +7,47 @@ import (
 	"testing"
 )
 
-func TestInternalScaffoldIDLContract(t *testing.T) {
-	repo := "../../"
-
-	for _, path := range []string{
-		"idl/scaffold/orchestrator.thrift",
-		"idl/scaffold/workspace.thrift",
-		"idl/scaffold/codex_session.thrift",
-		"idl/scaffold/workflow.thrift",
-	} {
-		text := readFile(t, filepath.Join(repo, path))
-		if !strings.Contains(text, "namespace go scaffold.") {
-			t.Fatalf("%s must declare a scaffold Go namespace", path)
-		}
-		if strings.Contains(text, "api.") {
-			t.Fatalf("%s is an internal scaffold IDL and must not expose Hertz route annotations", path)
-		}
-	}
-}
-
-func TestInternalScaffoldGenerationEntry(t *testing.T) {
+func TestOldInternalGeneratedScaffoldChainIsRetired(t *testing.T) {
 	repo := "../../"
 
 	makefile := readFile(t, filepath.Join(repo, "Makefile"))
-	if !strings.Contains(makefile, "hertz-scaffold-generate") {
-		t.Fatalf("Makefile must expose hertz-scaffold-generate")
+	if strings.Contains(makefile, "hertz-scaffold-generate") {
+		t.Fatalf("Makefile must not expose retired hertz-scaffold-generate target")
 	}
 
-	script := readFile(t, filepath.Join(repo, "scripts/hertz_scaffold_generate.sh"))
-	for _, want := range []string{
-		"hz model",
-		"idl/scaffold/orchestrator.thrift",
-		"idl/scaffold/workspace.thrift",
-		"idl/scaffold/codex_session.thrift",
-		"idl/scaffold/workflow.thrift",
-		"internal/generated/hertz/scaffold",
+	for _, retiredPath := range []string{
+		"scripts/hertz_scaffold_generate.sh",
+		"internal/generated",
+		"idl/scaffold",
 	} {
-		if !strings.Contains(script, want) {
-			t.Fatalf("scaffold generation script missing %q", want)
+		if _, err := os.Stat(filepath.Join(repo, retiredPath)); err == nil {
+			t.Fatalf("retired scaffold path still exists: %s", retiredPath)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", retiredPath, err)
 		}
 	}
 }
 
-func TestOrchestratorScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
-	text := readFile(t, "../../idl/scaffold/orchestrator.thrift")
+func TestStandardHertzIDLDefinesOrchestratorDiagnosticEntry(t *testing.T) {
+	mainIDL := readFile(t, "../../idl/main.thrift")
+	orchestratorIDL := readFile(t, "../../idl/orchestrator.thrift")
 
 	for _, want := range []string{
-		"service OrchestratorScaffold",
+		"service SymphonyAPI",
 		"ProjectIssueRun",
-		"IssueRunProjectionRequest",
+		"ProjectIssueRunReq",
+		`api.post="/api/v1/orchestrator/project-issue-run"`,
+	} {
+		if !strings.Contains(mainIDL, want) {
+			t.Fatalf("standard Hertz main IDL missing orchestrator entry %q", want)
+		}
+	}
+	for _, want := range []string{
+		"ProjectIssueRunReq",
 		"IssueRunProjection",
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("orchestrator scaffold IDL missing %q", want)
+		if !strings.Contains(orchestratorIDL, want) {
+			t.Fatalf("orchestrator domain IDL missing %q", want)
 		}
 	}
 }
@@ -82,18 +70,32 @@ func TestOrchestratorScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 	}
 }
 
-func TestWorkspaceScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
-	text := readFile(t, "../../idl/scaffold/workspace.thrift")
+func TestStandardHertzIDLDefinesWorkspaceDiagnosticEntries(t *testing.T) {
+	mainIDL := readFile(t, "../../idl/main.thrift")
+	workspaceIDL := readFile(t, "../../idl/workspace.thrift")
 
 	for _, want := range []string{
-		"service WorkspaceScaffold",
 		"ResolveWorkspacePath",
 		"ValidateWorkspacePath",
 		"PrepareWorkspace",
 		"CleanupWorkspace",
+		`api.post="/api/v1/workspace/resolve"`,
+		`api.post="/api/v1/workspace/validate"`,
+		`api.post="/api/v1/workspace/prepare"`,
+		`api.post="/api/v1/workspace/cleanup"`,
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("workspace scaffold IDL missing %q", want)
+		if !strings.Contains(mainIDL, want) {
+			t.Fatalf("standard Hertz main IDL missing workspace entry %q", want)
+		}
+	}
+	for _, want := range []string{
+		"ResolveWorkspacePathReq",
+		"ValidateWorkspacePathReq",
+		"PrepareWorkspaceReq",
+		"CleanupWorkspaceReq",
+	} {
+		if !strings.Contains(workspaceIDL, want) {
+			t.Fatalf("workspace domain IDL missing %q", want)
 		}
 	}
 }
@@ -122,17 +124,25 @@ func TestWorkspaceScaffoldIsExposedAsDiagnosticRoutes(t *testing.T) {
 	}
 }
 
-func TestCodexSessionScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
-	text := readFile(t, "../../idl/scaffold/codex_session.thrift")
+func TestStandardHertzIDLDefinesCodexSessionDiagnosticEntry(t *testing.T) {
+	mainIDL := readFile(t, "../../idl/main.thrift")
+	codexIDL := readFile(t, "../../idl/codex_session.thrift")
 
 	for _, want := range []string{
-		"service CodexSessionScaffold",
 		"RunTurn",
-		"CodexTurnRequest",
+		`api.post="/api/v1/codex-session/run-turn"`,
+	} {
+		if !strings.Contains(mainIDL, want) {
+			t.Fatalf("standard Hertz main IDL missing codex session entry %q", want)
+		}
+	}
+	for _, want := range []string{
+		"RunTurnReq",
+		"RunTurnResp",
 		"CodexTurnSummary",
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("codex session scaffold IDL missing %q", want)
+		if !strings.Contains(codexIDL, want) {
+			t.Fatalf("codex session domain IDL missing %q", want)
 		}
 	}
 	for _, forbidden := range []string{
@@ -143,8 +153,8 @@ func TestCodexSessionScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
 		"thread/start",
 		"turn/start",
 	} {
-		if strings.Contains(strings.ToLower(text), forbidden) {
-			t.Fatalf("codex session scaffold IDL exposes protocol detail %q", forbidden)
+		if strings.Contains(strings.ToLower(codexIDL), forbidden) {
+			t.Fatalf("codex session domain IDL exposes protocol detail %q", forbidden)
 		}
 	}
 }
@@ -167,18 +177,27 @@ func TestCodexSessionScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 	}
 }
 
-func TestWorkflowScaffoldIDLDefinesGeneratedServiceEntry(t *testing.T) {
-	text := readFile(t, "../../idl/scaffold/workflow.thrift")
+func TestStandardHertzIDLDefinesWorkflowDiagnosticEntries(t *testing.T) {
+	mainIDL := readFile(t, "../../idl/main.thrift")
+	workflowIDL := readFile(t, "../../idl/workflow.thrift")
 
 	for _, want := range []string{
-		"service WorkflowScaffold",
 		"LoadWorkflow",
 		"RenderWorkflowPrompt",
-		"WorkflowLoadRequest",
+		`api.post="/api/v1/workflow/load"`,
+		`api.post="/api/v1/workflow/render-prompt"`,
+	} {
+		if !strings.Contains(mainIDL, want) {
+			t.Fatalf("standard Hertz main IDL missing workflow entry %q", want)
+		}
+	}
+	for _, want := range []string{
+		"LoadWorkflowReq",
+		"RenderWorkflowPromptReq",
 		"WorkflowSummary",
 	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("workflow scaffold IDL missing %q", want)
+		if !strings.Contains(workflowIDL, want) {
+			t.Fatalf("workflow domain IDL missing %q", want)
 		}
 	}
 }
@@ -207,16 +226,10 @@ func TestInternalScaffoldDocumentation(t *testing.T) {
 	doc := readFile(t, "../../docs/internal-scaffold-hertz-idl.md")
 
 	for _, want := range []string{
-		"`idl/scaffold/orchestrator.thrift`",
-		"`idl/scaffold/workspace.thrift`",
-		"`idl/scaffold/codex_session.thrift`",
-		"`idl/scaffold/workflow.thrift`",
-		"`internal/generated/hertz/scaffold/`",
-		"`scripts/hertz_scaffold_generate.sh`",
-		"`make hertz-scaffold-generate`",
-		"内部架构脚手架 IDL",
-		"控制面 IDL",
-		"手写 adapter/service",
+		"迁移期契约",
+		"标准 Hertz 根目录 `biz/...`",
+		"已退役遗留",
+		"新增业务逻辑必须落到",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Fatalf("internal scaffold doc missing %q", want)
@@ -224,45 +237,11 @@ func TestInternalScaffoldDocumentation(t *testing.T) {
 	}
 }
 
-func TestGeneratedHertzScaffoldStaysGeneratedOnly(t *testing.T) {
+func TestGeneratedHertzBoundaryCheckOnlyCoversAuthoritativeGeneratedShell(t *testing.T) {
 	repo := "../../"
 	checkScript := readFile(t, filepath.Join(repo, "scripts/check_generated_hertz_boundary.sh"))
-	if !strings.Contains(checkScript, "internal/generated/hertz") {
-		t.Fatalf("generated boundary check must inspect internal/generated/hertz")
-	}
-
-	root := filepath.Join(repo, "internal/generated/hertz/scaffold")
-	foundGeneratedGo := false
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || filepath.Ext(path) != ".go" {
-			return nil
-		}
-		foundGeneratedGo = true
-		content := readFile(t, path)
-		if !strings.HasPrefix(content, "// Code generated ") {
-			t.Fatalf("%s must stay generated-only", path)
-		}
-		for _, forbidden := range []string{
-			"internal/orchestrator",
-			"internal/workspace",
-			"internal/codex",
-			"internal/workflow",
-			"internal/issuetracker",
-		} {
-			if strings.Contains(content, forbidden) {
-				t.Fatalf("%s imports %s; generated scaffold must not own business logic", path, forbidden)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk generated scaffold: %v", err)
-	}
-	if !foundGeneratedGo {
-		t.Fatalf("internal/generated/hertz/scaffold must contain generated Go files")
+	if strings.Contains(checkScript, "internal/generated") {
+		t.Fatalf("generated boundary check must not inspect retired internal/generated tree")
 	}
 }
 

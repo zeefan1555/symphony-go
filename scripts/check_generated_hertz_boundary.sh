@@ -50,13 +50,12 @@ check_internal_service_boundary() {
     fi
 
     if grep -Eq 'internal/issuetracker' "$file"; then
-      echo "internal service imports issue tracker adapter: ${file#$repo_root/}" >&2
+      echo "internal service imports issue tracker integration: ${file#$repo_root/}" >&2
       exit 1
     fi
   done < <(find "$root" -type f -name '*.go' | sort)
 }
 
-check_generated_tree "$repo_root/internal/generated/hertz" "internal generated Hertz tree" yes
 check_generated_tree "$repo_root/biz/handler" "biz handler shell" yes
 check_generated_tree "$repo_root/biz/model" "biz model shell" yes
 check_generated_tree "$repo_root/biz/router" "biz router shell" yes

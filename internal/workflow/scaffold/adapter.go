@@ -3,8 +3,8 @@ package scaffold
 import (
 	"context"
 
-	"github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/model"
-	generated "github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/workflow"
+	"github.com/zeefan1555/symphony-go/biz/model/common"
+	generated "github.com/zeefan1555/symphony-go/biz/model/workflow"
 	"github.com/zeefan1555/symphony-go/internal/types"
 	coreworkflow "github.com/zeefan1555/symphony-go/internal/workflow"
 )
@@ -15,7 +15,7 @@ func NewAdapter() *Adapter {
 	return &Adapter{}
 }
 
-func (a *Adapter) LoadWorkflow(ctx context.Context, request *generated.WorkflowLoadRequest) (*generated.WorkflowSummary, error) {
+func (a *Adapter) LoadWorkflow(ctx context.Context, request *generated.LoadWorkflowReq) (*generated.WorkflowSummary, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func (a *Adapter) LoadWorkflow(ctx context.Context, request *generated.WorkflowL
 	}, nil
 }
 
-func (a *Adapter) RenderWorkflowPrompt(ctx context.Context, request *generated.WorkflowRenderRequest) (*generated.WorkflowRenderResult, error) {
+func (a *Adapter) RenderWorkflowPrompt(ctx context.Context, request *generated.RenderWorkflowPromptReq) (*generated.WorkflowRenderResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -57,8 +57,8 @@ func (a *Adapter) RenderWorkflowPrompt(ctx context.Context, request *generated.W
 	}, nil
 }
 
-func workflowBoundary() *model.CapabilityBoundary {
-	return &model.CapabilityBoundary{
+func workflowBoundary() *common.CapabilityBoundary {
+	return &common.CapabilityBoundary{
 		Name:               "workflow.load_render",
 		Purpose:            "Load workflow configuration and render prompts through the handwritten workflow package.",
 		HandwrittenAdapter: "internal/workflow/scaffold",

@@ -6,13 +6,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	generated "github.com/zeefan1555/symphony-go/internal/generated/hertz/scaffold/workspace"
+	generated "github.com/zeefan1555/symphony-go/biz/model/workspace"
 	"github.com/zeefan1555/symphony-go/internal/types"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
-func TestAdapterImplementsGeneratedWorkspaceScaffold(t *testing.T) {
-	var _ generated.WorkspaceScaffold = (*Adapter)(nil)
+func TestAdapterExposesStandardWorkspaceDiagnosticMethods(t *testing.T) {
+	var _ interface {
+		ResolveWorkspacePath(context.Context, *generated.ResolveWorkspacePathReq) (*generated.WorkspacePreparation, error)
+		ValidateWorkspacePath(context.Context, *generated.ValidateWorkspacePathReq) (*generated.WorkspacePathValidation, error)
+		PrepareWorkspace(context.Context, *generated.PrepareWorkspaceReq) (*generated.WorkspacePreparation, error)
+		CleanupWorkspace(context.Context, *generated.CleanupWorkspaceReq) (*generated.WorkspaceCleanupResult, error)
+	} = (*Adapter)(nil)
 }
 
 func TestPrepareWorkspaceDelegatesToManagerAndPreservesContainment(t *testing.T) {
@@ -20,9 +25,8 @@ func TestPrepareWorkspaceDelegatesToManagerAndPreservesContainment(t *testing.T)
 	manager := coreworkspace.New(root, zeroHooks())
 	adapter := NewAdapter(manager)
 
-	preparation, err := adapter.PrepareWorkspace(context.Background(), &generated.WorkspacePrepareRequest{
+	preparation, err := adapter.PrepareWorkspace(context.Background(), &generated.PrepareWorkspaceReq{
 		IssueIdentifier: "../ZEE/unsafe",
-		RepoRoot:        root,
 	})
 	if err != nil {
 		t.Fatalf("PrepareWorkspace() error = %v", err)
@@ -44,7 +48,7 @@ func TestCleanupWorkspaceRejectsEscapedPath(t *testing.T) {
 	manager := coreworkspace.New(root, zeroHooks())
 	adapter := NewAdapter(manager)
 
-	_, err := adapter.CleanupWorkspace(context.Background(), &generated.WorkspaceCleanupRequest{
+	_, err := adapter.CleanupWorkspace(context.Background(), &generated.CleanupWorkspaceReq{
 		WorkspacePath: filepath.Join(filepath.Dir(root), "outside"),
 	})
 	if err == nil {
@@ -57,9 +61,8 @@ func TestResolveWorkspacePathDoesNotCreateDirectory(t *testing.T) {
 	manager := coreworkspace.New(root, zeroHooks())
 	adapter := NewAdapter(manager)
 
-	projection, err := adapter.ResolveWorkspacePath(context.Background(), &generated.WorkspacePrepareRequest{
+	projection, err := adapter.ResolveWorkspacePath(context.Background(), &generated.ResolveWorkspacePathReq{
 		IssueIdentifier: "ZEE-57",
-		RepoRoot:        root,
 	})
 	if err != nil {
 		t.Fatalf("ResolveWorkspacePath() error = %v", err)
