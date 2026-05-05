@@ -31,6 +31,7 @@ ISSUE_TEMPLATE = """中文冒烟测试：固定时间戳任务
 - 在 `Merging` 阶段通过 PR merge flow 创建或更新 PR、等待检查并 merge
 - PR merge 完成后把 issue 移动到 `Done`，由框架自动清理 issue worktree
 - 所有 Workpad、状态说明和最终回复使用中文
+{merge_target_note}
 """
 
 def parse_args() -> argparse.Namespace:
@@ -126,8 +127,14 @@ def resolve_targets(endpoint: str, api_key: str, project_slug: str, team_name: s
     return {"project_id": project["id"], "team_id": team["id"], "state_id": state["id"]}
 
 
-def create_issue(endpoint: str, api_key: str, targets: dict[str, str], title: str) -> dict[str, str]:
+def create_issue(endpoint: str, api_key: str, targets: dict[str, str], title: str, merge_target: str) -> dict[str, str]:
     timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    merge_target_note = ""
+    if merge_target:
+        merge_target_note = (
+            f"\n本轮 smoke 显式 merge target：`{merge_target}`。"
+            "Merging 阶段的 PR base 必须使用这个分支，不要合入 `main`。"
+        )
     data = graphql(
         endpoint,
         api_key,
@@ -145,7 +152,7 @@ def create_issue(endpoint: str, api_key: str, targets: dict[str, str], title: st
                 "projectId": targets["project_id"],
                 "stateId": targets["state_id"],
                 "title": title,
-                "description": ISSUE_TEMPLATE.format(timestamp=timestamp),
+                "description": ISSUE_TEMPLATE.format(timestamp=timestamp, merge_target_note=merge_target_note),
             }
         },
     )
@@ -186,7 +193,7 @@ def main() -> None:
         print(json.dumps({"project_slug": project_slug, "team": args.team, "state": args.state, "merge_target": args.merge_target or "(workflow default)", **targets}, ensure_ascii=False))
         return
 
-    issue = create_issue(endpoint, api_key, targets, args.title)
+    issue = create_issue(endpoint, api_key, targets, args.title, args.merge_target)
     print(json.dumps(issue, ensure_ascii=False), flush=True)
     if args.create_only:
         return
