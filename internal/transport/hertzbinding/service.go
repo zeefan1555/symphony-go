@@ -1,4 +1,4 @@
-package hertzhook
+package hertzbinding
 
 import (
 	"context"
