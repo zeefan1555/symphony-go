@@ -64,7 +64,7 @@ func TestMaintainerWorkflowDocumentsIDLBoundariesAndGeneration(t *testing.T) {
 		"`biz/handler`",
 		"`biz/model`",
 		"`biz/router`",
-		"`internal/control/hertzserver/`",
+		"`internal/transport/hertzserver/`",
 		"`internal/service/control/`",
 		"`make hertz-generate`",
 		"`scripts/hertz_generate.sh`",
@@ -252,11 +252,11 @@ func TestHertzScaffoldDoesNotOwnOrchestratorState(t *testing.T) {
 		"internal/" + "workspace",
 		"internal/" + "codex",
 		"internal/" + "workflow",
-		"internal/" + "issuetracker",
+		"internal/" + "integration",
 	}
 	for _, root := range []string{
 		"../../../biz",
-		"../../../internal/control/hertzserver",
+		"../../../internal/transport/hertzserver",
 	} {
 		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 			if err != nil {

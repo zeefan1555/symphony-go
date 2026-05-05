@@ -13,7 +13,7 @@ import (
 	orchestrator "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
 	workflow "github.com/zeefan1555/symphony-go/biz/model/workflow"
 	workspace "github.com/zeefan1555/symphony-go/biz/model/workspace"
-	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
+	"github.com/zeefan1555/symphony-go/internal/transport/hertzhook"
 )
 
 // GetScaffold .
