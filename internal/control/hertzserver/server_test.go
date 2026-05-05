@@ -15,8 +15,8 @@ import (
 	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/control/hertzserver"
 	"github.com/zeefan1555/symphony-go/internal/observability"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
-	"github.com/zeefan1555/symphony-go/internal/types"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
@@ -605,7 +605,7 @@ func TestOrchestratorRouteReturnsIssueRunProjection(t *testing.T) {
 
 func TestWorkspaceRoutesDelegateToControlService(t *testing.T) {
 	root := t.TempDir()
-	manager := coreworkspace.New(root, types.HooksConfig{})
+	manager := coreworkspace.New(root, runtimeconfig.HooksConfig{})
 	service := control.NewServiceWithWorkspace(snapshotProvider{snapshot: observability.NewSnapshot()}, manager)
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)

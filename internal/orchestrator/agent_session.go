@@ -8,12 +8,12 @@ import (
 
 	"github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/observability"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	"github.com/zeefan1555/symphony-go/internal/workflow"
 	"github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
-func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, issue types.Issue, attempt int, phase agentPhase) error {
+func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue, attempt int, phase agentPhase) error {
 	switch phase {
 	case phaseImplementer, phaseReviewer:
 	default:
@@ -61,7 +61,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		TurnCount:       1,
 		StartedAt:       time.Now(),
 	})
-	var nextIssue *types.Issue
+	var nextIssue *issuemodel.Issue
 	maxTurnsReached := false
 	noRetryNeeded := false
 	reviewFinal := ""

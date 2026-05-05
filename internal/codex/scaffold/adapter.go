@@ -6,7 +6,7 @@ import (
 	generated "github.com/zeefan1555/symphony-go/biz/model/codexsession"
 	"github.com/zeefan1555/symphony-go/biz/model/common"
 	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 type Runner interface {
@@ -27,7 +27,7 @@ func (a *Adapter) RunTurn(ctx context.Context, request *generated.RunTurnReq) (*
 	}
 	sessionRequest := corecodex.SessionRequest{
 		WorkspacePath: request.GetWorkspacePath(),
-		Issue:         types.Issue{Identifier: request.GetIssueIdentifier()},
+		Issue:         issuemodel.Issue{Identifier: request.GetIssueIdentifier()},
 		Prompts: []corecodex.TurnPrompt{{
 			Text: request.GetPromptText(),
 		}},

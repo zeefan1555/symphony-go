@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	generated "github.com/zeefan1555/symphony-go/biz/model/workspace"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
@@ -75,6 +75,6 @@ func TestResolveWorkspacePathDoesNotCreateDirectory(t *testing.T) {
 	}
 }
 
-func zeroHooks() types.HooksConfig {
-	return types.HooksConfig{}
+func zeroHooks() runtimeconfig.HooksConfig {
+	return runtimeconfig.HooksConfig{}
 }

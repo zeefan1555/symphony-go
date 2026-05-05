@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 func TestLoadAndRenderChineseWorkflow(t *testing.T) {
@@ -48,7 +48,7 @@ merge:
 		t.Fatalf("merge target = %q", loaded.Config.Merge.Target)
 	}
 	attempt := 2
-	rendered, err := Render(loaded.PromptTemplate, types.Issue{
+	rendered, err := Render(loaded.PromptTemplate, issuemodel.Issue{
 		Identifier:  "ZEE-中文",
 		Title:       "中文标题",
 		Description: "中文描述",

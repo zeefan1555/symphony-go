@@ -5,7 +5,7 @@ import (
 
 	"github.com/zeefan1555/symphony-go/biz/model/common"
 	generated "github.com/zeefan1555/symphony-go/biz/model/workflow"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	coreworkflow "github.com/zeefan1555/symphony-go/internal/workflow"
 )
 
@@ -43,7 +43,7 @@ func (a *Adapter) RenderWorkflowPrompt(ctx context.Context, request *generated.R
 		value := int(request.GetAttempt())
 		attempt = &value
 	}
-	prompt, err := coreworkflow.Render(loaded.PromptTemplate, types.Issue{
+	prompt, err := coreworkflow.Render(loaded.PromptTemplate, issuemodel.Issue{
 		Identifier:  request.GetIssueIdentifier(),
 		Title:       request.GetIssueTitle(),
 		Description: request.GetIssueDescription(),

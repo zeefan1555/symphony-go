@@ -11,8 +11,8 @@ import (
 
 	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/observability"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
-	"github.com/zeefan1555/symphony-go/internal/types"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
@@ -199,7 +199,7 @@ func TestServiceProjectsIssueRunState(t *testing.T) {
 
 func TestServiceProjectsWorkspaceLifecycle(t *testing.T) {
 	root := t.TempDir()
-	manager := coreworkspace.New(root, types.HooksConfig{})
+	manager := coreworkspace.New(root, runtimeconfig.HooksConfig{})
 	service := control.NewServiceWithWorkspace(fakeSnapshotProvider{snapshot: observability.NewSnapshot()}, manager)
 
 	resolved, err := service.ResolveWorkspacePath(context.Background(), "../ZEE/unsafe")

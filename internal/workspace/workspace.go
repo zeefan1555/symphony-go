@@ -10,18 +10,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 var unsafeIdentifierChars = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
 
 type Manager struct {
 	Root         string
-	Hooks        types.HooksConfig
+	Hooks        runtimeconfig.HooksConfig
 	hookObserver HookObserver
 }
 
-func New(root string, hooks types.HooksConfig) *Manager {
+func New(root string, hooks runtimeconfig.HooksConfig) *Manager {
 	return &Manager{Root: root, Hooks: hooks}
 }
 
@@ -48,7 +49,7 @@ type hookIssue struct {
 	Identifier string
 }
 
-func WithHookIssue(ctx context.Context, issue types.Issue) context.Context {
+func WithHookIssue(ctx context.Context, issue issuemodel.Issue) context.Context {
 	if issue.ID == "" && issue.Identifier == "" {
 		return ctx
 	}
@@ -77,7 +78,7 @@ func (m *Manager) RootAbs() (string, error) {
 	return filepath.Clean(root), nil
 }
 
-func (m *Manager) PathForIssue(issue types.Issue) (string, error) {
+func (m *Manager) PathForIssue(issue issuemodel.Issue) (string, error) {
 	if issue.Identifier == "" {
 		return "", fmt.Errorf("issue identifier is required")
 	}
@@ -187,7 +188,7 @@ func (m *Manager) AfterRun(ctx context.Context, path string) error {
 	return m.runHook(ctx, "after_run", m.Hooks.AfterRun, path)
 }
 
-func (m *Manager) Ensure(ctx context.Context, issue types.Issue) (string, bool, error) {
+func (m *Manager) Ensure(ctx context.Context, issue issuemodel.Issue) (string, bool, error) {
 	root, err := m.RootAbs()
 	if err != nil {
 		return "", false, err

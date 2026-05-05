@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/zeefan1555/symphony-go/internal/observability"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 type retryReason string
@@ -39,7 +39,7 @@ func maxRetryBackoff(opts Options) time.Duration {
 	return 300 * time.Second
 }
 
-func (o *Orchestrator) scheduleRetry(issue types.Issue, attempt int, reason retryReason, err error) {
+func (o *Orchestrator) scheduleRetry(issue issuemodel.Issue, attempt int, reason retryReason, err error) {
 	delay := retryDelay(o.currentOptions(), reason, attempt)
 	dueAt := time.Now().Add(delay)
 

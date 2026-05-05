@@ -4,12 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 )
 
 func TestRetryDelayUsesContinuationAndCappedFailureBackoff(t *testing.T) {
-	opts := Options{Workflow: &types.Workflow{Config: types.Config{
-		Agent: types.AgentConfig{MaxRetryBackoffMS: 25_000},
+	opts := Options{Workflow: &runtimeconfig.Workflow{Config: runtimeconfig.Config{
+		Agent: runtimeconfig.AgentConfig{MaxRetryBackoffMS: 25_000},
 	}}}
 
 	if got := retryDelay(opts, retryContinuation, 1); got != time.Second {

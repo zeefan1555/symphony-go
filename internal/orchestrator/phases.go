@@ -3,7 +3,7 @@ package orchestrator
 import (
 	"context"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
 type agentPhase string
@@ -15,7 +15,7 @@ const (
 	mergingContinuationPromptText = "Continue in the same reviewer session and execute the merge protocol for this issue. Re-check the current workspace and issue state, perform the required merge steps, run the smallest relevant verification, move the issue to Done only after the merge is complete, and report concrete results or blockers."
 )
 
-func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, issue types.Issue, attempt int) error {
+func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue, attempt int) error {
 	if isTerminal(issue.State, rt.workflow.Config.Tracker.TerminalStates) {
 		return nil
 	}
