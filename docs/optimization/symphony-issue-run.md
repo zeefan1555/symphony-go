@@ -111,10 +111,10 @@
 ## 2026-05-02 16:05 +08 - ZEE-41
 
 - Trigger: `ZEE-41` issue-scoped listener created the worktree but repeatedly failed before starting the Codex turn.
-- Evidence: `.symphony/logs/run-20260502-155913.human.log` recorded `response timeout waiting for id=2`; `internal/codex/runner.go:279` sends `thread/start` with id 2; `internal/config/config.go:94` defaulted `codex.read_timeout_ms` to 5000; current `WORKFLOW.md` did not override it.
+- Evidence: `.symphony/logs/run-20260502-155913.human.log` recorded `response timeout waiting for id=2`; `internal/codex/runner.go:279` sends `thread/start` with id 2; `internal/runtime/config/config.go:94` defaulted `codex.read_timeout_ms` to 5000; current `WORKFLOW.md` did not override it.
 - Optimization: Set `codex.read_timeout_ms: 60000` in `WORKFLOW.md` so the app-server startup/thread handshake has enough room in real unattended runs.
 - Files: `WORKFLOW.md`, `docs/optimization/symphony-issue-run.md`.
-- Validation: `git diff --check`; `./test.sh ./internal/config ./internal/workflow`; `make build`.
+- Validation: `git diff --check`; `./test.sh ./internal/runtime/config ./internal/workflow`; `make build`.
 - Follow-up: none unless the retry still stalls after the wider handshake timeout.
 
 ## 2026-05-02 11:29 +08 - repo-only
@@ -134,7 +134,7 @@
   - `docs/optimization/symphony-issue-run.md`
 - Validation:
   - 通过：`git diff --check`
-  - 通过：`go test ./internal/config ./internal/orchestrator ./internal/workflow ./internal/runtime/config ./internal/service/issue`
+  - 通过：`go test ./internal/runtime/config ./internal/orchestrator ./internal/workflow ./internal/service/issue`
   - 通过：`CGO_ENABLED=0 go test ./...`
 - Follow-up:
   - 下一次真实 issue-run 后，用该 issue 的 human log、JSONL log、Linear workpad 和 git evidence 追加一条运行级复盘记录。

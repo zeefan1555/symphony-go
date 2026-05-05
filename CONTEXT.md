@@ -116,8 +116,8 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - `internal/service/...` 是核心业务命名空间；`internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/control` 等现有顶层业务包只允许作为迁移期兼容 shim 或待迁移遗留包。
 - **业务服务层** 可以调用基础设施型内部包，但不得导入 Hertz `app.RequestContext`。
 - **Issue Tracker 集成** 不迁入 `internal/service/...`；Linear 具体实现的长期归属是 `internal/integration/linear`，现有 `internal/issuetracker/linear` 只允许作为迁移期遗留边界。
-- **应用配置** 的长期归属是 `internal/runtime/config`，不迁移到 `pkg/config`；现有 `internal/config` 只允许作为迁移期遗留边界。
-- 日志和观测能力的长期归属是 `internal/runtime/logging` 与 `internal/runtime/observability`，现有顶层目录只允许作为迁移期遗留边界。
+- **应用配置** 的归属是 `internal/runtime/config`，不迁移到 `pkg/config`；旧顶层 `internal/config` 已删除。
+- 日志和观测能力的归属是 `internal/runtime/logging` 与 `internal/runtime/observability`；旧顶层 `internal/logging` 与 `internal/observability` 已删除。
 - Hertz hook/server 的长期归属是 `internal/transport/hertz...`，现有 `internal/control/hertz*` 只允许作为迁移期遗留边界。
 - **应用配置** 与 **Workflow 配置** 分工明确：应用级个性化默认值不应为了读取方便重复塞进 workflow。
 - **合入目标分支** 的长期优先级为 CLI `--merge-target` > `conf/config.yaml` > 默认 `main`；旧 `workflow merge.target` 仅作为兼容期来源。

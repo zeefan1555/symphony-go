@@ -5,7 +5,7 @@ import (
 
 	"github.com/zeefan1555/symphony-go/biz/model/common"
 	"github.com/zeefan1555/symphony-go/biz/model/orchestrator"
-	"github.com/zeefan1555/symphony-go/internal/observability"
+	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
 )
 
 type SnapshotProvider interface {

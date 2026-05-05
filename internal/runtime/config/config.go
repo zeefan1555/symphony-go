@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 )
 
 const (
@@ -50,11 +49,11 @@ func Code(err error) string {
 	return ""
 }
 
-func Resolve(raw runtimeconfig.Config, workflowPath string) (runtimeconfig.Config, error) {
+func Resolve(raw Config, workflowPath string) (Config, error) {
 	cfg := raw
 	appCfg, appLoaded, err := LoadAppConfig(workflowPath)
 	if err != nil {
-		return runtimeconfig.Config{}, err
+		return Config{}, err
 	}
 	applyAppConfig(&cfg, appCfg, appLoaded)
 	applyDefaults(&cfg)
@@ -62,10 +61,10 @@ func Resolve(raw runtimeconfig.Config, workflowPath string) (runtimeconfig.Confi
 	normalizeStates(&cfg)
 	normalizeMerge(&cfg)
 	if err := normalizeWorkspaceRoot(&cfg, workflowPath); err != nil {
-		return runtimeconfig.Config{}, err
+		return Config{}, err
 	}
 	if err := validate(cfg); err != nil {
-		return runtimeconfig.Config{}, err
+		return Config{}, err
 	}
 	return cfg, nil
 }
@@ -98,7 +97,7 @@ func workflowDir(workflowPath string) string {
 	return filepath.Dir(workflowPath)
 }
 
-func applyAppConfig(cfg *runtimeconfig.Config, appCfg AppConfig, appLoaded bool) {
+func applyAppConfig(cfg *Config, appCfg AppConfig, appLoaded bool) {
 	if !appLoaded {
 		return
 	}
@@ -108,7 +107,7 @@ func applyAppConfig(cfg *runtimeconfig.Config, appCfg AppConfig, appLoaded bool)
 	}
 	workflowTarget := strings.TrimSpace(cfg.Merge.Target)
 	if workflowTarget != "" && workflowTarget != target {
-		cfg.Warnings = append(cfg.Warnings, runtimeconfig.ConfigWarning{
+		cfg.Warnings = append(cfg.Warnings, ConfigWarning{
 			Code:    WarnWorkflowMergeTarget,
 			Message: fmt.Sprintf("workflow merge.target %q is deprecated and ignored because conf/config.yaml git.merge_target is set", workflowTarget),
 		})
@@ -116,7 +115,7 @@ func applyAppConfig(cfg *runtimeconfig.Config, appCfg AppConfig, appLoaded bool)
 	cfg.Merge.Target = target
 }
 
-func applyDefaults(cfg *runtimeconfig.Config) {
+func applyDefaults(cfg *Config) {
 	if cfg.Tracker.Endpoint == "" {
 		cfg.Tracker.Endpoint = "https://api.linear.app/graphql"
 	}
@@ -167,7 +166,7 @@ func applyDefaults(cfg *runtimeconfig.Config) {
 	}
 }
 
-func resolveEnv(cfg *runtimeconfig.Config) {
+func resolveEnv(cfg *Config) {
 	cfg.Tracker.APIKey = resolveDollar(cfg.Tracker.APIKey)
 	if cfg.Tracker.APIKey == "" && cfg.Tracker.Kind == "linear" {
 		cfg.Tracker.APIKey = os.Getenv("LINEAR_API_KEY")
@@ -182,7 +181,7 @@ func resolveDollar(value string) string {
 	return value
 }
 
-func normalizeStates(cfg *runtimeconfig.Config) {
+func normalizeStates(cfg *Config) {
 	normalized := map[string]int{}
 	for state, limit := range cfg.Agent.MaxConcurrentAgentsByState {
 		if limit > 0 {
@@ -192,14 +191,14 @@ func normalizeStates(cfg *runtimeconfig.Config) {
 	cfg.Agent.MaxConcurrentAgentsByState = normalized
 }
 
-func normalizeMerge(cfg *runtimeconfig.Config) {
+func normalizeMerge(cfg *Config) {
 	cfg.Merge.Target = strings.TrimSpace(cfg.Merge.Target)
 	if cfg.Merge.Target == "" {
 		cfg.Merge.Target = "main"
 	}
 }
 
-func normalizeWorkspaceRoot(cfg *runtimeconfig.Config, workflowPath string) error {
+func normalizeWorkspaceRoot(cfg *Config, workflowPath string) error {
 	root := expandHome(cfg.Workspace.Root)
 	if !filepath.IsAbs(root) {
 		base := "."
@@ -230,7 +229,7 @@ func expandHome(path string) string {
 	return path
 }
 
-func validate(cfg runtimeconfig.Config) error {
+func validate(cfg Config) error {
 	if cfg.Tracker.Kind != "linear" {
 		return &Error{Code: ErrUnsupportedTrackerKind, Message: fmt.Sprintf("tracker.kind %q is not supported", cfg.Tracker.Kind)}
 	}
@@ -264,7 +263,7 @@ func validate(cfg runtimeconfig.Config) error {
 	return nil
 }
 
-func validateReviewPolicy(policy runtimeconfig.ReviewPolicyConfig) error {
+func validateReviewPolicy(policy ReviewPolicyConfig) error {
 	mode := strings.ToLower(strings.TrimSpace(policy.Mode))
 	if mode != "" && mode != "human" && mode != "ai" && mode != "auto" {
 		return &Error{Code: ErrInvalidReviewPolicy, Message: "agent.review_policy.mode must be one of human, ai, auto"}

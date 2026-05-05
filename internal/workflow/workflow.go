@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/zeefan1555/symphony-go/internal/config"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	"gopkg.in/yaml.v3"
@@ -28,7 +27,7 @@ func Load(path string) (*runtimeconfig.Workflow, error) {
 			return nil, fmt.Errorf("parse workflow front matter: %w", err)
 		}
 	}
-	resolved, err := config.Resolve(cfg, path)
+	resolved, err := runtimeconfig.Resolve(cfg, path)
 	if err != nil {
 		return nil, err
 	}

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/zeefan1555/symphony-go/internal/codex"
-	"github.com/zeefan1555/symphony-go/internal/observability"
+	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	"github.com/zeefan1555/symphony-go/internal/workflow"
 	"github.com/zeefan1555/symphony-go/internal/workspace"
