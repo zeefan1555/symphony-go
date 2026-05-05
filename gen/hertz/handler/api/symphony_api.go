@@ -13,7 +13,7 @@ import (
 	orchestrator "github.com/zeefan1555/symphony-go/gen/hertz/model/orchestrator"
 	workflow "github.com/zeefan1555/symphony-go/gen/hertz/model/workflow"
 	workspace "github.com/zeefan1555/symphony-go/gen/hertz/model/workspace"
-	"github.com/zeefan1555/symphony-go/internal/transport/hertzhook"
+	"github.com/zeefan1555/symphony-go/internal/transport/hertzbinding"
 )
 
 // GetState .
@@ -27,7 +27,7 @@ func GetState(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	state, err := hertzhook.CurrentService().GetState(ctx)
+	state, err := hertzbinding.CurrentService().GetState(ctx)
 	if err != nil {
 		c.String(consts.StatusInternalServerError, err.Error())
 		return
@@ -48,9 +48,9 @@ func Refresh(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().Refresh(ctx)
+	resp, err := hertzbinding.CurrentService().Refresh(ctx)
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -72,9 +72,9 @@ func GetIssue(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	issue, err := hertzhook.CurrentService().GetIssue(ctx, req.IssueIdentifier)
+	issue, err := hertzbinding.CurrentService().GetIssue(ctx, req.IssueIdentifier)
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -97,9 +97,9 @@ func ProjectIssueRun(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().ProjectIssueRun(ctx, req.IssueIdentifier)
+	resp, err := hertzbinding.CurrentService().ProjectIssueRun(ctx, req.IssueIdentifier)
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -121,9 +121,9 @@ func ResolveWorkspacePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().ResolveWorkspacePath(ctx, req.IssueIdentifier)
+	resp, err := hertzbinding.CurrentService().ResolveWorkspacePath(ctx, req.IssueIdentifier)
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -145,9 +145,9 @@ func ValidateWorkspacePath(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().ValidateWorkspacePath(ctx, req.WorkspacePath)
+	resp, err := hertzbinding.CurrentService().ValidateWorkspacePath(ctx, req.WorkspacePath)
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -169,9 +169,9 @@ func PrepareWorkspace(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().PrepareWorkspace(ctx, req.IssueIdentifier)
+	resp, err := hertzbinding.CurrentService().PrepareWorkspace(ctx, req.IssueIdentifier)
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -193,9 +193,9 @@ func CleanupWorkspace(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().CleanupWorkspace(ctx, req.WorkspacePath)
+	resp, err := hertzbinding.CurrentService().CleanupWorkspace(ctx, req.WorkspacePath)
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -217,9 +217,9 @@ func LoadWorkflow(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().LoadWorkflow(ctx, req.WorkflowPath)
+	resp, err := hertzbinding.CurrentService().LoadWorkflow(ctx, req.WorkflowPath)
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -241,7 +241,7 @@ func RenderWorkflowPrompt(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().RenderWorkflowPrompt(ctx, hertzhook.WorkflowRenderRequest{
+	resp, err := hertzbinding.CurrentService().RenderWorkflowPrompt(ctx, hertzbinding.WorkflowRenderRequest{
 		WorkflowPath:     req.WorkflowPath,
 		IssueIdentifier:  req.IssueIdentifier,
 		IssueTitle:       req.IssueTitle,
@@ -250,7 +250,7 @@ func RenderWorkflowPrompt(ctx context.Context, c *app.RequestContext) {
 		Attempt:          req.Attempt,
 	})
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}
@@ -272,14 +272,14 @@ func RunTurn(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := hertzhook.CurrentService().RunTurn(ctx, hertzhook.CodexTurnRequest{
+	resp, err := hertzbinding.CurrentService().RunTurn(ctx, hertzbinding.CodexTurnRequest{
 		IssueIdentifier: req.IssueIdentifier,
 		PromptName:      req.PromptName,
 		WorkspacePath:   req.WorkspacePath,
 		PromptText:      req.PromptText,
 	})
 	if err != nil {
-		envelope, status := hertzhook.ErrorEnvelope(err)
+		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)
 		return
 	}

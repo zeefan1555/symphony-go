@@ -288,6 +288,26 @@ func TestHertzScaffoldDoesNotOwnOrchestratorState(t *testing.T) {
 	}
 }
 
+func TestHertzControlPlaneUsesSingleBindingModule(t *testing.T) {
+	handlerGo, err := os.ReadFile("../../../gen/hertz/handler/api/symphony_api.go")
+	if err != nil {
+		t.Fatalf("read generated handler: %v", err)
+	}
+	serverGo, err := os.ReadFile("server.go")
+	if err != nil {
+		t.Fatalf("read hertz server: %v", err)
+	}
+
+	if !strings.Contains(string(handlerGo), "internal/transport/hertzbinding") {
+		t.Fatalf("generated handler must route through hertzbinding")
+	}
+	for _, forbidden := range []string{"hertzhook", "controlAdapter"} {
+		if strings.Contains(string(handlerGo), forbidden) || strings.Contains(string(serverGo), forbidden) {
+			t.Fatalf("Hertz control plane must not keep %q in the generated handler/server chain", forbidden)
+		}
+	}
+}
+
 func parseHertzMethods(t *testing.T, mainText string) []hertzMethodContract {
 	t.Helper()
 	methodPattern := regexp.MustCompile(`(?m)^\s+([a-z_]+)\.([A-Za-z0-9]+)Resp\s+([A-Za-z0-9]+)\(1:\s+([a-z_]+)\.([A-Za-z0-9]+)Req req\)\s+\(api\.post="([^"]+)"\)`)
