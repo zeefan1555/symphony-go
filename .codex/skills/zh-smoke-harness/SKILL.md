@@ -7,7 +7,7 @@ description: "外层中文冒烟实验 harness：控制 Symphony Go 创建固定
 
 这个 skill 是外层 harness，不是单个 Linear issue 的工作流。它负责控制框架本身：创建相同中文冒烟 issue、启动 Symphony Go、收集指标、判断下一处最小优化、修改代码、重启后再跑。
 
-单个 issue 的任务定义在 `WORKFLOW.zh-smoke.md`；本 skill 只编排实验循环。
+真实链路测试使用生产 `WORKFLOW.md`；单个 issue 的固定 smoke 任务由外层 harness 创建的 Linear issue 描述定义。本 skill 只编排实验循环。
 
 ## 成功标准
 
@@ -22,7 +22,7 @@ description: "外层中文冒烟实验 harness：控制 Symphony Go 创建固定
 
 ## 固定资产
 
-- Workflow：`WORKFLOW.zh-smoke.md`
+- Workflow：`WORKFLOW.md`
 - 外层 round 脚本：`scripts/zh_smoke_round.py`
 - 指标脚本：`scripts/smoke_metrics.py`
 - 人类可读实验记录：`.codex/skills/zh-smoke-harness/experiments/rounds.md`
@@ -144,7 +144,7 @@ make zh-smoke-round
 2. 直接设为 `Todo`。
 3. 停止旧 zh-smoke 进程。
 4. 记录 `.symphony/logs/run-*.jsonl` 快照。
-5. 运行一次 `WORKFLOW.zh-smoke.md`，每轮都启动新的 Symphony Go 进程。
+5. 运行一次生产 `WORKFLOW.md`，每轮都启动新的 Symphony Go 进程。
 6. 只用本轮新生成的 log 追加 TSV 和 Markdown 指标记录。
 7. 如果设置了 `CHANGE_NOTE`，把它写入 `rounds.md` 的“优化动作”列。
 
@@ -175,7 +175,7 @@ tail -n 40 ../.codex/skills/zh-smoke-harness/experiments/rounds.md
 
 每轮只能改一个变量。常见候选：
 
-- 缩短 `WORKFLOW.zh-smoke.md` 的说明文本。
+- 缩短固定 smoke issue 描述或生产 `WORKFLOW.md` 中真实可复用的说明文本。
 - 调整 `model_reasoning_effort`。
 - 调整 `polling.interval_ms`。
 - 改善 `internal/tui` 的状态或指标展示。

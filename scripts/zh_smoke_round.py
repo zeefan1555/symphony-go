@@ -35,7 +35,7 @@ ISSUE_TEMPLATE = """中文冒烟测试：固定时间戳任务
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run one zh-smoke benchmark round.")
-    parser.add_argument("--workflow", default="./WORKFLOW.zh-smoke.md")
+    parser.add_argument("--workflow", default="./WORKFLOW.md")
     parser.add_argument("--team", default=os.environ.get("ZH_SMOKE_TEAM", "Zeefan"))
     parser.add_argument("--state", default="Todo")
     parser.add_argument("--merge-target", default=os.environ.get("MERGE_TARGET", ""))
@@ -193,7 +193,7 @@ def main() -> None:
 
     run_command(["make", "zh-smoke-stop"])
     before_logs = log_snapshot()
-    make_args = ["make", "zh-smoke-once", f"ISSUE={issue['identifier']}"]
+    make_args = ["make", "run-once", f"WORKFLOW={args.workflow}", f"ISSUE={issue['identifier']}"]
     if args.merge_target:
         make_args.append(f"MERGE_TARGET={args.merge_target}")
     run_command(make_args)

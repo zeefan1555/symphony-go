@@ -1,7 +1,7 @@
 GO ?= go
 BINARY := bin/symphony-go
 WORKFLOW ?= ./WORKFLOW.md
-ZH_SMOKE_WORKFLOW ?= ./WORKFLOW.zh-smoke.md
+ZH_SMOKE_WORKFLOW ?= ./WORKFLOW.md
 ISSUE ?=
 MERGE_TARGET ?=
 MERGE_TARGET_FLAG := $(if $(strip $(MERGE_TARGET)),--merge-target $(MERGE_TARGET),)
