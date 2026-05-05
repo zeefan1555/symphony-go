@@ -1,5 +1,54 @@
 # Lessons
 
+## 2026-05-05: Symphony Go 业务与运行支撑应归入 service-rooted 结构
+
+### 用户纠正
+
+- 用户指出：`/Users/bytedance/symphony-go/internal` 的当前文件结构不符合预期，Symphony Go 的业务逻辑应该放在 `internal/service/...` 下。
+- 用户要求回看此前已经确认过的口径，不要把业务逻辑继续散放在 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow` 或 `internal/control` 这类顶层包里。
+- 用户进一步明确：迁移完毕后，原顶层 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow` 只应作为迁移期兼容 shim 或最终消失；`internal/control/hertz*`、`internal/issuetracker`、`internal/config`、`internal/logging`、`internal/observability` 也不应继续作为顶层目录存在，目标是提升人类可读性。
+- 用户明确否定：`internal/generated` 不需要，已经迁移到 `biz` 生成；`internal/types` 也不应长期存在，应该优先复用 `biz/model` 中的数据结构；`adapter` 这个目录名不好，`platform` 也看不出和 `service` 的区别。
+
+### 错误模式
+
+- 这是流程错误：`CONTEXT.md` 已经把 **业务服务层** 定义为 `internal/service/...`，我在后续结构讨论或实现时没有把它当作当前权威约束。
+- 这是技术判断错误：把 `internal/service/control` 做成控制面 facade 后，容易误以为 `service` 只承载 HTTP control service，而忽略了它应是 orchestrator、workspace、codex、workflow、control 等核心业务逻辑的统一命名空间。
+- 这是结构理解错误：把 config、logging、observability、issue tracker adapter 当成可以永久留在 `internal/` 顶层的基础设施包，会牺牲用户最重视的人类可读性。
+- 这是命名判断错误：`adapter`、`platform` 这类通用分层名不够直观，不能清楚表达“外部系统集成”和“本地运行支撑”与业务 `service` 的区别。
+- 这是文档一致性错误：`CONTEXT.md` 的“逐步迁入 service”与 `docs/internal-scaffold-hertz-idl.md` 中“第一版不迁移这些包”的旧口径存在张力，继续开发前必须先收敛。
+
+### 防复犯规则
+
+- 新增或迁移 Symphony Go 业务逻辑与运行支撑能力时，默认放入 `internal/service/<domain>/...`；顶层 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow` 等只允许作为兼容 shim 或待迁移遗留包存在。
+- `internal/control/hertz*` 只承载传输适配；迁移完毕后不应继续占用 `internal/control` 顶层目录，HTTP handler 和 adapter 必须委托到 `internal/service/...` 内的协议无关服务。
+- `internal/issuetracker/...`、`internal/config`、`internal/logging`、`internal/observability` 不应作为长期顶层目录存在；如果功能仍需要，应迁入 service-rooted 结构下的清晰子域。
+- `internal/generated` 已被主 Hertz `biz/` 生成目录取代，迁移完毕后不应继续存在；当前残留的 `internal/generated/hertz/scaffold` 生成链需要先退役或迁到新的可读边界。
+- `internal/types` 不应作为长期共享模型目录存在；删除前必须先区分可并入 `biz/model` 的控制面数据结构，以及仍需要本地 workflow/config 语义的运行时结构。
+- 目录命名优先选人类一眼能读懂职责的词；不要默认使用 `adapter`、`platform` 这类过泛名称。
+- `internal/hertzcontract`、`internal/tui`、`internal/app` 是否保留在 service 外，需要在迁移计划中逐个确认，不要默认扩大或遗漏。
+- 迁移结构时必须先写清分批计划和 import 兼容策略，不要一次性大搬家导致行为回归或循环依赖。
+
+### 固定动作
+
+- 开始结构类改动前先确认当前边界：
+
+```bash
+rg -n "业务服务层|internal/service|逐步迁入|第一版不迁移" CONTEXT.md docs lesson.md
+find internal -maxdepth 2 -type d | sort
+```
+
+- 新增或迁移逻辑前先检查是否误加到顶层包：
+
+```bash
+rg -n "github.com/zeefan1555/symphony-go/internal/(orchestrator|workspace|codex|workflow|control|issuetracker|config|logging|observability)" internal cmd biz docs
+```
+
+- 文档或迁移计划改动后至少运行：
+
+```bash
+git diff --check
+```
+
 ## 2026-05-02: symphony-issue-run 必须看着框架自己跑完
 
 ### 用户纠正
