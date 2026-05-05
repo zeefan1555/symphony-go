@@ -2,7 +2,7 @@
 
 本文档记录旧内部架构脚手架 IDL 的迁移期契约。它描述内部子系统能力边界；当某个能力被明确纳入诊断控制面 API 时，外部 HTTP 路由仍必须通过 `idl/main.thrift` 和平铺领域 IDL 注册，而不是直接暴露 scaffold service。
 
-当前长期方向以 ZEE-76 为准：标准 Hertz 根目录 `biz/...` 是控制面生成模型、handler skeleton 和 router 的权威生成边界；旧 `internal/generated` scaffold 生成链是 ZEE-78 中已退役遗留，不再保留目录、生成脚本或 Makefile 入口。本文档不得被理解为允许新增业务逻辑继续落到旧顶层 internal 包。
+当前长期方向以 ZEE-83 / ADR-0003 为准：`gen/hertz/...` 是控制面生成模型、handler skeleton 和 router 的权威生成边界；旧 `internal/generated` scaffold 生成链是 ZEE-78 中已退役遗留，不再保留目录、生成脚本或 Makefile 入口。本文档不得被理解为允许新增业务逻辑继续落到旧顶层 internal 包，也不得被理解为允许继续新增旧 scaffold Module。
 
 ## 目录契约
 
@@ -14,7 +14,7 @@
 
 `idl/workflow.thrift` 描述 workflow 加载、reload、摘要和 prompt 渲染相关能力。workflow 文件语义、动态 reload 和模板渲染仍由现有手写包维护。
 
-旧内部脚手架 IDL 目录和旧生成输出已经退役。控制面类型以 `biz/model/...` 为模型来源，手写 adapter 只依赖这些标准 Hertz 模型包。
+旧内部脚手架 IDL 目录和旧生成输出已经退役。控制面类型以 `gen/hertz/model/...` 为模型来源，手写 `internal/transport/hertzbinding` 只依赖这些 Hertz 生成模型包并委托到 `internal/service/control`。
 
 ## 生成命令
 
@@ -24,9 +24,9 @@
 make hertz-generate
 ```
 
-该入口以 `idl/main.thrift` 为唯一 service 来源，并通过根目录平铺领域 IDL 生成 `biz/model`、`biz/handler` 和 `biz/router`。旧 scaffold 生成命令已经删除；新增或修改诊断控制面接口时，先改根目录 IDL，再更新手写 service / transport 绑定。
+该入口以 `idl/main.thrift` 为唯一 service 来源，并通过根目录平铺领域 IDL 生成 `gen/hertz/model`、`gen/hertz/handler` 和 `gen/hertz/router`。旧 scaffold 生成命令已经删除；新增或修改诊断控制面接口时，先改根目录 IDL，再更新手写 service / transport 绑定。
 
-生成结束后应运行 `scripts/check_generated_hertz_boundary.sh`。该检查确认标准 `biz` 生成外壳下的 Go 文件都带有生成代码头；其中生成 model、router 和 handler 外壳不能直接导入 `internal/service/orchestrator`、`internal/service/workspace`、`internal/service/codex`、`internal/service/workflow`、`internal/service` 或现有 issue tracker 接入包。脚本同时检查 `internal/service/` 不导入 Hertz `app.RequestContext`，也不直接依赖 issue tracker 集成。
+生成结束后应运行 `scripts/check_generated_hertz_boundary.sh`。该检查确认 `gen/hertz/...` 生成外壳下的 Go 文件都带有生成代码头；其中生成 model、router 和 handler 外壳不能直接导入 `internal/service/orchestrator`、`internal/service/workspace`、`internal/service/codex`、`internal/service/workflow`、`internal/service` 或现有 issue tracker 接入包。脚本同时检查 `internal/service/` 不导入 Hertz `app.RequestContext`，也不直接依赖 issue tracker 集成。
 
 ## 边界说明
 

@@ -45,12 +45,16 @@ _Avoid_: REST 资源式路径, 在路径里重复 HTTP method 名
 _Avoid_: Symphony 核心服务
 
 **Hertz 管理代码**:
-以标准 Hertz 工程布局作为主应用 HTTP 外壳，根目录 `biz/` 由 IDL 和 hz 生成代码管理，核心业务逻辑仍由手写 internal 层实现。
-_Avoid_: internal/generated/hertz 隐藏式控制面生成区、让 Hertz 生成 orchestrator、workspace 或 agent runner 的业务实现
+以 `gen/hertz/...` 作为长期生成代码外壳，由 IDL 和 hz 管理 handler、model 和 router，核心业务逻辑仍由手写 internal 层实现。
+_Avoid_: internal/generated/hertz 隐藏式控制面生成区、`biz/...` 长期生成外壳、让 Hertz 生成 orchestrator、workspace 或 agent runner 的业务实现
 
 **手写服务实现**:
 HTTP handler 绑定请求后委托的业务实现层，负责控制面语义、类型转换、副作用和对核心包的调用。
 _Avoid_: 生成 handler 内业务逻辑, 生成目录内状态机
+
+**Hertz 绑定层**:
+位于 `internal/transport/hertzbinding` 的手写传输绑定 Module，负责把 Hertz 生成 handler 接到 **手写服务实现**，并集中 HTTP error envelope 语义。
+_Avoid_: 全局 hook 包散落业务语义, 单实现 Adapter, 生成 handler 内直接装配业务服务
 
 **业务服务层**:
 位于 `internal/service/...` 的手写核心业务命名空间，按领域承载 orchestrator、workspace、codex、workflow、control 等业务逻辑，并供 Hertz handler 调用。
@@ -110,9 +114,11 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - **主 IDL 入口** 中的 service method 默认都是 **业务 POST 接口**；健康检查等非业务路由不属于该规则。
 - **业务 POST 接口** 使用 **动作式路由**，路径中的动作名与 service method 名保持可映射。
 - **Hertz 管理代码** 要求新增 HTTP 接口先改 IDL、再生成路由注册和 handler 骨架、最后委托到 **手写服务实现**。
-- **Hertz 管理代码** 使用根目录 `biz/handler`、`biz/model`、`biz/router` 作为 hz 管理的标准外壳，手写业务不得进入 `biz/model` 或 `biz/router`。
+- **Hertz 管理代码** 使用 `gen/hertz/handler`、`gen/hertz/model`、`gen/hertz/router` 作为长期 hz 管理外壳，手写业务不得进入 `gen/hertz/...`。
 - **Hertz 管理代码** 可以成为主应用外壳的一部分，但 `cmd/symphony-go/main.go` 和根目录 `build.sh` 仍是本仓手写权威入口，不由生成命令直接覆盖。
-- Hertz 控制面生成代码迁移到根目录 `biz/...`，核心业务逻辑保留在手写 internal 层。
+- Hertz 控制面生成代码迁移到 `gen/hertz/...`，核心业务逻辑保留在手写 internal 层。
+- **Hertz 绑定层** 是生成 handler 到 `internal/service/control` 的唯一手写传输绑定点；旧 `hertzhook` 和单实现 `controlAdapter` 只属于迁移前形态。
+- 旧 scaffold Module 已退役；不得新增 `internal/service/*/scaffold` 作为业务入口或测试 seam。
 - `internal/service/...` 是核心业务命名空间；旧顶层 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow` 已删除，不得作为兼容 shim 或新增业务入口重新引入。
 - **业务服务层** 可以调用基础设施型内部包，但不得导入 Hertz `app.RequestContext`。
 - **Issue Tracker 集成** 不迁入 `internal/service/...`；Linear 具体实现的归属是 `internal/integration/linear`，旧顶层 `internal/issuetracker/linear` 已删除。
@@ -138,7 +144,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - `internal/runtime/...`：本地 daemon 运行支撑，包括配置解析、日志事件、观测快照和进程级偏好。
 - `internal/integration/...`：第三方系统接入，包括 Linear issue tracker client、fake、状态推进和 blocker normalization。
 - `internal/transport/...`：入站协议层，包括 Hertz HTTP hook/server、HTTP error envelope 和协议模型转换。
-- `biz/...`：标准 Hertz 生成外壳，是控制面生成模型、handler skeleton 和 router 的权威来源。
+- `gen/hertz/...`：Hertz 生成外壳，是控制面生成模型、handler skeleton 和 router 的权威来源。
 
 迁移顺序为：先统一文档和边界检查；再退役旧 `internal/generated` scaffold 生成链；再拆分顶层 `internal/types`；再迁移 runtime、integration 和 transport；最后收口 service-rooted 业务迁移与 smoke。当前旧 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/generated`、`internal/types`、`internal/config`、`internal/logging`、`internal/observability`、`internal/issuetracker` 与 `internal/control/hertz*` 已删除；这些旧顶层目录不得作为 shim 或业务入口重新引入。
 
@@ -162,13 +168,14 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - “按类别分文件”已解析为按运行子系统分文件，例如 orchestrator、workspace、agent runner、workflow、tracker、observability；不按 workflow 状态阶段分文件。
 - “Hertz 管理代码”已解析为 IDL-first 生成标准 Hertz 根目录外壳，不是生成业务状态机或覆盖手写核心实现。
 - “改造 Hertz 生成到根目录的 build.sh”已解析为保留根目录 `build.sh` 作为手写权威入口，并让它接入 Hertz-owned shell；不允许 `hz --force` 直接覆盖根目录构建脚本。
-- “生成代码目录”最初解析为 `internal/generated/hertz/...`，现已改为标准 Hertz 根目录 `biz/...`；旧内部 scaffold 生成链只作为 ZEE-78 之前的待退役遗留，不是长期权威边界。
-- “Hertz 标准根目录布局”已解析为迁移 `biz/` 生成外壳，不迁移程序入口；主入口仍是 `cmd/symphony-go/main.go`。
+- “生成代码目录”最初解析为 `internal/generated/hertz/...`，随后短期采用 `biz/...`，现已改为长期目标 `gen/hertz/...`；旧内部 scaffold 生成链只作为 ZEE-78 之前的待退役遗留，不是长期权威边界。
+- “Hertz 标准根目录布局”已被重新解析为 `gen/hertz/...` 生成外壳，不迁移程序入口；主入口仍是 `cmd/symphony-go/main.go`。
 - “手写业务目录”已解析为新增统一 `internal/service/...`，并将 orchestrator、workspace、codex、workflow、control 等核心业务包逐步迁入该层，而不是只作为 handler facade。
 - `run --once --issue` 已解析为诊断/测试辅助，不是 Symphony 的主领域能力。
 - 第一版外部控制面已解析为优先实现 **HTTP 控制面**；**RPC 控制面** 保留为后续适配层。
 - “每个接口必须独立定义 Req/Resp”已解析为所有 IDL service method 的 **接口顶层契约** 规则，不只约束外部 **控制面 IDL**。
 - “内部 scaffold 变成外部 HTTP 路由”已解析为暴露 **诊断控制面 API**，不是把这些接口承诺为稳定产品 API。
+- “scaffold Adapter”已解析为旧设计残留；当前长期链路使用 **Hertz 绑定层** 和 **手写服务实现**，不新增单实现 Adapter seam。
 - “所有核心函数都被 Hz 管理”已解析为 Hz 管理 HTTP 契约、路由注册、handler 骨架和生成模型；业务逻辑仍由 **手写服务实现** 拥有。
 - “统一 main.thrift 生成”已解析为 **主 IDL 入口** 拥有唯一 service 和所有 route annotations；只 include 子 IDL 不足以让 Hertz 注册子 service 路由。
 - “默认 POST”已解析为主 IDL 注册的业务 HTTP 接口全部使用 **业务 POST 接口**，以便统一本地调试和 agent/TUI 调用。

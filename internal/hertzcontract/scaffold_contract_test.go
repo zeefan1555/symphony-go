@@ -222,17 +222,36 @@ func TestWorkflowScaffoldIsExposedAsDiagnosticRoutes(t *testing.T) {
 	}
 }
 
-func TestInternalScaffoldDocumentation(t *testing.T) {
-	doc := readFile(t, "../../docs/internal-scaffold-hertz-idl.md")
+func TestHertzGenerationArchitectureDecisionDocumentsGenHertzShell(t *testing.T) {
+	adr := readFile(t, "../../docs/adr/0003-gen-hertz-control-plane-shell.md")
+	contextDoc := readFile(t, "../../CONTEXT.md")
+	controlDoc := readFile(t, "../../docs/control-plane-hertz-idl.md")
+	scaffoldDoc := readFile(t, "../../docs/internal-scaffold-hertz-idl.md")
 
 	for _, want := range []string{
-		"迁移期契约",
-		"标准 Hertz 根目录 `biz/...`",
-		"已退役遗留",
-		"新增业务逻辑必须落到",
+		"`gen/hertz/...`",
+		"`internal/transport/hertzbinding`",
+		"`internal/service/control`",
+		"旧 scaffold",
 	} {
-		if !strings.Contains(doc, want) {
-			t.Fatalf("internal scaffold doc missing %q", want)
+		if !strings.Contains(adr, want) {
+			t.Fatalf("gen/hertz ADR missing %q", want)
+		}
+	}
+	if strings.Contains(adr, "长期目标为 `biz") {
+		t.Fatalf("gen/hertz ADR must not describe biz as the long-term generated shell")
+	}
+
+	for name, text := range map[string]string{
+		"CONTEXT.md":                    contextDoc,
+		"control-plane-hertz-idl.md":    controlDoc,
+		"internal-scaffold-hertz-idl.md": scaffoldDoc,
+	} {
+		if !strings.Contains(text, "`gen/hertz/...`") {
+			t.Fatalf("%s must document gen/hertz as the generated shell", name)
+		}
+		if strings.Contains(text, "标准 Hertz 根目录 `biz/...`") {
+			t.Fatalf("%s must not describe biz as the standard long-term generated shell", name)
 		}
 	}
 }
