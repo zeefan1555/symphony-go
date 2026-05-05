@@ -276,3 +276,34 @@ gh pr view <PR> --json state,mergedAt,baseRefName,headRefName,url
 ```
 
 - 如果 issue 进入 `Human Review`，先查 workpad blocker 和 run log，不要把它当成功状态。
+
+## 2026-05-06: 真实冒烟默认使用生产 Workflow
+
+### 用户纠正
+
+- 用户指出：如果目标是用真实场景验证链路是否完成，冒烟测试应尽量使用原来的 `WORKFLOW.md`，创建 `Todo` issue 让它按生产流程处理；新增一套专用 smoke workflow 会让测试和真实 workflow 漂移。
+
+### 错误模式
+
+- 这是技术判断错误：我把“固定 smoke 任务”和“执行 workflow”绑定成一份新的 `WORKFLOW.zh-smoke.md`，降低了测试对生产 `WORKFLOW.md` 的代表性。
+- 这是验证设计错误：真实链路测试应控制 issue 内容和 merge target，而不是替换核心 workflow SOP。
+
+### 防复犯规则
+
+- 真实冒烟测试默认使用 `WORKFLOW.md`，只通过 issue 描述指定最小任务，例如追加 `docs/smoke/pr-merge-fast-path-smoke.md` 时间戳。
+- 专用 workflow 只适合做 prompt/指标实验；不能作为“生产链路是否真实可用”的主要证据。
+- 如果需要临时 merge target，使用命令行 `MERGE_TARGET=<branch>` 或临时 branch 隔离，不复制一份 workflow 改流程。
+
+### 固定动作
+
+- 真实冒烟前先 dry-run 生产 workflow：
+
+```bash
+python3 scripts/zh_smoke_round.py --workflow ./WORKFLOW.md --dry-run
+```
+
+- 创建真实 issue 后运行生产 workflow：
+
+```bash
+GO=$HOME/sdk/go1.22.12/bin/go make run-once WORKFLOW=./WORKFLOW.md ISSUE=<ISSUE> MERGE_TARGET=<target-branch>
+```
