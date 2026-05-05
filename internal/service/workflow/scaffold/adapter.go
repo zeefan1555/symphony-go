@@ -6,7 +6,7 @@ import (
 	"github.com/zeefan1555/symphony-go/biz/model/common"
 	generated "github.com/zeefan1555/symphony-go/biz/model/workflow"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	coreworkflow "github.com/zeefan1555/symphony-go/internal/workflow"
+	coreworkflow "github.com/zeefan1555/symphony-go/internal/service/workflow"
 )
 
 type Adapter struct{}
@@ -61,6 +61,6 @@ func workflowBoundary() *common.CapabilityBoundary {
 	return &common.CapabilityBoundary{
 		Name:               "workflow.load_render",
 		Purpose:            "Load workflow configuration and render prompts through the handwritten workflow package.",
-		HandwrittenAdapter: "internal/workflow/scaffold",
+		HandwrittenAdapter: "internal/service/workflow/scaffold",
 	}
 }

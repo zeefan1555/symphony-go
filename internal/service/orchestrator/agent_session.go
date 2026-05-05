@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
+	"github.com/zeefan1555/symphony-go/internal/service/codex"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	"github.com/zeefan1555/symphony-go/internal/workflow"
-	"github.com/zeefan1555/symphony-go/internal/workspace"
+	"github.com/zeefan1555/symphony-go/internal/service/workflow"
+	"github.com/zeefan1555/symphony-go/internal/service/workspace"
 )
 
 func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue, attempt int, phase agentPhase) error {

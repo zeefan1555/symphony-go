@@ -5,7 +5,7 @@ import (
 
 	generated "github.com/zeefan1555/symphony-go/biz/model/codexsession"
 	"github.com/zeefan1555/symphony-go/biz/model/common"
-	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
+	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )
 
@@ -40,7 +40,7 @@ func (a *Adapter) RunTurn(ctx context.Context, request *generated.RunTurnReq) (*
 		Boundary: &common.CapabilityBoundary{
 			Name:               "codex_session.turn",
 			Purpose:            "Run a single Codex turn through the handwritten Codex runner without exposing app-server protocol details.",
-			HandwrittenAdapter: "internal/codex/scaffold",
+			HandwrittenAdapter: "internal/service/codex/scaffold",
 		},
 		SessionID: result.SessionID,
 		TurnCount: int32(len(result.Turns)),

@@ -37,7 +37,7 @@ func TestProjectIssueRunDelegatesToSnapshotProvider(t *testing.T) {
 	if projection.Boundary.Name != "orchestrator.issue_run_projection" {
 		t.Fatalf("boundary name = %q", projection.Boundary.Name)
 	}
-	if projection.Boundary.HandwrittenAdapter != "internal/orchestrator/scaffold" {
+	if projection.Boundary.HandwrittenAdapter != "internal/service/orchestrator/scaffold" {
 		t.Fatalf("adapter = %q", projection.Boundary.HandwrittenAdapter)
 	}
 	if projection.IssueIdentifier != "ZEE-56" {

@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
+	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
-	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
+	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
 )
 
 type fakeSnapshotProvider struct {

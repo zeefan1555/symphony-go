@@ -28,7 +28,7 @@ func TestLoadWorkflowDelegatesToWorkflowLoader(t *testing.T) {
 	if summary.Boundary == nil {
 		t.Fatal("summary boundary is nil")
 	}
-	if summary.Boundary.HandwrittenAdapter != "internal/workflow/scaffold" {
+	if summary.Boundary.HandwrittenAdapter != "internal/service/workflow/scaffold" {
 		t.Fatalf("adapter = %q", summary.Boundary.HandwrittenAdapter)
 	}
 	if summary.WorkflowPath != path {

@@ -32,7 +32,7 @@ func (a *Adapter) ProjectIssueRun(ctx context.Context, request *orchestrator.Pro
 		Boundary: &common.CapabilityBoundary{
 			Name:               "orchestrator.issue_run_projection",
 			Purpose:            "Project issue-run control state from the handwritten orchestrator runtime.",
-			HandwrittenAdapter: "internal/orchestrator/scaffold",
+			HandwrittenAdapter: "internal/service/orchestrator/scaffold",
 		},
 		IssueIdentifier: issueIdentifier,
 		RuntimeState:    a.runtimeState(issueIdentifier),

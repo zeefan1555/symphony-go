@@ -8,7 +8,7 @@ import (
 
 	generated "github.com/zeefan1555/symphony-go/biz/model/workspace"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
+	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
 )
 
 func TestAdapterExposesStandardWorkspaceDiagnosticMethods(t *testing.T) {

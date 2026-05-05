@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
+	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
+	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
 	"github.com/zeefan1555/symphony-go/internal/transport/hertzserver"
-	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 
 type snapshotProvider struct {
@@ -594,7 +594,7 @@ func TestOrchestratorRouteReturnsIssueRunProjection(t *testing.T) {
 	if body.Projection.Boundary.Name != "orchestrator.issue_run_projection" {
 		t.Fatalf("boundary name = %q, want orchestrator issue-run projection", body.Projection.Boundary.Name)
 	}
-	wantAdapter := "internal/" + "orchestrator/scaffold"
+	wantAdapter := "internal/service/" + "orchestrator/scaffold"
 	if body.Projection.Boundary.HandwrittenAdapter != wantAdapter {
 		t.Fatalf("adapter = %q, want orchestrator scaffold adapter", body.Projection.Boundary.HandwrittenAdapter)
 	}
@@ -811,7 +811,7 @@ func TestCodexSessionRouteDelegatesToControlService(t *testing.T) {
 	if len(runner.request.Prompts) != 1 || runner.request.Prompts[0].Text != "Implement the requested slice." {
 		t.Fatalf("prompts = %#v", runner.request.Prompts)
 	}
-	if body.Summary.Boundary.Name != "codex_session.turn" || body.Summary.Boundary.HandwrittenAdapter != "internal/codex/scaffold" {
+	if body.Summary.Boundary.Name != "codex_session.turn" || body.Summary.Boundary.HandwrittenAdapter != "internal/service/codex/scaffold" {
 		t.Fatalf("boundary = %#v, want codex session turn boundary", body.Summary.Boundary)
 	}
 	if body.Summary.SessionID != "session-1" || body.Summary.TurnCount != 1 {

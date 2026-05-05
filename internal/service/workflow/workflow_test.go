@@ -126,7 +126,7 @@ prompt
 }
 
 func TestRepoWorkflowUsesPRMergeFlow(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "WORKFLOW.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
 	}

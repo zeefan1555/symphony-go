@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
 	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
+	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	coreworkflow "github.com/zeefan1555/symphony-go/internal/workflow"
-	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
+	coreworkflow "github.com/zeefan1555/symphony-go/internal/service/workflow"
+	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
 )
 
 var (
@@ -408,7 +408,7 @@ func ProjectIssueRunState(state RuntimeState, issueIdentifier string) IssueRunPr
 		Boundary: CapabilityBoundary{
 			Name:               "orchestrator.issue_run_projection",
 			Purpose:            "Project issue-run control state from the handwritten orchestrator runtime.",
-			HandwrittenAdapter: "internal/orchestrator/scaffold",
+			HandwrittenAdapter: "internal/service/orchestrator/scaffold",
 		},
 		IssueIdentifier: issueIdentifier,
 		RuntimeState:    runtimeState,
@@ -435,7 +435,7 @@ func WorkspaceBoundary() CapabilityBoundary {
 	return CapabilityBoundary{
 		Name:               "workspace.lifecycle",
 		Purpose:            "Resolve, validate, prepare, and clean up issue workspaces through the handwritten workspace manager.",
-		HandwrittenAdapter: "internal/workspace/scaffold",
+		HandwrittenAdapter: "internal/service/workspace/scaffold",
 	}
 }
 
@@ -470,7 +470,7 @@ func WorkflowBoundary() CapabilityBoundary {
 	return CapabilityBoundary{
 		Name:               "workflow.load_render",
 		Purpose:            "Load workflow configuration and render prompts through the handwritten workflow package.",
-		HandwrittenAdapter: "internal/workflow/scaffold",
+		HandwrittenAdapter: "internal/service/workflow/scaffold",
 	}
 }
 
@@ -498,7 +498,7 @@ func CodexSessionBoundary() CapabilityBoundary {
 	return CapabilityBoundary{
 		Name:               "codex_session.turn",
 		Purpose:            "Run a single Codex turn through the handwritten Codex runner without exposing app-server protocol details.",
-		HandwrittenAdapter: "internal/codex/scaffold",
+		HandwrittenAdapter: "internal/service/codex/scaffold",
 	}
 }
 
