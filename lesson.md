@@ -246,3 +246,33 @@ rg -n "对外可见文本默认使用中文|Linear workpad|交接记录" WORKFLO
 ```bash
 rg -n "nextIssue|AI Review|Rework|Merging|phaseReview|RunSession" internal/service/orchestrator internal/service/codex
 ```
+
+## 2026-05-06: 冒烟测试必须覆盖 worktree 到自动清理闭环
+
+### 用户纠正
+
+- 用户指出：真实冒烟测试应全程在 issue worktree 里处理，worktree 改动需要提交 PR/MR，上游合并完成后再推进流程，默认进入 AI Review，不要最终落到 Human Review，并且要让框架自动清理 worktree。
+
+### 错误模式
+
+- 这是流程错误：我把一次因 root sync 权限受限产生的 `Human Review` 当成可接受收尾状态，但用户要验证的是无人值守闭环，而不是人工 hold。
+- 这是验证标准错误：只证明实现、review 和 PR merge 不够，还必须证明终态 `Done` 触发 orchestrator 自动清理 issue worktree。
+
+### 防复犯规则
+
+- 本仓真实冒烟测试的通过标准必须包含：issue worktree 内实现、worktree 分支提交、创建/更新 PR、PR merge、状态推进到 `Done`、`.worktrees/<ISSUE>` 自动清理。
+- `Human Review` 只能表示真实外部 blocker；默认 smoke 成功路径不得以 `Human Review` 结束。
+- 如需使用临时 smoke merge target，必须确保 child agent 能完成 root checkout sync，或由主流程明确补齐后再让 issue 到 `Done` 并验证自动清理。
+
+### 固定动作
+
+- 冒烟收尾必须检查：
+
+```bash
+linear issue view <ISSUE> --json
+test -d .worktrees/<ISSUE> && echo worktree_exists || echo worktree_cleaned
+git worktree list --porcelain
+gh pr view <PR> --json state,mergedAt,baseRefName,headRefName,url
+```
+
+- 如果 issue 进入 `Human Review`，先查 workpad blocker 和 run log，不要把它当成功状态。
