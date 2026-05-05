@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/observability"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
@@ -206,6 +207,7 @@ func (s *Service) LoadWorkflow(ctx context.Context, path string) (WorkflowSummar
 		Boundary:     WorkflowBoundary(),
 		WorkflowPath: path,
 		StateNames:   append([]string(nil), loaded.Config.Tracker.ActiveStates...),
+		IssueFlow:    workflowIssueFlow(loaded.Config),
 	}, nil
 }
 
@@ -472,11 +474,296 @@ type WorkflowSummary struct {
 	Boundary     CapabilityBoundary `json:"boundary"`
 	WorkflowPath string             `json:"workflow_path"`
 	StateNames   []string           `json:"state_names"`
+	IssueFlow    WorkflowIssueFlow  `json:"issue_flow"`
+}
+
+type WorkflowIssueFlow struct {
+	ActiveStates   []string                  `json:"active_states"`
+	TerminalStates []string                  `json:"terminal_states"`
+	ReviewPolicy   WorkflowReviewPolicy      `json:"review_policy"`
+	PhaseRoutes    []WorkflowPhaseRoute      `json:"phase_routes"`
+	Transitions    []WorkflowStateTransition `json:"transitions"`
+	DispatchRules  []WorkflowDispatchRule    `json:"dispatch_rules"`
+	SingleSession  bool                      `json:"single_agent_session"`
+	StageFlows     []WorkflowStageFlow       `json:"stage_flows"`
+}
+
+type WorkflowReviewPolicy struct {
+	Mode                string `json:"mode"`
+	AllowManualAIReview bool   `json:"allow_manual_ai_review"`
+	OnAIFail            string `json:"on_ai_fail"`
+}
+
+type WorkflowPhaseRoute struct {
+	State    string `json:"state"`
+	Phase    string `json:"phase"`
+	Behavior string `json:"behavior"`
+}
+
+type WorkflowStateTransition struct {
+	FromState string `json:"from_state"`
+	ToState   string `json:"to_state"`
+	Owner     string `json:"owner"`
+	Trigger   string `json:"trigger"`
+	Condition string `json:"condition"`
+}
+
+type WorkflowDispatchRule struct {
+	State    string `json:"state"`
+	Decision string `json:"decision"`
+	Reason   string `json:"reason"`
+}
+
+type WorkflowStageFlow struct {
+	State          string   `json:"state"`
+	Stage          string   `json:"stage"`
+	SessionPolicy  string   `json:"session_policy"`
+	EntryCondition string   `json:"entry_condition"`
+	Action         string   `json:"action"`
+	ExitCondition  string   `json:"exit_condition"`
+	NextStates     []string `json:"next_states"`
 }
 
 type WorkflowRenderResult struct {
 	Boundary CapabilityBoundary `json:"boundary"`
 	Prompt   string             `json:"prompt"`
+}
+
+func workflowIssueFlow(cfg runtimeconfig.Config) WorkflowIssueFlow {
+	policy := workflowReviewPolicy(cfg.Agent)
+	return WorkflowIssueFlow{
+		ActiveStates:   append([]string(nil), cfg.Tracker.ActiveStates...),
+		TerminalStates: append([]string(nil), cfg.Tracker.TerminalStates...),
+		ReviewPolicy:   policy,
+		PhaseRoutes:    workflowPhaseRoutes(cfg.Tracker.ActiveStates, cfg.Tracker.TerminalStates, policy),
+		Transitions:    workflowStateTransitions(policy),
+		DispatchRules:  workflowDispatchRules(),
+		SingleSession:  true,
+		StageFlows:     workflowStageFlows(),
+	}
+}
+
+func workflowReviewPolicy(agent runtimeconfig.AgentConfig) WorkflowReviewPolicy {
+	mode := strings.ToLower(strings.TrimSpace(agent.ReviewPolicy.Mode))
+	if mode == "" {
+		mode = "human"
+		if agent.AIReview.Enabled {
+			mode = "ai"
+			if agent.AIReview.AutoMerge {
+				mode = "auto"
+			}
+		}
+	}
+	onFail := strings.ToLower(strings.TrimSpace(agent.ReviewPolicy.OnAIFail))
+	if onFail == "" && agent.AIReview.ReworkOnFailure {
+		onFail = "rework"
+	}
+	if onFail == "" {
+		onFail = "unspecified"
+	}
+	return WorkflowReviewPolicy{
+		Mode:                mode,
+		AllowManualAIReview: agent.ReviewPolicy.AllowManualAIReview,
+		OnAIFail:            onFail,
+	}
+}
+
+func workflowPhaseRoutes(activeStates, terminalStates []string, policy WorkflowReviewPolicy) []WorkflowPhaseRoute {
+	routes := make([]WorkflowPhaseRoute, 0, len(activeStates)+len(terminalStates))
+	reviewEnabled := policy.Mode == "ai" || policy.Mode == "auto" || policy.AllowManualAIReview
+	for _, state := range activeStates {
+		switch strings.ToLower(state) {
+		case "todo":
+			routes = append(routes, WorkflowPhaseRoute{
+				State:    state,
+				Phase:    "implementation",
+				Behavior: "orchestrator moves Todo to In Progress before starting the same issue session",
+			})
+		case "human review", "in review":
+			routes = append(routes, WorkflowPhaseRoute{
+				State:    state,
+				Phase:    "hold",
+				Behavior: "orchestrator waits for a human to resolve the external blocker",
+			})
+		case "ai review":
+			behavior := "orchestrator waits because review policy does not allow AI Review dispatch"
+			if reviewEnabled {
+				behavior = "the same issue session continues into the review stage"
+			}
+			routes = append(routes, WorkflowPhaseRoute{State: state, Phase: "review", Behavior: behavior})
+		case "merging":
+			routes = append(routes, WorkflowPhaseRoute{
+				State:    state,
+				Phase:    "merge",
+				Behavior: "the same issue session continues into the PR merge protocol",
+			})
+		default:
+			routes = append(routes, WorkflowPhaseRoute{
+				State:    state,
+				Phase:    "implementation",
+				Behavior: "the same issue session starts or continues implementation",
+			})
+		}
+	}
+	for _, state := range terminalStates {
+		routes = append(routes, WorkflowPhaseRoute{
+			State:    state,
+			Phase:    "terminal",
+			Behavior: "orchestrator does not run an agent and cleans up the issue workspace",
+		})
+	}
+	return routes
+}
+
+func workflowStateTransitions(policy WorkflowReviewPolicy) []WorkflowStateTransition {
+	reviewCondition := "review_policy.mode is ai or auto"
+	if policy.AllowManualAIReview {
+		reviewCondition = "review_policy allows manual AI Review dispatch"
+	}
+	return []WorkflowStateTransition{
+		{
+			FromState: "Todo",
+			ToState:   "In Progress",
+			Owner:     "orchestrator",
+			Trigger:   "dispatch start",
+			Condition: "issue is active, unblocked, unclaimed, and an orchestrator slot is available",
+		},
+		{
+			FromState: "In Progress",
+			ToState:   "AI Review",
+			Owner:     "same issue agent",
+			Trigger:   "implementation complete",
+			Condition: reviewCondition,
+		},
+		{
+			FromState: "In Progress",
+			ToState:   "Human Review",
+			Owner:     "same issue agent",
+			Trigger:   "external blocker",
+			Condition: "required auth, permission, secret, or external decision is missing",
+		},
+		{
+			FromState: "AI Review",
+			ToState:   "Merging",
+			Owner:     "same issue agent or orchestrator",
+			Trigger:   "review passes",
+			Condition: "review stage final message starts with a pass marker or the agent updates the tracker state",
+		},
+		{
+			FromState: "AI Review",
+			ToState:   "Rework",
+			Owner:     "same issue agent",
+			Trigger:   "review fails",
+			Condition: "review findings require code, test, or documentation changes",
+		},
+		{
+			FromState: "AI Review",
+			ToState:   "Human Review",
+			Owner:     "same issue agent",
+			Trigger:   "external blocker",
+			Condition: "review cannot continue without human action",
+		},
+		{
+			FromState: "Merging",
+			ToState:   "Done",
+			Owner:     "same issue agent",
+			Trigger:   "PR merge protocol completes",
+			Condition: "PR is merged, root checkout is synced, and required evidence is recorded",
+		},
+		{
+			FromState: "Rework",
+			ToState:   "AI Review",
+			Owner:     "same issue agent",
+			Trigger:   "rework complete",
+			Condition: "review findings are addressed and validation is recorded",
+		},
+		{
+			FromState: "any active state",
+			ToState:   "terminal state",
+			Owner:     "agent or issue tracker",
+			Trigger:   "issue leaves active workflow",
+			Condition: "state is listed in tracker.terminal_states; orchestrator cleans up the workspace",
+		},
+	}
+}
+
+func workflowDispatchRules() []WorkflowDispatchRule {
+	return []WorkflowDispatchRule{
+		{State: "any active state", Decision: "dispatch", Reason: "required issue fields exist, state is active, state is not terminal, issue is unclaimed, issue is not already running, and slots are available"},
+		{State: "Todo", Decision: "skip", Reason: "any blocking issue is not in a terminal state"},
+		{State: "Human Review", Decision: "hold", Reason: "state is reserved for real external blockers and waits for human action"},
+		{State: "In Review", Decision: "hold", Reason: "legacy/manual review hold state waits for human action"},
+		{State: "AI Review", Decision: "dispatch or hold", Reason: "dispatch only when review policy mode is ai/auto or manual AI Review dispatch is allowed"},
+		{State: "terminal state", Decision: "cleanup", Reason: "terminal issues are not dispatched; startup and worker-exit cleanup remove their workspaces"},
+	}
+}
+
+func workflowStageFlows() []WorkflowStageFlow {
+	return []WorkflowStageFlow{
+		{
+			State:          "Todo",
+			Stage:          "queue",
+			SessionPolicy:  "no Codex session until dispatch",
+			EntryCondition: "issue is active and all blockers are terminal",
+			Action:         "orchestrator moves the issue to In Progress before starting work",
+			ExitCondition:  "state update succeeds",
+			NextStates:     []string{"In Progress"},
+		},
+		{
+			State:          "In Progress",
+			Stage:          "implementation",
+			SessionPolicy:  "same issue agent session",
+			EntryCondition: "issue is dispatched or continued after Rework",
+			Action:         "implement acceptance criteria, update workpad, commit changes, and move to AI Review when ready",
+			ExitCondition:  "acceptance criteria and validation are recorded, or a real external blocker is found",
+			NextStates:     []string{"AI Review", "Human Review"},
+		},
+		{
+			State:          "AI Review",
+			Stage:          "review",
+			SessionPolicy:  "same issue agent session",
+			EntryCondition: "implementation or rework has moved the issue to AI Review",
+			Action:         "review workpad, diff, commit range, and validation evidence in the existing session context",
+			ExitCondition:  "review passes, review findings require rework, or a real external blocker is found",
+			NextStates:     []string{"Merging", "Rework", "Human Review"},
+		},
+		{
+			State:          "Rework",
+			Stage:          "rework",
+			SessionPolicy:  "same issue agent session",
+			EntryCondition: "AI Review produced concrete findings",
+			Action:         "address findings, rerun relevant validation, update workpad, and return to AI Review",
+			ExitCondition:  "findings are resolved and validation evidence is recorded",
+			NextStates:     []string{"AI Review", "Human Review"},
+		},
+		{
+			State:          "Merging",
+			Stage:          "merge",
+			SessionPolicy:  "same issue agent session",
+			EntryCondition: "AI Review passed",
+			Action:         "run the PR merge protocol, sync the root checkout, record evidence, and move to Done",
+			ExitCondition:  "merge protocol completes or a real external blocker is found",
+			NextStates:     []string{"Done", "Human Review"},
+		},
+		{
+			State:          "Human Review",
+			Stage:          "hold",
+			SessionPolicy:  "session stops until human action resolves the blocker",
+			EntryCondition: "agent cannot continue without external auth, permission, secret, tool, or business decision",
+			Action:         "record a blocker brief and wait",
+			ExitCondition:  "human moves the issue back to an active executable state",
+			NextStates:     []string{"Todo", "In Progress", "AI Review", "Rework", "Merging"},
+		},
+		{
+			State:          "Done",
+			Stage:          "terminal",
+			SessionPolicy:  "no Codex session",
+			EntryCondition: "issue is in a terminal tracker state",
+			Action:         "orchestrator skips agent work and cleans up the workspace",
+			ExitCondition:  "workspace cleanup is attempted",
+			NextStates:     nil,
+		},
+	}
 }
 
 func CodexSessionBoundary() CapabilityBoundary {

@@ -88,6 +88,14 @@ _Avoid_: 控制面契约
 Symphony 针对一个 issue 创建或复用 workspace、执行 agent、记录进度并推动 workflow 状态的完整尝试。
 _Avoid_: task, job
 
+**Issue Flow 投影**:
+面向维护者和控制面调用方的可读流程描述，把 **Workflow 配置** 中的 active/terminal states、review policy 和 orchestrator 的阶段路由规则投影为状态转换、阶段路线和 dispatch 规则。
+_Avoid_: 新的状态机真相、运行时 map 镜像、每个 helper 函数的 HTTP 接口
+
+**单 issue agent session**:
+一个 **Issue Run** 默认使用同一个 Codex session 贯穿 implementation、review、rework 和 merge 阶段；阶段切换通过 continuation prompt 和 issue state 表达。
+_Avoid_: 为 review 或 merge 默认新建独立 agent/session
+
 **Issue Tracker 集成**:
 外部集成层中的 issue 管理系统接入能力，供业务服务读取和推进 issue 状态。
 _Avoid_: 业务服务层、workflow 状态机、Hertz handler
@@ -134,6 +142,8 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - **公共模型 IDL** 可以被 **HTTP 控制面** 和 **RPC 控制面** 共同使用。
 - 所有 IDL service method 必须通过专属 **接口顶层契约** 接收请求和返回响应；**公共模型 IDL** 只能作为字段嵌套，不能直接充当 service method 的顶层 Req 或 Resp。
 - **运行时状态** 可以被投影成控制面响应，但不是 IDL 的来源真相。
+- **Issue Flow 投影** 可以出现在 workflow 控制面响应中，用来解释状态流转和阶段控制；它不替代 **Workflow 配置** 和 orchestrator 代码中的实际调度规则。
+- **单 issue agent session** 是默认执行边界；阶段流程 IDL 可以描述多个阶段，但不得暗示每个阶段都需要新的 agent。
 - **监听服务** 是默认运行形态；单 issue 过滤或单轮 poll 只属于诊断/测试辅助，不进入第一版 **控制面 IDL**。
 
 ## Internal Directory Contract

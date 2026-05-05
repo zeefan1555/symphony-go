@@ -1461,14 +1461,14 @@ func TestAIReviewStateDoesNotUseManualPolicyTransition(t *testing.T) {
 	}
 }
 
-func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
+func TestAIReviewStateRunsReviewStage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER",
-		Title:      "reviewer agent smoke",
+		Title:      "review stage smoke",
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
@@ -1500,14 +1500,14 @@ func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
 	}
 }
 
-func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
+func TestReviewStageContinuesIntoMergingInSameSession(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER-MERGE",
-		Title:      "reviewer to merge smoke",
+		Title:      "review to merge smoke",
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
@@ -1539,7 +1539,7 @@ func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 	}
 
 	if runner.calls != 1 {
-		t.Fatalf("reviewer runner calls = %d, want 1", runner.calls)
+		t.Fatalf("review runner calls = %d, want 1", runner.calls)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
@@ -1558,14 +1558,14 @@ func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 	}
 }
 
-func TestReviewerPassFinalAutoPromotesToMergingContinuation(t *testing.T) {
+func TestReviewPassFinalAutoPromotesToMergingContinuation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER-PASS",
-		Title:      "reviewer pass smoke",
+		Title:      "review pass smoke",
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
@@ -1596,7 +1596,7 @@ func TestReviewerPassFinalAutoPromotesToMergingContinuation(t *testing.T) {
 	}
 
 	if runner.calls != 1 {
-		t.Fatalf("reviewer runner calls = %d, want 1", runner.calls)
+		t.Fatalf("review runner calls = %d, want 1", runner.calls)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
@@ -1612,18 +1612,18 @@ func TestReviewerPassFinalAutoPromotesToMergingContinuation(t *testing.T) {
 	}
 }
 
-func TestReviewerMergingContinuationRespectsMaxTurns(t *testing.T) {
+func TestReviewMergingContinuationRespectsMaxTurns(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER-MERGE-STUCK",
-		Title:      "reviewer merge stuck smoke",
+		Title:      "review merge stuck smoke",
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
-	runner := &stuckMergingRunner{tracker: tracker, maxPrompts: 2}
+	runner := &stuckMergingRunner{tracker: tracker, maxPrompts: 3}
 	o := New(Options{
 		Workflow: &runtimeconfig.Workflow{
 			Config: runtimeconfig.Config{
@@ -1645,7 +1645,7 @@ func TestReviewerMergingContinuationRespectsMaxTurns(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "reached max turns") {
 		t.Fatalf("runAgent error = %v, want reached max turns", err)
 	}
-	if got, want := len(runner.prompts), 2; got != want {
+	if got, want := len(runner.prompts), 3; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
 	}
 }
@@ -1725,6 +1725,64 @@ func TestRunAgentDoesNotAutoPromoteAfterCommitWhenAgentMovesToAIReview(t *testin
 	}
 
 	if got, want := tracker.states, []string{"AI Review"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+}
+
+func TestSingleIssueSessionContinuesThroughReviewAndMerge(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := issuemodel.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-SINGLE-SESSION",
+		Title:      "single session flow",
+		State:      "In Progress",
+	}
+	tracker := &recordingTracker{issue: issue}
+	runner := &singleIssueFlowRunner{tracker: tracker}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates:   []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
+					TerminalStates: []string{"Done"},
+				},
+				Agent: runtimeconfig.AgentConfig{
+					MaxTurns: 3,
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
+						Mode:     "auto",
+						OnAIFail: "rework",
+					},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }} in {{ issue.state }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), ".worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if runner.calls != 1 {
+		t.Fatalf("RunSession calls = %d, want one continuous issue session", runner.calls)
+	}
+	if got, want := len(runner.prompts), 3; got != want {
+		t.Fatalf("prompts = %d, want %d", got, want)
+	}
+	if got, want := runner.prompts[0].Text, "work on ZEE-SINGLE-SESSION in In Progress"; got != want {
+		t.Fatalf("first prompt = %q, want %q", got, want)
+	}
+	if got := runner.prompts[1]; got.Text != reviewContinuationPromptText || !got.Continuation || got.Issue == nil || got.Issue.State != "AI Review" {
+		t.Fatalf("review continuation prompt = %#v, want same-session AI Review continuation", got)
+	}
+	if got := runner.prompts[2]; got.Text != mergingContinuationPromptText || !got.Continuation || got.Issue == nil || got.Issue.State != "Merging" {
+		t.Fatalf("merge continuation prompt = %#v, want same-session Merging continuation", got)
+	}
+	if got, want := tracker.states, []string{"AI Review", "Merging", "Done"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
 }
@@ -2714,6 +2772,66 @@ func (r *reviewPassThenMergeRunner) RunSession(ctx context.Context, request code
 			})
 		}
 		if turn == 1 {
+			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Done"); err != nil {
+				return result, err
+			}
+		}
+		turnResult := codex.Result{
+			SessionID: fmt.Sprintf("thread-1-turn-%d", turn+1),
+			ThreadID:  "thread-1",
+			TurnID:    fmt.Sprintf("turn-%d", turn+1),
+			PID:       123,
+		}
+		result.Turns = append(result.Turns, turnResult)
+		result.SessionID = turnResult.SessionID
+		result.PID = turnResult.PID
+		if request.AfterTurn == nil {
+			continue
+		}
+		next, ok, err := request.AfterTurn(ctx, turnResult, turn+1)
+		if err != nil {
+			return result, err
+		}
+		if !ok {
+			return result, nil
+		}
+		request.Prompts = append(request.Prompts, next)
+	}
+	return result, nil
+}
+
+type singleIssueFlowRunner struct {
+	tracker *recordingTracker
+	calls   int
+	prompts []codex.TurnPrompt
+}
+
+func (r *singleIssueFlowRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+	r.calls++
+	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
+	for turn := 0; turn < len(request.Prompts); turn++ {
+		prompt := request.Prompts[turn]
+		r.prompts = append(r.prompts, prompt)
+		switch turn {
+		case 0:
+			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "AI Review"); err != nil {
+				return result, err
+			}
+		case 1:
+			if onEvent != nil {
+				onEvent(codex.Event{
+					Name: "item/completed",
+					Payload: map[string]any{
+						"params": map[string]any{
+							"item": map[string]any{
+								"type": "agentMessage",
+								"text": "结论: PASS\n\nFindings:\n- 无阻塞发现。",
+							},
+						},
+					},
+				})
+			}
+		case 2:
 			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Done"); err != nil {
 				return result, err
 			}

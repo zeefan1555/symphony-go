@@ -10,6 +10,8 @@
 
 `idl/control.thrift`、`idl/orchestrator.thrift`、`idl/workspace.thrift`、`idl/workflow.thrift` 和 `idl/codex_session.thrift` 是平铺领域 IDL。它们只放对应 method 的专属 `XxxReq` / `XxxResp` contract 和必要嵌套模型；可以引用公共模型作为字段，但不定义 service，也不放 route annotations。
 
+`idl/workflow.thrift` 中的 `WorkflowIssueFlow` 是维护者可读的 issue 状态流转投影，用于解释 active/terminal states、review policy、phase routes、stage flows、transitions 和 dispatch rules。它不是新的状态机真相；实际执行仍由 workflow 配置、orchestrator 阶段路由和 agent 更新 issue 状态共同决定。默认执行边界是单 issue agent session，阶段 IDL 只描述流程，不表示每个阶段都要新建 agent。
+
 `gen/hertz/...` 是 Hertz 生成代码外壳。`gen/hertz/handler`、`gen/hertz/model` 和 `gen/hertz/router` 是 Hertz 生成代码目录。这里的 model、router 和默认 handler skeleton 由 `hz` 生成，review 时不要把生成噪音当作主要讨论对象。
 
 `internal/transport/hertzbinding/` 是长期手写 Hertz 绑定层。它保存当前 control service、定义 HTTP error envelope helper，并让生成 handler 不直接拥有业务逻辑。旧 `internal/transport/hertzhook/` 和 server-local `controlAdapter` 只属于迁移前形态。

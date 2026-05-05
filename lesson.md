@@ -221,3 +221,28 @@ rg -n "对外可见文本默认使用中文|Linear workpad|交接记录" WORKFLO
 ```
 
 - 若发现已发布的 issue comment 正文误用英文，立即用 `linear issue comment update <comment_id> --body ...` 原地改成中文。
+
+## 2026-05-06: 阶段流程不是多 agent 边界
+
+### 用户纠正
+
+- 用户指出：希望为各个阶段流程建立 IDL，但一个 issue 全程只用一个 agent 跑，不要为了 review 再新增 agent。
+
+### 错误模式
+
+- 这是技术判断错误：我把阶段流程的可读投影和运行时 agent/session 边界混在一起，默认保留了 implementer/reviewer 分段 agent 的旧口径。
+- 这是沟通错误：用户强调的是人类可读的阶段流程契约，而不是按阶段拆成更多执行 agent。
+
+### 防复犯规则
+
+- 阶段 IDL 只能描述流程、状态转换、阶段提示和控制规则，不应暗示每个阶段都需要新的 agent 或新的 Codex session。
+- 同一个 issue 的默认执行边界应是一个连续 agent session；阶段变化通过 continuation prompt 和 issue state 切换表达。
+- 如需引入多 agent、多 session 或 reviewer agent，必须先确认这是用户明确想要的运行时行为，而不是从“阶段”这个词推导出来。
+
+### 固定动作
+
+- 修改阶段流程或 review/merge 逻辑前，先检查当前 session 是否会在 `AI Review`、`Rework` 或 `Merging` 状态切换时中断：
+
+```bash
+rg -n "nextIssue|AI Review|Rework|Merging|phaseReview|RunSession" internal/service/orchestrator internal/service/codex
+```

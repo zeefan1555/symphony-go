@@ -124,10 +124,10 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 - `agent.review_policy.mode` 是 review 路由的唯一语义开关，不要用多个布尔值组合推断流程。
 - 当前默认使用 `mode: auto`，描述目标路径 `In Progress -> AI Review -> Merging -> Done`；orchestrator 不根据 commit 自动推进业务状态。
-- implementer agent 可以多 turn、多 commit；完成 acceptance、validation、workpad 和最终 commit 后，由 agent 移动到 `AI Review`。
-- `AI Review` 由真实 reviewer agent 执行。
-- reviewer 通过后移动到 `Merging`；`Merging` 阶段使用 `pr` skill 完成 PR merge flow。
-- reviewer 不通过时，按 `on_ai_fail: rework` 移动到 `Rework`，下一轮必须基于 review 发现重新计划、修复、验证和提交。
+- 同一个 issue 默认全程使用一个连续 agent session；实现、AI Review、Rework 和 Merging 都通过 continuation prompt 在同一上下文中推进。
+- 完成 acceptance、validation、workpad 和最终 commit 后，由同一个 agent 移动到 `AI Review` 并继续 review 阶段。
+- review 通过后移动到 `Merging`；`Merging` 阶段使用 `pr` skill 完成 PR merge flow。
+- review 不通过时，按 `on_ai_fail: rework` 移动到 `Rework`，同一个 session 必须基于 review 发现重新计划、修复、验证和提交。
 - `Human Review` 只作为真实外部 blocker 的人工 hold 状态；默认流程不得依赖人工把 issue 从 `Human Review` 推到 `Merging`。
 
 ## 阶段路由
@@ -141,7 +141,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - `Backlog`：不属于本 workflow 范围；不要修改。
 - `Todo`：排队状态；开始主动工作前立即转到 `In Progress`。
 - `In Progress`：正在实现。
-- `AI Review`：由真实 reviewer agent 审查；通过后进入 `Merging`，失败时进入 `Rework`。
+- `AI Review`：同一个 issue agent 在既有上下文中审查；通过后进入 `Merging`，失败时进入 `Rework`。
 - `Human Review`：仅用于真实外部 blocker 的人工 hold；不是默认 review 终点。
 - `Merging`：AI Review 已通过；在 issue worktree 中使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow 创建/更新 PR、等待检查、squash merge，并同步 root `main`。
 - `Rework`：AI Review 要求修改；需要按 review 发现重新计划、实现、验证和提交。
@@ -155,7 +155,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - `Backlog`：不要修改 issue 内容或状态，停止并等待人类移动到 `Todo`。
    - `Todo`：立即移动到 `In Progress`，然后确保 bootstrap workpad comment 存在，不存在则创建，随后进入执行流程。
    - `In Progress`：从当前 scratchpad comment 继续执行。
-   - `AI Review`：启动真实 reviewer agent 审查；通过后进入 `Merging`，失败时进入 `Rework`。
+   - `AI Review`：同一个 issue agent 在既有上下文中进入 review 阶段；通过后进入 `Merging`，失败时进入 `Rework`。
    - `Human Review`：只等待真实外部 blocker 的人工解锁；不要自行改代码或合并。
    - `Merging`：进入后执行 PR merge flow；该状态要求 issue worktree 分支已有本地提交。
    - `Rework`：基于 AI Review 发现进入 rework 流程。
@@ -260,7 +260,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - 强制门禁：执行 ticket 提供的所有 `Validation`、`Test Plan` 或 `Testing` 要求；未满足即视为未完成。
    - 优先使用能直接证明改动行为的 targeted proof。
    - 可以使用临时本地 proof edit 来验证假设，例如临时调整 build input 或本地 hardcode 某个 UI account/response path，但必须在 commit/push 前全部恢复。
-   - 把临时 proof 步骤和结果记录到 workpad 的 `Validation` 或 `Notes`，让 reviewer 可复核。
+   - 把临时 proof 步骤和结果记录到 workpad 的 `Validation` 或 `Notes`，让后续 review 阶段可复核。
    - 如果触及 app，运行 `launch-app` 验证，并在 workpad 中记录关键路径和结果。
 6. 重新检查全部 acceptance criteria，补齐 gap。
 7. 提交当前 issue worktree 分支：
@@ -270,22 +270,22 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 8. 更新 workpad comment 的最终 checklist 和 validation notes。
     - 勾选已完成的 plan、acceptance、validation 项。
     - 在同一个 workpad comment 中加入最终 handoff notes，包括 commit 和 validation summary。
-    - 明确写出后续 `AI Review` 需要 reviewer agent 审查；reviewer 通过后会进入 `Merging`，并由 `pr` skill 执行 PR merge flow。
+    - 明确写出后续 `AI Review` 需要在同一个 issue session 中审查；review 通过后会进入 `Merging`，并由 `pr` skill 执行 PR merge flow。
     - 如果执行中有任何不清楚的地方，在底部添加简短 `### Confusions` section。
     - 不要额外发布 completion summary comment。
 9. 状态切换前重新打开并刷新 workpad，让 `Plan`、`Acceptance Criteria`、`Validation` 与已完成工作完全一致。
-10. 完成 acceptance、validation、workpad 和最终 commit 后，由 implementer agent 移动 issue 到 `AI Review`。
+10. 完成 acceptance、validation、workpad 和最终 commit 后，由同一个 agent 移动 issue 到 `AI Review`。
     - 不要把已有 commit 当作自动 handoff 信号；orchestrator 只刷新 tracker state、续跑 active issue、记录事件，并处理 cleanup/retry。
-    - implementer agent 不移动到 `Merging`；`Merging` 只由 reviewer 通过后进入。
+    - 实现阶段不要直接移动到 `Merging`；`Merging` 只由 review 通过后进入。
     - 例外：如果按 blocked-access escape hatch 被工具或 auth 阻塞，可以带 blocker brief 和明确解锁动作移动到 `Human Review`。
 
 ## Step 3：AI Review、Rework 与 PR merge 处理
 
-1. 当 issue 处于 `AI Review`，启动真实 reviewer agent。
-2. reviewer agent 审查 issue、workpad、diff、commit range 和验证证据。
-3. 如果 review 通过，reviewer agent 移动 issue 到 `Merging`。
+1. 当 issue 处于 `AI Review`，同一个 issue agent 继续在既有上下文中执行 review 阶段。
+2. review 阶段审查 issue、workpad、diff、commit range 和验证证据。
+3. 如果 review 通过，同一个 agent 移动 issue 到 `Merging`。
 4. `Merging` 阶段执行 `PR merge 协议`：从 issue worktree 使用 `.codex/skills/pr/SKILL.md` 的 PR flow 创建/更新 PR、等待检查、squash merge，并同步 root `main`。
-5. 如果 review 不通过，reviewer agent 把 findings 写入 workpad，移动 issue 到 `Rework`，然后结束本轮。
+5. 如果 review 不通过，同一个 agent 把 findings 写入 workpad，移动 issue 到 `Rework`，并在同一 session 中继续 rework。
 6. PR merge flow 成功后，更新 workpad 证据并移动 issue 到 `Done`。
 7. `Human Review` 只处理真实外部 blocker；人工解锁后应回到 `Todo`、`In Progress` 或 `AI Review` 继续自动流程。
 
@@ -318,11 +318,11 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 如果 session 内无法通过 `linear_graphql` 编辑 comment，先记录 blocker；不要调用 Linear MCP/app 工具兜底。
 - 临时 proof edit 只允许用于本地验证，commit 前必须恢复。
 - 如果发现超出范围的改进，创建单独 Backlog issue，不要扩大当前 scope；该 issue 要有清晰标题、描述、验收标准、同 project 归属、与当前 issue 的 `related` 链接，并在依赖当前 issue 时设置 `blockedBy`。
-- 未达到 `AI Review` 完成门槛前，不要移动到 `AI Review`；达到门槛后由 implementer agent 移动到 `AI Review`。
+- 未达到 `AI Review` 完成门槛前，不要移动到 `AI Review`；达到门槛后由同一个 agent 移动到 `AI Review` 并继续 review 阶段。
 - 不要把 `Human Review` 当成默认审核阶段；它只用于真实外部 blocker。
 - 在 `Merging` 中不要直接合入本地 `main`；只允许执行 `pr` skill 的 PR merge flow。
 - 如果状态是 terminal，例如 `Done`，什么都不做并退出。
-- issue 文本保持简洁、具体、面向 reviewer。
+- issue 文本保持简洁、具体，便于 review 阶段复核。
 - 如果被阻塞且尚无 workpad，添加一个 blocker comment，说明 blocker、影响和下一步解锁动作。
 
 ## Workpad 模板

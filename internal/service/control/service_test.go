@@ -276,6 +276,24 @@ func TestServiceLoadsAndRendersWorkflow(t *testing.T) {
 	if summary.WorkflowPath != workflowPath || strings.Join(summary.StateNames, ",") != "Todo,In Progress" {
 		t.Fatalf("summary = %#v, want workflow path and active states", summary)
 	}
+	if strings.Join(summary.IssueFlow.ActiveStates, ",") != "Todo,In Progress" {
+		t.Fatalf("issue flow active states = %#v, want workflow active states", summary.IssueFlow.ActiveStates)
+	}
+	if !stringSliceContains(summary.IssueFlow.TerminalStates, "Done") {
+		t.Fatalf("issue flow terminal states = %#v, want default Done state", summary.IssueFlow.TerminalStates)
+	}
+	if route, ok := findWorkflowPhaseRoute(summary.IssueFlow.PhaseRoutes, "Todo"); !ok || route.Phase != "implementation" {
+		t.Fatalf("Todo phase route = %#v ok=%v, want implementation route", route, ok)
+	}
+	if transition, ok := findWorkflowTransition(summary.IssueFlow.Transitions, "Todo", "In Progress"); !ok || transition.Owner != "orchestrator" {
+		t.Fatalf("Todo transition = %#v ok=%v, want orchestrator-owned transition", transition, ok)
+	}
+	if !summary.IssueFlow.SingleSession {
+		t.Fatalf("single agent session = false, want true")
+	}
+	if flow, ok := findWorkflowStageFlow(summary.IssueFlow.StageFlows, "AI Review"); !ok || flow.SessionPolicy != "same issue agent session" {
+		t.Fatalf("AI Review stage flow = %#v ok=%v, want same issue session", flow, ok)
+	}
 
 	rendered, err := service.RenderWorkflowPrompt(context.Background(), control.WorkflowRenderInput{
 		WorkflowPath:     workflowPath,
@@ -430,4 +448,40 @@ attempt {{ attempt }}
 		t.Fatal(err)
 	}
 	return path
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func findWorkflowPhaseRoute(routes []control.WorkflowPhaseRoute, state string) (control.WorkflowPhaseRoute, bool) {
+	for _, route := range routes {
+		if route.State == state {
+			return route, true
+		}
+	}
+	return control.WorkflowPhaseRoute{}, false
+}
+
+func findWorkflowTransition(transitions []control.WorkflowStateTransition, from, to string) (control.WorkflowStateTransition, bool) {
+	for _, transition := range transitions {
+		if transition.FromState == from && transition.ToState == to {
+			return transition, true
+		}
+	}
+	return control.WorkflowStateTransition{}, false
+}
+
+func findWorkflowStageFlow(flows []control.WorkflowStageFlow, state string) (control.WorkflowStageFlow, bool) {
+	for _, flow := range flows {
+		if flow.State == state {
+			return flow, true
+		}
+	}
+	return control.WorkflowStageFlow{}, false
 }

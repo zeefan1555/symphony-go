@@ -15,7 +15,7 @@ import (
 
 func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue, attempt int, phase agentPhase) error {
 	switch phase {
-	case phaseImplementer, phaseReviewer:
+	case phaseImplementer, phaseReview, phaseMerge:
 	default:
 		return fmt.Errorf("unknown agent phase %q", phase)
 	}
@@ -61,14 +61,38 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		TurnCount:       1,
 		StartedAt:       time.Now(),
 	})
-	var nextIssue *issuemodel.Issue
 	maxTurnsReached := false
 	noRetryNeeded := false
 	reviewFinal := ""
+	currentPhase := phase
+	currentPhaseTurns := 1
 	request := codex.SessionRequest{
 		WorkspacePath: workspacePath,
 		Issue:         issue,
 		Prompts:       []codex.TurnPrompt{{Text: prompt, Attempt: renderAttempt}},
+	}
+	continueWith := func(nextIssue issuemodel.Issue, nextPhase agentPhase, promptText string) (codex.TurnPrompt, bool) {
+		if nextPhase == currentPhase {
+			if currentPhaseTurns >= maxTurns {
+				maxTurnsReached = true
+				return codex.TurnPrompt{}, false
+			}
+			currentPhaseTurns++
+		} else {
+			currentPhase = nextPhase
+			currentPhaseTurns = 1
+		}
+		issue = nextIssue
+		o.setRunning(observability.RunningEntry{
+			IssueID:         issue.ID,
+			IssueIdentifier: issue.Identifier,
+			State:           issue.State,
+			WorkspacePath:   workspacePath,
+			TurnCount:       turnCountForRunning(currentPhaseTurns),
+			StartedAt:       time.Now(),
+		})
+		next := issue
+		return codex.TurnPrompt{Text: promptText, Continuation: true, Issue: &next}, true
 	}
 	request.AfterTurn = func(ctx context.Context, result codex.Result, turn int) (codex.TurnPrompt, bool, error) {
 		o.logIssue(issue, "turn_completed", "Codex turn completed", map[string]any{"session_id": result.SessionID})
@@ -80,62 +104,36 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			noRetryNeeded = true
 			return codex.TurnPrompt{}, false, nil
 		}
-		if phase == phaseReviewer && refreshed.State == "AI Review" && reviewFinalPasses(reviewFinal) {
-			if err := rt.tracker.UpdateIssueState(ctx, refreshed.ID, "Merging"); err != nil {
-				return codex.TurnPrompt{}, false, err
-			}
-			refreshed.State = "Merging"
-			o.logIssue(refreshed, "state_changed", "AI Review -> Merging", nil)
-			issue = refreshed
-			o.setRunning(observability.RunningEntry{
-				IssueID:         issue.ID,
-				IssueIdentifier: issue.Identifier,
-				State:           issue.State,
-				WorkspacePath:   workspacePath,
-				TurnCount:       turn + 1,
-				StartedAt:       time.Now(),
-			})
-			next := issue
-			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
-		}
-		if refreshed.State == "Human Review" || refreshed.State == "In Review" || refreshed.State == "AI Review" {
-			nextIssue = &refreshed
+		switch refreshed.State {
+		case "Human Review", "In Review":
+			o.logIssue(refreshed, "waiting_for_review", "issue is waiting for human review", nil)
+			noRetryNeeded = true
 			return codex.TurnPrompt{}, false, nil
-		}
-		if turn >= maxTurns {
-			maxTurnsReached = true
-			return codex.TurnPrompt{}, false, nil
-		}
-		if refreshed.State == "Merging" {
-			if phase != phaseReviewer {
-				nextIssue = &refreshed
-				return codex.TurnPrompt{}, false, nil
+		case "AI Review":
+			if currentPhase == phaseReview && reviewFinalPasses(reviewFinal) {
+				if err := rt.tracker.UpdateIssueState(ctx, refreshed.ID, "Merging"); err != nil {
+					return codex.TurnPrompt{}, false, err
+				}
+				refreshed.State = "Merging"
+				reviewFinal = ""
+				o.logIssue(refreshed, "state_changed", "AI Review -> Merging", nil)
+				next, ok := continueWith(refreshed, phaseMerge, mergingContinuationPromptText)
+				return next, ok, nil
 			}
-			issue = refreshed
-			o.setRunning(observability.RunningEntry{
-				IssueID:         issue.ID,
-				IssueIdentifier: issue.Identifier,
-				State:           issue.State,
-				WorkspacePath:   workspacePath,
-				TurnCount:       turn + 1,
-				StartedAt:       time.Now(),
-			})
-			next := issue
-			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
+			next, ok := continueWith(refreshed, phaseReview, reviewContinuationPromptText)
+			return next, ok, nil
+		case "Merging":
+			next, ok := continueWith(refreshed, phaseMerge, mergingContinuationPromptText)
+			return next, ok, nil
+		case "Rework":
+			next, ok := continueWith(refreshed, phaseImplementer, reworkContinuationPromptText)
+			return next, ok, nil
 		}
-		issue = refreshed
-		o.setRunning(observability.RunningEntry{
-			IssueID:         issue.ID,
-			IssueIdentifier: issue.Identifier,
-			State:           issue.State,
-			WorkspacePath:   workspacePath,
-			TurnCount:       turn + 1,
-			StartedAt:       time.Now(),
-		})
-		return codex.TurnPrompt{Text: continuationPromptText, Continuation: true}, true, nil
+		next, ok := continueWith(refreshed, phaseImplementer, continuationPromptText)
+		return next, ok, nil
 	}
 	_, err = rt.runner.RunSession(ctx, request, func(event codex.Event) {
-		if phase == phaseReviewer {
+		if currentPhase == phaseReview {
 			if text := completedAgentMessageText(event); text != "" {
 				reviewFinal = text
 			}
@@ -147,16 +145,6 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 	if err != nil {
 		return err
 	}
-	if nextIssue != nil {
-		if nextIssue.State == "Human Review" || nextIssue.State == "In Review" {
-			o.logIssue(*nextIssue, "waiting_for_review", "issue is waiting for human review", nil)
-			return errNoRetryNeeded
-		}
-		if nextIssue.State == "AI Review" || nextIssue.State == "Rework" {
-			return errNoRetryNeeded
-		}
-		return o.runAgentWith(ctx, rt, *nextIssue, attempt)
-	}
 	if maxTurnsReached {
 		return fmt.Errorf("reached max turns for %s while issue stayed active", issue.Identifier)
 	}
@@ -164,6 +152,13 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		return errNoRetryNeeded
 	}
 	return nil
+}
+
+func turnCountForRunning(phaseTurns int) int {
+	if phaseTurns < 1 {
+		return 1
+	}
+	return phaseTurns
 }
 
 func reviewFinalPasses(text string) bool {

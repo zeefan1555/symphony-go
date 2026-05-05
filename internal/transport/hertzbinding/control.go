@@ -332,7 +332,83 @@ func workflowSummaryModel(summary controlplane.WorkflowSummary) *workflowmodel.W
 		Boundary:     capabilityBoundaryModel(summary.Boundary),
 		WorkflowPath: summary.WorkflowPath,
 		StateNames:   append([]string(nil), summary.StateNames...),
+		IssueFlow:    workflowIssueFlowModel(summary.IssueFlow),
 	}
+}
+
+func workflowIssueFlowModel(flow controlplane.WorkflowIssueFlow) *workflowmodel.WorkflowIssueFlow {
+	return &workflowmodel.WorkflowIssueFlow{
+		ActiveStates:       append([]string(nil), flow.ActiveStates...),
+		TerminalStates:     append([]string(nil), flow.TerminalStates...),
+		ReviewPolicy:       workflowReviewPolicyModel(flow.ReviewPolicy),
+		PhaseRoutes:        workflowPhaseRouteModels(flow.PhaseRoutes),
+		Transitions:        workflowStateTransitionModels(flow.Transitions),
+		DispatchRules:      workflowDispatchRuleModels(flow.DispatchRules),
+		SingleAgentSession: flow.SingleSession,
+		StageFlows:         workflowStageFlowModels(flow.StageFlows),
+	}
+}
+
+func workflowReviewPolicyModel(policy controlplane.WorkflowReviewPolicy) *workflowmodel.WorkflowReviewPolicy {
+	return &workflowmodel.WorkflowReviewPolicy{
+		Mode:                policy.Mode,
+		AllowManualAiReview: policy.AllowManualAIReview,
+		OnAiFail:            policy.OnAIFail,
+	}
+}
+
+func workflowPhaseRouteModels(routes []controlplane.WorkflowPhaseRoute) []*workflowmodel.WorkflowPhaseRoute {
+	models := make([]*workflowmodel.WorkflowPhaseRoute, 0, len(routes))
+	for _, route := range routes {
+		models = append(models, &workflowmodel.WorkflowPhaseRoute{
+			State:    route.State,
+			Phase:    route.Phase,
+			Behavior: route.Behavior,
+		})
+	}
+	return models
+}
+
+func workflowStateTransitionModels(transitions []controlplane.WorkflowStateTransition) []*workflowmodel.WorkflowStateTransition {
+	models := make([]*workflowmodel.WorkflowStateTransition, 0, len(transitions))
+	for _, transition := range transitions {
+		models = append(models, &workflowmodel.WorkflowStateTransition{
+			FromState: transition.FromState,
+			ToState:   transition.ToState,
+			Owner:     transition.Owner,
+			Trigger:   transition.Trigger,
+			Condition: transition.Condition,
+		})
+	}
+	return models
+}
+
+func workflowDispatchRuleModels(rules []controlplane.WorkflowDispatchRule) []*workflowmodel.WorkflowDispatchRule {
+	models := make([]*workflowmodel.WorkflowDispatchRule, 0, len(rules))
+	for _, rule := range rules {
+		models = append(models, &workflowmodel.WorkflowDispatchRule{
+			State:    rule.State,
+			Decision: rule.Decision,
+			Reason:   rule.Reason,
+		})
+	}
+	return models
+}
+
+func workflowStageFlowModels(flows []controlplane.WorkflowStageFlow) []*workflowmodel.WorkflowStageFlow {
+	models := make([]*workflowmodel.WorkflowStageFlow, 0, len(flows))
+	for _, flow := range flows {
+		models = append(models, &workflowmodel.WorkflowStageFlow{
+			State:          flow.State,
+			Stage:          flow.Stage,
+			SessionPolicy:  flow.SessionPolicy,
+			EntryCondition: flow.EntryCondition,
+			Action:         flow.Action,
+			ExitCondition:  flow.ExitCondition,
+			NextStates:     append([]string(nil), flow.NextStates...),
+		})
+	}
+	return models
 }
 
 func workflowRenderResultModel(result controlplane.WorkflowRenderResult) *workflowmodel.WorkflowRenderResult {

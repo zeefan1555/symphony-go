@@ -37,6 +37,23 @@ type fakeCodexRunner struct {
 	err     error
 }
 
+type workflowPhaseRouteBody struct {
+	State    string `json:"state"`
+	Phase    string `json:"phase"`
+	Behavior string `json:"behavior"`
+}
+
+type workflowTransitionBody struct {
+	FromState string `json:"from_state"`
+	ToState   string `json:"to_state"`
+	Owner     string `json:"owner"`
+}
+
+type workflowStageFlowBody struct {
+	State         string `json:"state"`
+	SessionPolicy string `json:"session_policy"`
+}
+
 func (p snapshotProvider) Snapshot() observability.Snapshot {
 	return p.snapshot
 }
@@ -727,6 +744,17 @@ func TestWorkflowRoutesDelegateToControlService(t *testing.T) {
 			} `json:"boundary"`
 			WorkflowPath string   `json:"workflow_path"`
 			StateNames   []string `json:"state_names"`
+			IssueFlow    struct {
+				ActiveStates   []string `json:"active_states"`
+				TerminalStates []string `json:"terminal_states"`
+				ReviewPolicy   struct {
+					Mode string `json:"mode"`
+				} `json:"review_policy"`
+				PhaseRoutes        []workflowPhaseRouteBody `json:"phase_routes"`
+				Transitions        []workflowTransitionBody `json:"transitions"`
+				SingleAgentSession bool                     `json:"single_agent_session"`
+				StageFlows         []workflowStageFlowBody  `json:"stage_flows"`
+			} `json:"issue_flow"`
 		} `json:"summary"`
 	}
 	if err := json.NewDecoder(loadResp.Body).Decode(&loaded); err != nil {
@@ -737,6 +765,24 @@ func TestWorkflowRoutesDelegateToControlService(t *testing.T) {
 	}
 	if loaded.Summary.WorkflowPath != workflowPath || strings.Join(loaded.Summary.StateNames, ",") != "Todo,In Progress" {
 		t.Fatalf("summary = %#v, want workflow path and active states", loaded.Summary)
+	}
+	if strings.Join(loaded.Summary.IssueFlow.ActiveStates, ",") != "Todo,In Progress" {
+		t.Fatalf("issue flow active states = %#v, want workflow active states", loaded.Summary.IssueFlow.ActiveStates)
+	}
+	if !stringSliceContains(loaded.Summary.IssueFlow.TerminalStates, "Done") {
+		t.Fatalf("issue flow terminal states = %#v, want default Done state", loaded.Summary.IssueFlow.TerminalStates)
+	}
+	if route, ok := findHTTPWorkflowPhaseRoute(loaded.Summary.IssueFlow.PhaseRoutes, "Todo"); !ok || route.Phase != "implementation" {
+		t.Fatalf("Todo phase route = %#v ok=%v, want implementation route", route, ok)
+	}
+	if transition, ok := findHTTPWorkflowTransition(loaded.Summary.IssueFlow.Transitions, "Todo", "In Progress"); !ok || transition.Owner != "orchestrator" {
+		t.Fatalf("Todo transition = %#v ok=%v, want orchestrator-owned transition", transition, ok)
+	}
+	if !loaded.Summary.IssueFlow.SingleAgentSession {
+		t.Fatalf("single agent session = false, want true")
+	}
+	if flow, ok := findHTTPWorkflowStageFlow(loaded.Summary.IssueFlow.StageFlows, "AI Review"); !ok || flow.SessionPolicy != "same issue agent session" {
+		t.Fatalf("AI Review stage flow = %#v ok=%v, want same issue session", flow, ok)
 	}
 
 	renderResp := postJSON(t, baseURL, "/api/v1/workflow/render-prompt", `{"workflow_path":"`+workflowPath+`","issue_identifier":"ZEE-59","issue_title":"Workflow tracer","issue_description":"Render through HTTP route.","has_attempt":true,"attempt":2}`)
@@ -880,4 +926,40 @@ attempt {{ attempt }}
 		t.Fatal(err)
 	}
 	return path
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func findHTTPWorkflowPhaseRoute(routes []workflowPhaseRouteBody, state string) (workflowPhaseRouteBody, bool) {
+	for _, route := range routes {
+		if route.State == state {
+			return route, true
+		}
+	}
+	return workflowPhaseRouteBody{}, false
+}
+
+func findHTTPWorkflowTransition(transitions []workflowTransitionBody, from, to string) (workflowTransitionBody, bool) {
+	for _, transition := range transitions {
+		if transition.FromState == from && transition.ToState == to {
+			return transition, true
+		}
+	}
+	return workflowTransitionBody{}, false
+}
+
+func findHTTPWorkflowStageFlow(flows []workflowStageFlowBody, state string) (workflowStageFlowBody, bool) {
+	for _, flow := range flows {
+		if flow.State == state {
+			return flow, true
+		}
+	}
+	return workflowStageFlowBody{}, false
 }
