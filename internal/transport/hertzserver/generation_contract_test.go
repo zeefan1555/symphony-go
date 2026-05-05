@@ -113,8 +113,9 @@ func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
 		t.Fatalf("read main IDL: %v", err)
 	}
 	mainText := string(mainIDL)
-	if !strings.Contains(mainText, `api.post="/api/v1/control/get-scaffold"`) {
-		t.Fatalf("main IDL must define the scaffold POST route annotation")
+	if strings.Contains(mainText, `api.post="/api/v1/control/get-scaffold"`) ||
+		strings.Contains(mainText, "GetScaffold") {
+		t.Fatalf("main IDL must not define the retired scaffold control route")
 	}
 	if strings.Contains(mainText, "api.get") {
 		t.Fatalf("business routes in main IDL must use POST annotations")
@@ -311,7 +312,6 @@ func parseHertzMethods(t *testing.T, mainText string) []hertzMethodContract {
 
 func expectedHertzMethodContracts() []hertzMethodContract {
 	return []hertzMethodContract{
-		{Domain: "control", Method: "GetScaffold", Route: "/api/v1/control/get-scaffold"},
 		{Domain: "control", Method: "GetState", Route: "/api/v1/control/get-state"},
 		{Domain: "control", Method: "Refresh", Route: "/api/v1/control/refresh"},
 		{Domain: "control", Method: "GetIssue", Route: "/api/v1/control/get-issue"},

@@ -538,7 +538,7 @@ func TestRefreshRouteReturnsErrorEnvelope(t *testing.T) {
 	}
 }
 
-func TestScaffoldRouteCallsAuthoredControlService(t *testing.T) {
+func TestRetiredScaffoldRouteIsNotRegistered(t *testing.T) {
 	service := control.NewService(snapshotProvider{snapshot: observability.NewSnapshot()})
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
@@ -546,18 +546,8 @@ func TestScaffoldRouteCallsAuthoredControlService(t *testing.T) {
 	resp := postJSON(t, baseURL, "/api/v1/control/get-scaffold", "{}")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	var body struct {
-		Status string `json:"status"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if body.Status != "ok" {
-		t.Fatalf("response status = %q, want ok", body.Status)
+	if resp.StatusCode == http.StatusOK {
+		t.Fatalf("retired scaffold route returned %d; route must not be registered", resp.StatusCode)
 	}
 }
 
