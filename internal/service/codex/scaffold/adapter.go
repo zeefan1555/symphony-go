@@ -3,8 +3,8 @@ package scaffold
 import (
 	"context"
 
-	generated "github.com/zeefan1555/symphony-go/biz/model/codexsession"
-	"github.com/zeefan1555/symphony-go/biz/model/common"
+	generated "github.com/zeefan1555/symphony-go/gen/hertz/model/codexsession"
+	"github.com/zeefan1555/symphony-go/gen/hertz/model/common"
 	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
 	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 )

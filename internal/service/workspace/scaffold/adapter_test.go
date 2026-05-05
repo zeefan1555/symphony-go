@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	generated "github.com/zeefan1555/symphony-go/biz/model/workspace"
+	generated "github.com/zeefan1555/symphony-go/gen/hertz/model/workspace"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
 )

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	generated "github.com/zeefan1555/symphony-go/biz/model/codexsession"
+	generated "github.com/zeefan1555/symphony-go/gen/hertz/model/codexsession"
 	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
 )
 

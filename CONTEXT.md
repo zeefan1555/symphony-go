@@ -46,7 +46,7 @@ _Avoid_: Symphony 核心服务
 
 **Hertz 管理代码**:
 以 `gen/hertz/...` 作为长期生成代码外壳，由 IDL 和 hz 管理 handler、model 和 router，核心业务逻辑仍由手写 internal 层实现。
-_Avoid_: internal/generated/hertz 隐藏式控制面生成区、`biz/...` 长期生成外壳、让 Hertz 生成 orchestrator、workspace 或 agent runner 的业务实现
+_Avoid_: internal/generated/hertz 隐藏式控制面生成区、旧根级长期生成外壳、让 Hertz 生成 orchestrator、workspace 或 agent runner 的业务实现
 
 **手写服务实现**:
 HTTP handler 绑定请求后委托的业务实现层，负责控制面语义、类型转换、副作用和对核心包的调用。
@@ -168,7 +168,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - “按类别分文件”已解析为按运行子系统分文件，例如 orchestrator、workspace、agent runner、workflow、tracker、observability；不按 workflow 状态阶段分文件。
 - “Hertz 管理代码”已解析为 IDL-first 生成标准 Hertz 根目录外壳，不是生成业务状态机或覆盖手写核心实现。
 - “改造 Hertz 生成到根目录的 build.sh”已解析为保留根目录 `build.sh` 作为手写权威入口，并让它接入 Hertz-owned shell；不允许 `hz --force` 直接覆盖根目录构建脚本。
-- “生成代码目录”最初解析为 `internal/generated/hertz/...`，随后短期采用 `biz/...`，现已改为长期目标 `gen/hertz/...`；旧内部 scaffold 生成链只作为 ZEE-78 之前的待退役遗留，不是长期权威边界。
+- “生成代码目录”最初解析为 `internal/generated/hertz/...`，随后短期采用根级生成目录，现已改为 `gen/hertz/...`；旧内部 scaffold 生成链只作为 ZEE-78 之前的待退役遗留，不是长期权威边界。
 - “Hertz 标准根目录布局”已被重新解析为 `gen/hertz/...` 生成外壳，不迁移程序入口；主入口仍是 `cmd/symphony-go/main.go`。
 - “手写业务目录”已解析为新增统一 `internal/service/...`，并将 orchestrator、workspace、codex、workflow、control 等核心业务包逐步迁入该层，而不是只作为 handler facade。
 - `run --once --issue` 已解析为诊断/测试辅助，不是 Symphony 的主领域能力。

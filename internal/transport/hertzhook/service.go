@@ -5,12 +5,12 @@ import (
 	"errors"
 	"sync"
 
-	codexsessionmodel "github.com/zeefan1555/symphony-go/biz/model/codexsession"
-	commonmodel "github.com/zeefan1555/symphony-go/biz/model/common"
-	controlmodel "github.com/zeefan1555/symphony-go/biz/model/control"
-	orchestratormodel "github.com/zeefan1555/symphony-go/biz/model/orchestrator"
-	workflowmodel "github.com/zeefan1555/symphony-go/biz/model/workflow"
-	workspacemodel "github.com/zeefan1555/symphony-go/biz/model/workspace"
+	codexsessionmodel "github.com/zeefan1555/symphony-go/gen/hertz/model/codexsession"
+	commonmodel "github.com/zeefan1555/symphony-go/gen/hertz/model/common"
+	controlmodel "github.com/zeefan1555/symphony-go/gen/hertz/model/control"
+	orchestratormodel "github.com/zeefan1555/symphony-go/gen/hertz/model/orchestrator"
+	workflowmodel "github.com/zeefan1555/symphony-go/gen/hertz/model/workflow"
+	workspacemodel "github.com/zeefan1555/symphony-go/gen/hertz/model/workspace"
 )
 
 type ScaffoldStatus struct {

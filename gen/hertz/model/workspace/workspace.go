@@ -5,7 +5,7 @@ package workspace
 import (
 	"fmt"
 	"github.com/apache/thrift/lib/go/thrift"
-	"github.com/zeefan1555/symphony-go/biz/model/common"
+	"github.com/zeefan1555/symphony-go/gen/hertz/model/common"
 )
 
 type ResolveWorkspacePathReq struct {

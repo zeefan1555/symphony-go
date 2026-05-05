@@ -4,7 +4,7 @@ package api
 
 import (
 	"github.com/cloudwego/hertz/pkg/app/server"
-	api "github.com/zeefan1555/symphony-go/biz/handler/api"
+	api "github.com/zeefan1555/symphony-go/gen/hertz/handler/api"
 )
 
 /*

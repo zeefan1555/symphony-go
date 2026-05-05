@@ -21,6 +21,16 @@ func _v1Mw() []app.HandlerFunc {
 	return nil
 }
 
+func _codex_sessionMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _runturnMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
 func _controlMw() []app.HandlerFunc {
 	// your code...
 	return nil
@@ -56,6 +66,21 @@ func _projectissuerunMw() []app.HandlerFunc {
 	return nil
 }
 
+func _workflowMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _loadworkflowMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _renderworkflowpromptMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
 func _workspaceMw() []app.HandlerFunc {
 	// your code...
 	return nil
@@ -77,31 +102,6 @@ func _resolveworkspacepathMw() []app.HandlerFunc {
 }
 
 func _validateworkspacepathMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _workflowMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _loadworkflowMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _renderworkflowpromptMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _codex_sessionMw() []app.HandlerFunc {
-	// your code...
-	return nil
-}
-
-func _runturnMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

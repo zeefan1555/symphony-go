@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	generated "github.com/zeefan1555/symphony-go/biz/model/workflow"
+	generated "github.com/zeefan1555/symphony-go/gen/hertz/model/workflow"
 )
 
 func TestAdapterExposesStandardWorkflowDiagnosticMethods(t *testing.T) {

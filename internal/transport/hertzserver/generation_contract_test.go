@@ -36,13 +36,16 @@ func TestRepositoryDocumentsHertzGenerationCommand(t *testing.T) {
 	for _, want := range []string{
 		"hz new",
 		"idl/main.thrift",
-		"biz/handler",
-		"biz/model",
-		"biz/router",
+		"gen/hertz/handler",
+		"gen/hertz/model",
+		"gen/hertz/router",
 	} {
 		if !strings.Contains(scriptText, want) {
 			t.Fatalf("hertz generation script missing %q", want)
 		}
+	}
+	if strings.Contains(scriptText, "$repo_root/biz") {
+		t.Fatalf("hertz generation script must not write generated Hertz output to biz")
 	}
 }
 
@@ -223,7 +226,7 @@ func TestAllBusinessRoutesArePostActionRoutes(t *testing.T) {
 }
 
 func TestGeneratedRouterRegistersAllBusinessEndpoints(t *testing.T) {
-	routerGo, err := os.ReadFile("../../../biz/router/api/main.go")
+	routerGo, err := os.ReadFile("../../../gen/hertz/router/api/main.go")
 	if err != nil {
 		t.Fatalf("read generated router: %v", err)
 	}
@@ -256,7 +259,7 @@ func TestHertzScaffoldDoesNotOwnOrchestratorState(t *testing.T) {
 		"internal/" + "integration",
 	}
 	for _, root := range []string{
-		"../../../biz",
+		"../../../gen/hertz",
 		"../../../internal/transport/hertzserver",
 	} {
 		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
