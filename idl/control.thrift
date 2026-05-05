@@ -1,13 +1,6 @@
 namespace go control
 include "common.thrift"
 
-struct GetScaffoldReq {
-}
-
-struct GetScaffoldResp {
-    1: required string status
-}
-
 struct GetStateReq {
 }
 

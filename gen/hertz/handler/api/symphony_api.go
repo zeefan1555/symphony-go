@@ -16,27 +16,6 @@ import (
 	"github.com/zeefan1555/symphony-go/internal/transport/hertzhook"
 )
 
-// GetScaffold .
-// @router /api/v1/control/get-scaffold [POST]
-func GetScaffold(ctx context.Context, c *app.RequestContext) {
-	var err error
-	var req control.GetScaffoldReq
-	err = c.BindAndValidate(&req)
-	if err != nil {
-		c.String(consts.StatusBadRequest, err.Error())
-		return
-	}
-
-	status, err := hertzhook.CurrentService().GetScaffold(ctx)
-	if err != nil {
-		c.String(consts.StatusInternalServerError, err.Error())
-		return
-	}
-	resp := &control.GetScaffoldResp{Status: status.Status}
-
-	c.JSON(consts.StatusOK, resp)
-}
-
 // GetState .
 // @router /api/v1/control/get-state [POST]
 func GetState(ctx context.Context, c *app.RequestContext) {

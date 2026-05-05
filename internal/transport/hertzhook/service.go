@@ -13,12 +13,7 @@ import (
 	workspacemodel "github.com/zeefan1555/symphony-go/gen/hertz/model/workspace"
 )
 
-type ScaffoldStatus struct {
-	Status string
-}
-
 type ControlService interface {
-	GetScaffold(context.Context) (ScaffoldStatus, error)
 	GetState(context.Context) (*commonmodel.RuntimeState, error)
 	GetIssue(context.Context, string) (*commonmodel.IssueDetail, error)
 	ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error)
@@ -48,53 +43,49 @@ type CodexTurnRequest struct {
 	PromptText      string
 }
 
-type ControlFunc func(context.Context) (ScaffoldStatus, error)
+type unavailableControlService struct{}
 
-func (f ControlFunc) GetScaffold(ctx context.Context) (ScaffoldStatus, error) {
-	return f(ctx)
-}
-
-func (f ControlFunc) GetState(context.Context) (*commonmodel.RuntimeState, error) {
+func (unavailableControlService) GetState(context.Context) (*commonmodel.RuntimeState, error) {
 	return emptyRuntimeState(), nil
 }
 
-func (f ControlFunc) GetIssue(context.Context, string) (*commonmodel.IssueDetail, error) {
+func (unavailableControlService) GetIssue(context.Context, string) (*commonmodel.IssueDetail, error) {
 	return nil, NewError(404, "issue_not_found", "issue not found")
 }
 
-func (f ControlFunc) ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error) {
+func (unavailableControlService) ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error) {
 	return nil, NewError(404, "issue_run_not_found", "issue run not found")
 }
 
-func (f ControlFunc) ResolveWorkspacePath(context.Context, string) (*workspacemodel.ResolveWorkspacePathResp, error) {
+func (unavailableControlService) ResolveWorkspacePath(context.Context, string) (*workspacemodel.ResolveWorkspacePathResp, error) {
 	return nil, NewError(503, "workspace_unavailable", "workspace manager is unavailable")
 }
 
-func (f ControlFunc) ValidateWorkspacePath(context.Context, string) (*workspacemodel.ValidateWorkspacePathResp, error) {
+func (unavailableControlService) ValidateWorkspacePath(context.Context, string) (*workspacemodel.ValidateWorkspacePathResp, error) {
 	return nil, NewError(503, "workspace_unavailable", "workspace manager is unavailable")
 }
 
-func (f ControlFunc) PrepareWorkspace(context.Context, string) (*workspacemodel.PrepareWorkspaceResp, error) {
+func (unavailableControlService) PrepareWorkspace(context.Context, string) (*workspacemodel.PrepareWorkspaceResp, error) {
 	return nil, NewError(503, "workspace_unavailable", "workspace manager is unavailable")
 }
 
-func (f ControlFunc) CleanupWorkspace(context.Context, string) (*workspacemodel.CleanupWorkspaceResp, error) {
+func (unavailableControlService) CleanupWorkspace(context.Context, string) (*workspacemodel.CleanupWorkspaceResp, error) {
 	return nil, NewError(503, "workspace_unavailable", "workspace manager is unavailable")
 }
 
-func (f ControlFunc) LoadWorkflow(context.Context, string) (*workflowmodel.LoadWorkflowResp, error) {
+func (unavailableControlService) LoadWorkflow(context.Context, string) (*workflowmodel.LoadWorkflowResp, error) {
 	return nil, NewError(503, "workflow_unavailable", "workflow loader is unavailable")
 }
 
-func (f ControlFunc) RenderWorkflowPrompt(context.Context, WorkflowRenderRequest) (*workflowmodel.RenderWorkflowPromptResp, error) {
+func (unavailableControlService) RenderWorkflowPrompt(context.Context, WorkflowRenderRequest) (*workflowmodel.RenderWorkflowPromptResp, error) {
 	return nil, NewError(503, "workflow_unavailable", "workflow renderer is unavailable")
 }
 
-func (f ControlFunc) RunTurn(context.Context, CodexTurnRequest) (*codexsessionmodel.RunTurnResp, error) {
+func (unavailableControlService) RunTurn(context.Context, CodexTurnRequest) (*codexsessionmodel.RunTurnResp, error) {
 	return nil, NewError(503, "codex_runner_unavailable", "codex runner is unavailable")
 }
 
-func (f ControlFunc) Refresh(context.Context) (*controlmodel.RefreshResp, error) {
+func (unavailableControlService) Refresh(context.Context) (*controlmodel.RefreshResp, error) {
 	return nil, NewError(503, "refresh_unavailable", "refresh trigger is unavailable")
 }
 
@@ -102,16 +93,12 @@ var controlService = struct {
 	sync.RWMutex
 	current ControlService
 }{
-	current: ControlFunc(func(context.Context) (ScaffoldStatus, error) {
-		return ScaffoldStatus{Status: "unconfigured"}, nil
-	}),
+	current: unavailableControlService{},
 }
 
 func SetControlService(service ControlService) func() {
 	if service == nil {
-		service = ControlFunc(func(context.Context) (ScaffoldStatus, error) {
-			return ScaffoldStatus{Status: "unconfigured"}, nil
-		})
+		service = unavailableControlService{}
 	}
 
 	controlService.Lock()

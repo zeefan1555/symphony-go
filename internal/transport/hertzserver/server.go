@@ -70,14 +70,6 @@ type controlAdapter struct {
 	control Control
 }
 
-func (a controlAdapter) GetScaffold(ctx context.Context) (hertzhook.ScaffoldStatus, error) {
-	status, err := a.control.GetScaffold(ctx)
-	if err != nil {
-		return hertzhook.ScaffoldStatus{}, err
-	}
-	return hertzhook.ScaffoldStatus{Status: status.Status}, nil
-}
-
 func (a controlAdapter) GetState(ctx context.Context) (*commonmodel.RuntimeState, error) {
 	state, err := a.control.RuntimeState(ctx)
 	if err != nil {

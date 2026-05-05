@@ -48,7 +48,6 @@ type CodexSessionRunner interface {
 }
 
 type ControlService interface {
-	GetScaffold(context.Context) (ScaffoldStatus, error)
 	RuntimeState(context.Context) (RuntimeState, error)
 	IssueDetail(context.Context, string) (IssueDetail, error)
 	ProjectIssueRun(context.Context, string) (IssueRunProjection, error)
@@ -82,16 +81,6 @@ func NewServiceWithCodexRunner(provider SnapshotProvider, runner CodexSessionRun
 
 func NewServiceWithWorkspaceAndCodexRunner(provider SnapshotProvider, manager *coreworkspace.Manager, runner CodexSessionRunner) *Service {
 	return &Service{provider: provider, workspace: manager, runner: runner}
-}
-
-func (s *Service) GetScaffold(ctx context.Context) (ScaffoldStatus, error) {
-	if err := ctx.Err(); err != nil {
-		return ScaffoldStatus{}, err
-	}
-	if s == nil || s.provider == nil {
-		return ScaffoldStatus{Status: "unconfigured"}, nil
-	}
-	return ScaffoldStatus{Status: "ok"}, nil
 }
 
 func (s *Service) RuntimeState(ctx context.Context) (RuntimeState, error) {
@@ -413,10 +402,6 @@ func ProjectIssueRunState(state RuntimeState, issueIdentifier string) IssueRunPr
 		IssueIdentifier: issueIdentifier,
 		RuntimeState:    runtimeState,
 	}
-}
-
-type ScaffoldStatus struct {
-	Status string `json:"status"`
 }
 
 type CapabilityBoundary struct {

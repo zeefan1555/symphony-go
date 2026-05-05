@@ -28,7 +28,6 @@ func Register(r *server.Hertz) {
 			{
 				_control := _v1.Group("/control", _controlMw()...)
 				_control.POST("/get-issue", append(_getissueMw(), api.GetIssue)...)
-				_control.POST("/get-scaffold", append(_getscaffoldMw(), api.GetScaffold)...)
 				_control.POST("/get-state", append(_getstateMw(), api.GetState)...)
 				_control.POST("/refresh", append(_refreshMw(), api.Refresh)...)
 			}
