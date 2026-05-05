@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	runtimeconfig "symphony-go/internal/runtime/config"
 )
 
 const stableLoadAttempts = 3

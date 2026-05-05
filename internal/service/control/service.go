@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
-	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
-	coreworkflow "github.com/zeefan1555/symphony-go/internal/service/workflow"
-	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
+	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/service/codex"
+	issuemodel "symphony-go/internal/service/issue"
+	"symphony-go/internal/service/workflow"
+	"symphony-go/internal/service/workspace"
 )
 
 var (
@@ -44,7 +44,7 @@ type RefreshTrigger interface {
 }
 
 type CodexSessionRunner interface {
-	RunSession(context.Context, corecodex.SessionRequest, func(corecodex.Event)) (corecodex.SessionResult, error)
+	RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
 }
 
 type ControlService interface {
@@ -63,7 +63,7 @@ type ControlService interface {
 
 type Service struct {
 	provider  SnapshotProvider
-	workspace *coreworkspace.Manager
+	workspace *workspace.Manager
 	runner    CodexSessionRunner
 }
 
@@ -71,7 +71,7 @@ func NewService(provider SnapshotProvider) *Service {
 	return &Service{provider: provider}
 }
 
-func NewServiceWithWorkspace(provider SnapshotProvider, manager *coreworkspace.Manager) *Service {
+func NewServiceWithWorkspace(provider SnapshotProvider, manager *workspace.Manager) *Service {
 	return &Service{provider: provider, workspace: manager}
 }
 
@@ -79,7 +79,7 @@ func NewServiceWithCodexRunner(provider SnapshotProvider, runner CodexSessionRun
 	return &Service{provider: provider, runner: runner}
 }
 
-func NewServiceWithWorkspaceAndCodexRunner(provider SnapshotProvider, manager *coreworkspace.Manager, runner CodexSessionRunner) *Service {
+func NewServiceWithWorkspaceAndCodexRunner(provider SnapshotProvider, manager *workspace.Manager, runner CodexSessionRunner) *Service {
 	return &Service{provider: provider, workspace: manager, runner: runner}
 }
 
@@ -198,7 +198,7 @@ func (s *Service) LoadWorkflow(ctx context.Context, path string) (WorkflowSummar
 	if strings.TrimSpace(path) == "" {
 		return WorkflowSummary{}, ErrInvalidWorkflowPath
 	}
-	loaded, err := coreworkflow.Load(path)
+	loaded, err := workflow.Load(path)
 	if err != nil {
 		return WorkflowSummary{}, err
 	}
@@ -216,7 +216,7 @@ func (s *Service) RenderWorkflowPrompt(ctx context.Context, input WorkflowRender
 	if strings.TrimSpace(input.WorkflowPath) == "" {
 		return WorkflowRenderResult{}, ErrInvalidWorkflowPath
 	}
-	loaded, err := coreworkflow.Load(input.WorkflowPath)
+	loaded, err := workflow.Load(input.WorkflowPath)
 	if err != nil {
 		return WorkflowRenderResult{}, err
 	}
@@ -225,7 +225,7 @@ func (s *Service) RenderWorkflowPrompt(ctx context.Context, input WorkflowRender
 		value := input.Attempt
 		attempt = &value
 	}
-	prompt, err := coreworkflow.Render(loaded.PromptTemplate, issuemodel.Issue{
+	prompt, err := workflow.Render(loaded.PromptTemplate, issuemodel.Issue{
 		Identifier:  input.IssueIdentifier,
 		Title:       input.IssueTitle,
 		Description: input.IssueDescription,
@@ -249,10 +249,10 @@ func (s *Service) RunCodexTurn(ctx context.Context, input CodexTurnInput) (Codex
 	if s == nil || s.runner == nil {
 		return CodexTurnSummary{}, ErrCodexRunnerRequired
 	}
-	result, err := s.runner.RunSession(ctx, corecodex.SessionRequest{
+	result, err := s.runner.RunSession(ctx, codex.SessionRequest{
 		WorkspacePath: input.WorkspacePath,
 		Issue:         issuemodel.Issue{Identifier: input.IssueIdentifier},
-		Prompts: []corecodex.TurnPrompt{{
+		Prompts: []codex.TurnPrompt{{
 			Text: input.PromptText,
 		}},
 	}, nil)

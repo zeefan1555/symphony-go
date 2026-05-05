@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
 	"gopkg.in/yaml.v3"
+	runtimeconfig "symphony-go/internal/runtime/config"
+	issuemodel "symphony-go/internal/service/issue"
 )
 
 var variablePattern = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}`)

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/zeefan1555/symphony-go/internal/app"
+	"symphony-go/internal/app"
 )
 
 type runOptions struct {

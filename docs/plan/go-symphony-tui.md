@@ -397,8 +397,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/zeefan1555/symphony-go/internal/codex"
-	"github.com/zeefan1555/symphony-go/internal/types"
+	"symphony-go/internal/codex"
+	"symphony-go/internal/types"
 )
 
 type fakeTracker struct {
@@ -449,7 +449,7 @@ Expected: FAIL，提示 `Snapshot` 未定义。
 ```go
 import (
 	"sync"
-	"github.com/zeefan1555/symphony-go/internal/observability"
+	"symphony-go/internal/observability"
 )
 ```
 
@@ -576,7 +576,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/observability"
+	"symphony-go/internal/observability"
 )
 
 func TestRenderSnapshotShowsCoreSections(t *testing.T) {
@@ -633,7 +633,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/observability"
+	"symphony-go/internal/observability"
 )
 
 type Options struct {
@@ -858,7 +858,7 @@ opts.ApplyDefaults()
 
 ```go
 "time"
-"github.com/zeefan1555/symphony-go/internal/tui"
+"symphony-go/internal/tui"
 ```
 
 创建 orchestrator 后，如果 `opts.TUI` 为 true，启动 goroutine：

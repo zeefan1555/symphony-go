@@ -7,13 +7,13 @@ import (
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
-	codexsession "github.com/zeefan1555/symphony-go/gen/hertz/model/codexsession"
-	common "github.com/zeefan1555/symphony-go/gen/hertz/model/common"
-	control "github.com/zeefan1555/symphony-go/gen/hertz/model/control"
-	orchestrator "github.com/zeefan1555/symphony-go/gen/hertz/model/orchestrator"
-	workflow "github.com/zeefan1555/symphony-go/gen/hertz/model/workflow"
-	workspace "github.com/zeefan1555/symphony-go/gen/hertz/model/workspace"
-	"github.com/zeefan1555/symphony-go/internal/transport/hertzbinding"
+	codexsession "symphony-go/gen/hertz/model/codexsession"
+	common "symphony-go/gen/hertz/model/common"
+	control "symphony-go/gen/hertz/model/control"
+	orchestrator "symphony-go/gen/hertz/model/orchestrator"
+	workflow "symphony-go/gen/hertz/model/workflow"
+	workspace "symphony-go/gen/hertz/model/workspace"
+	"symphony-go/internal/transport/hertzbinding"
 )
 
 // GetState .

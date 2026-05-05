@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
-	corecodex "github.com/zeefan1555/symphony-go/internal/service/codex"
-	"github.com/zeefan1555/symphony-go/internal/service/control"
-	coreworkspace "github.com/zeefan1555/symphony-go/internal/service/workspace"
+	runtimeconfig "symphony-go/internal/runtime/config"
+	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/service/codex"
+	"symphony-go/internal/service/control"
+	"symphony-go/internal/service/workspace"
 )
 
 type fakeSnapshotProvider struct {
@@ -27,8 +27,8 @@ type fakeRefreshProvider struct {
 }
 
 type fakeControlCodexRunner struct {
-	request corecodex.SessionRequest
-	result  corecodex.SessionResult
+	request codex.SessionRequest
+	result  codex.SessionResult
 	err     error
 }
 
@@ -115,7 +115,7 @@ func (p *fakeRefreshProvider) RequestRefresh(ctx context.Context) (bool, error) 
 	return result, nil
 }
 
-func (f *fakeControlCodexRunner) RunSession(ctx context.Context, request corecodex.SessionRequest, onEvent func(corecodex.Event)) (corecodex.SessionResult, error) {
+func (f *fakeControlCodexRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
 	f.request = request
 	return f.result, f.err
 }
@@ -199,14 +199,14 @@ func TestServiceProjectsIssueRunState(t *testing.T) {
 
 func TestServiceProjectsWorkspaceLifecycle(t *testing.T) {
 	root := t.TempDir()
-	manager := coreworkspace.New(root, runtimeconfig.HooksConfig{})
+	manager := workspace.New(root, runtimeconfig.HooksConfig{})
 	service := control.NewServiceWithWorkspace(fakeSnapshotProvider{snapshot: observability.NewSnapshot()}, manager)
 
 	resolved, err := service.ResolveWorkspacePath(context.Background(), "../ZEE/unsafe")
 	if err != nil {
 		t.Fatalf("ResolveWorkspacePath returned error: %v", err)
 	}
-	wantPath := filepath.Join(root, coreworkspace.SafeIdentifier("../ZEE/unsafe"))
+	wantPath := filepath.Join(root, workspace.SafeIdentifier("../ZEE/unsafe"))
 	if resolved.WorkspacePath != wantPath || !resolved.ContainedInRoot {
 		t.Fatalf("resolved = %#v, want contained path %q", resolved, wantPath)
 	}
@@ -301,10 +301,10 @@ func TestServiceLoadsAndRendersWorkflow(t *testing.T) {
 }
 
 func TestServiceRunsCodexTurnThroughRunner(t *testing.T) {
-	runner := &fakeControlCodexRunner{result: corecodex.SessionResult{
+	runner := &fakeControlCodexRunner{result: codex.SessionResult{
 		SessionID: "session-1",
 		ThreadID:  "thread-1",
-		Turns: []corecodex.Result{{
+		Turns: []codex.Result{{
 			SessionID: "session-1",
 			ThreadID:  "thread-1",
 			TurnID:    "turn-1",

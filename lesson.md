@@ -40,7 +40,7 @@ find internal -maxdepth 2 -type d | sort
 - 新增或迁移逻辑前先检查是否误加到顶层包：
 
 ```bash
-rg -n "github.com/zeefan1555/symphony-go/internal/(orchestrator|workspace|codex|workflow|control|issuetracker|config|logging|observability)" internal cmd biz docs
+rg -n "symphony-go/internal/(orchestrator|workspace|codex|workflow|control|issuetracker|config|logging|observability)" internal cmd biz docs
 ```
 
 - 文档或迁移计划改动后至少运行：

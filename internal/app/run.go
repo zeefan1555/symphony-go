@@ -14,17 +14,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/integration/linear"
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
-	"github.com/zeefan1555/symphony-go/internal/runtime/logging"
-	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
-	"github.com/zeefan1555/symphony-go/internal/service/codex"
-	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
-	"github.com/zeefan1555/symphony-go/internal/service/orchestrator"
-	"github.com/zeefan1555/symphony-go/internal/service/workflow"
-	"github.com/zeefan1555/symphony-go/internal/service/workspace"
-	"github.com/zeefan1555/symphony-go/internal/transport/hertzserver"
-	"github.com/zeefan1555/symphony-go/internal/tui"
+	"symphony-go/internal/integration/linear"
+	runtimeconfig "symphony-go/internal/runtime/config"
+	"symphony-go/internal/runtime/logging"
+	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/service/codex"
+	controlplane "symphony-go/internal/service/control"
+	"symphony-go/internal/service/orchestrator"
+	"symphony-go/internal/service/workflow"
+	"symphony-go/internal/service/workspace"
+	"symphony-go/internal/transport/hertzserver"
+	"symphony-go/internal/tui"
 )
 
 type Options struct {

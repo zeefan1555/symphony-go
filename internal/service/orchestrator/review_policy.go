@@ -3,7 +3,7 @@ package orchestrator
 import (
 	"strings"
 
-	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
+	runtimeconfig "symphony-go/internal/runtime/config"
 )
 
 const (

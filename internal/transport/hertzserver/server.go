@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
-	"github.com/zeefan1555/symphony-go/gen/hertz/router"
-	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
-	"github.com/zeefan1555/symphony-go/internal/transport/hertzbinding"
+	"symphony-go/gen/hertz/router"
+	controlplane "symphony-go/internal/service/control"
+	"symphony-go/internal/transport/hertzbinding"
 )
 
 type Control = controlplane.ControlService

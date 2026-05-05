@@ -178,7 +178,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	"symphony-go/internal/types"
 )
 
 func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
@@ -305,7 +305,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	"symphony-go/internal/types"
 )
 
 const (
@@ -498,7 +498,7 @@ return &types.Workflow{Config: resolved, PromptTemplate: strings.TrimSpace(strin
 Import:
 
 ```go
-import "github.com/zeefan1555/symphony-go/internal/config"
+import "symphony-go/internal/config"
 ```
 
 Remove the direct call to `cfg.ApplyDefaults()`.
@@ -655,7 +655,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	"symphony-go/internal/types"
 )
 
 type Reloader struct {
@@ -1120,7 +1120,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	"symphony-go/internal/types"
 )
 
 func TestSortCandidatesUsesPriorityCreatedAtIdentifier(t *testing.T) {
@@ -1197,7 +1197,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	"symphony-go/internal/types"
 )
 
 type runningIssue struct {

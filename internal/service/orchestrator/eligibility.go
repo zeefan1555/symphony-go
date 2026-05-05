@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	issuemodel "github.com/zeefan1555/symphony-go/internal/service/issue"
+	issuemodel "symphony-go/internal/service/issue"
 )
 
 type runningIssue struct {

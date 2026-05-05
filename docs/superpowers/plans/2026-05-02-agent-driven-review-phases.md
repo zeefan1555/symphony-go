@@ -595,11 +595,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeefan1555/symphony-go/internal/codex"
-	"github.com/zeefan1555/symphony-go/internal/observability"
-	"github.com/zeefan1555/symphony-go/internal/types"
-	"github.com/zeefan1555/symphony-go/internal/workflow"
-	"github.com/zeefan1555/symphony-go/internal/workspace"
+	"symphony-go/internal/codex"
+	"symphony-go/internal/observability"
+	"symphony-go/internal/types"
+	"symphony-go/internal/workflow"
+	"symphony-go/internal/workspace"
 )
 
 func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, issue types.Issue, attempt int, phase agentPhase) error {
@@ -747,7 +747,7 @@ package orchestrator
 import (
 	"context"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	"symphony-go/internal/types"
 )
 
 type agentPhase string
@@ -799,7 +799,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zeefan1555/symphony-go/internal/types"
+	"symphony-go/internal/types"
 )
 
 const (
