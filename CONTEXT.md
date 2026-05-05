@@ -56,6 +56,18 @@ _Avoid_: 生成 handler 内业务逻辑, 生成目录内状态机
 位于 `internal/service/...` 的手写核心业务命名空间，按领域承载 orchestrator、workspace、codex、workflow、control 等业务逻辑，并供 Hertz handler 调用。
 _Avoid_: 泛化 helper 包、HTTP handler、IDL 生成模型、仅作为控制面 facade 的薄转发层
 
+**运行支撑层**:
+长期位于 `internal/runtime/...` 的本地 daemon 支撑命名空间，承载应用配置、日志事件、观测快照和进程运行偏好。
+_Avoid_: Symphony 业务状态机、HTTP handler、第三方系统接入
+
+**外部集成层**:
+长期位于 `internal/integration/...` 的第三方系统接入命名空间，Linear issue tracker 是其中一个具体集成。
+_Avoid_: workflow 状态机、Issue Run 调度、Hertz handler
+
+**传输层**:
+长期位于 `internal/transport/...` 的入站协议适配命名空间，Hertz HTTP hook/server 属于这里。
+_Avoid_: workflow 解析、workspace 操作、Codex 启动、Linear 读取
+
 **RPC 控制面**:
 面向后端服务或 agent 平台调用的 RPC 传输适配层。
 _Avoid_: 默认本地 dashboard 接口
@@ -72,12 +84,12 @@ _Avoid_: 控制面契约
 Symphony 针对一个 issue 创建或复用 workspace、执行 agent、记录进度并推动 workflow 状态的完整尝试。
 _Avoid_: task, job
 
-**Issue Tracker Adapter**:
-位于 `internal/issuetracker/...` 的外部 issue 管理系统适配层，供业务服务读取和推进 issue 状态。
+**Issue Tracker 集成**:
+外部集成层中的 issue 管理系统接入能力，供业务服务读取和推进 issue 状态。
 _Avoid_: 业务服务层、workflow 状态机、Hertz handler
 
 **应用配置**:
-位于 `internal/config` 的 Viper 应用内配置读取与解析边界，默认读取 `conf/config.yaml`，承载本机/项目级 key-value、阈值、名单和默认行为。
+运行支撑层中的 Viper 应用内配置读取与解析边界，默认读取 `conf/config.yaml`，承载本机/项目级 key-value、阈值、名单和默认行为。
 _Avoid_: pkg/config 公共库、handler 或 service 中写死规则数据、workflow 执行定义
 
 **Workflow 配置**:
@@ -101,10 +113,12 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - **Hertz 管理代码** 使用根目录 `biz/handler`、`biz/model`、`biz/router` 作为 hz 管理的标准外壳，手写业务不得进入 `biz/model` 或 `biz/router`。
 - **Hertz 管理代码** 可以成为主应用外壳的一部分，但 `cmd/symphony-go/main.go` 和根目录 `build.sh` 仍是本仓手写权威入口，不由生成命令直接覆盖。
 - Hertz 控制面生成代码迁移到根目录 `biz/...`，核心业务逻辑保留在手写 internal 层。
-- Hertz standard layout 迁移新增 `internal/service/...` 作为核心业务命名空间；`internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/control` 等核心包逐步迁入该层。
+- `internal/service/...` 是核心业务命名空间；`internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/control` 等现有顶层业务包只允许作为迁移期兼容 shim 或待迁移遗留包。
 - **业务服务层** 可以调用基础设施型内部包，但不得导入 Hertz `app.RequestContext`。
-- **Issue Tracker Adapter** 是基础设施适配层，不迁入 `internal/service/...`；Linear 具体实现放在 `internal/issuetracker/linear`。
-- **应用配置** 保留在 `internal/config`，不迁移到 `pkg/config`；默认配置文件位于 `conf/config.yaml`，由 Viper 注册和读取 key-value。
+- **Issue Tracker 集成** 不迁入 `internal/service/...`；Linear 具体实现的长期归属是 `internal/integration/linear`，现有 `internal/issuetracker/linear` 只允许作为迁移期遗留边界。
+- **应用配置** 的长期归属是 `internal/runtime/config`，不迁移到 `pkg/config`；现有 `internal/config` 只允许作为迁移期遗留边界。
+- 日志和观测能力的长期归属是 `internal/runtime/logging` 与 `internal/runtime/observability`，现有顶层目录只允许作为迁移期遗留边界。
+- Hertz hook/server 的长期归属是 `internal/transport/hertz...`，现有 `internal/control/hertz*` 只允许作为迁移期遗留边界。
 - **应用配置** 与 **Workflow 配置** 分工明确：应用级个性化默认值不应为了读取方便重复塞进 workflow。
 - **合入目标分支** 的长期优先级为 CLI `--merge-target` > `conf/config.yaml` > 默认 `main`；旧 `workflow merge.target` 仅作为兼容期来源。
 - **合入目标分支** 在 `conf/config.yaml` 中的 canonical key 是 `git.merge_target`。
@@ -115,6 +129,20 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - 所有 IDL service method 必须通过专属 **接口顶层契约** 接收请求和返回响应；**公共模型 IDL** 只能作为字段嵌套，不能直接充当 service method 的顶层 Req 或 Resp。
 - **运行时状态** 可以被投影成控制面响应，但不是 IDL 的来源真相。
 - **监听服务** 是默认运行形态；单 issue 过滤或单轮 poll 只属于诊断/测试辅助，不进入第一版 **控制面 IDL**。
+
+## Internal Directory Contract
+
+长期 internal 顶层目录按人类可读职责收敛为少数语义根：
+
+- `internal/service/...`：Symphony 核心业务能力，包括 issue run 调度、workspace lifecycle、Codex session、workflow 语义和 control semantics。
+- `internal/runtime/...`：本地 daemon 运行支撑，包括配置解析、日志事件、观测快照和进程级偏好。
+- `internal/integration/...`：第三方系统接入，包括 Linear issue tracker client、fake、状态推进和 blocker normalization。
+- `internal/transport/...`：入站协议层，包括 Hertz HTTP hook/server、HTTP error envelope 和协议模型转换。
+- `biz/...`：标准 Hertz 生成外壳，是控制面生成模型、handler skeleton 和 router 的权威来源。
+
+迁移顺序为：先统一文档和边界检查；再退役旧 `internal/generated` scaffold 生成链；再拆分顶层 `internal/types`；再迁移 runtime、integration 和 transport；最后收口 service-rooted 业务迁移与 smoke。迁移期间允许 shim，但 shim 只能转发到新归属，不得承载新增业务逻辑。
+
+不再把 `adapter` 或 `platform` 作为长期目录名：前者不能清楚表达第三方系统接入，后者不能清楚表达本地运行支撑。若某个能力无法归入上述语义根，应先更新 PRD 或创建 follow-up，再新增目录。
 
 ## Example dialogue
 
@@ -134,7 +162,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - “按类别分文件”已解析为按运行子系统分文件，例如 orchestrator、workspace、agent runner、workflow、tracker、observability；不按 workflow 状态阶段分文件。
 - “Hertz 管理代码”已解析为 IDL-first 生成标准 Hertz 根目录外壳，不是生成业务状态机或覆盖手写核心实现。
 - “改造 Hertz 生成到根目录的 build.sh”已解析为保留根目录 `build.sh` 作为手写权威入口，并让它接入 Hertz-owned shell；不允许 `hz --force` 直接覆盖根目录构建脚本。
-- “生成代码目录”最初解析为 `internal/generated/hertz/...`，现已改为标准 Hertz 根目录 `biz/...`；内部 scaffold 生成仍可保留在 `internal/generated/hertz/scaffold`。
+- “生成代码目录”最初解析为 `internal/generated/hertz/...`，现已改为标准 Hertz 根目录 `biz/...`；旧内部 scaffold 生成链只作为 ZEE-78 之前的待退役遗留，不是长期权威边界。
 - “Hertz 标准根目录布局”已解析为迁移 `biz/` 生成外壳，不迁移程序入口；主入口仍是 `cmd/symphony-go/main.go`。
 - “手写业务目录”已解析为新增统一 `internal/service/...`，并将 orchestrator、workspace、codex、workflow、control 等核心业务包逐步迁入该层，而不是只作为 handler facade。
 - `run --once --issue` 已解析为诊断/测试辅助，不是 Symphony 的主领域能力。
@@ -145,8 +173,8 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - “统一 main.thrift 生成”已解析为 **主 IDL 入口** 拥有唯一 service 和所有 route annotations；只 include 子 IDL 不足以让 Hertz 注册子 service 路由。
 - “默认 POST”已解析为主 IDL 注册的业务 HTTP 接口全部使用 **业务 POST 接口**，以便统一本地调试和 agent/TUI 调用。
 - “路由命名”已解析为使用 **动作式路由**，按领域和 method kebab-case 映射，不采用 REST 资源式路径。
-- “issue 管理器”已解析为 **Issue Tracker Adapter**；Linear 是具体实现，目录为 `internal/issuetracker/linear`，不属于 **业务服务层**。
-- “pkg/config”已解析为不采用；配置模块继续使用 `internal/config`，但所有业务阈值、名单和 KV 数据必须通过该边界读取。
+- “issue 管理器”已解析为 **Issue Tracker 集成**；Linear 是具体实现，长期目录为 `internal/integration/linear`，不属于 **业务服务层**。
+- “pkg/config”已解析为不采用；配置模块长期归入 `internal/runtime/config`，但所有业务阈值、名单和 KV 数据必须通过该边界读取。
 - “conf/config.yaml”已解析为采用；它由 Viper 读取，用于应用级个性化 key-value，不替代 **Workflow 配置**。
 - “merge.target”已解析为从 **Workflow 配置** 迁出；长期来源为 CLI 覆盖或 `conf/config.yaml`，旧 workflow 字段进入兼容期。
 - “conf/config.yaml 与 workflow merge.target 冲突”已解析为 `conf/config.yaml` 赢，并对旧 workflow 字段记录 deprecation warning。
