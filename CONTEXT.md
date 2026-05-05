@@ -113,12 +113,12 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - **Hertz 管理代码** 使用根目录 `biz/handler`、`biz/model`、`biz/router` 作为 hz 管理的标准外壳，手写业务不得进入 `biz/model` 或 `biz/router`。
 - **Hertz 管理代码** 可以成为主应用外壳的一部分，但 `cmd/symphony-go/main.go` 和根目录 `build.sh` 仍是本仓手写权威入口，不由生成命令直接覆盖。
 - Hertz 控制面生成代码迁移到根目录 `biz/...`，核心业务逻辑保留在手写 internal 层。
-- `internal/service/...` 是核心业务命名空间；`internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/control` 等现有顶层业务包只允许作为迁移期兼容 shim 或待迁移遗留包。
+- `internal/service/...` 是核心业务命名空间；`internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow` 等现有顶层业务包只允许作为迁移期兼容 shim 或待迁移遗留包。
 - **业务服务层** 可以调用基础设施型内部包，但不得导入 Hertz `app.RequestContext`。
-- **Issue Tracker 集成** 不迁入 `internal/service/...`；Linear 具体实现的长期归属是 `internal/integration/linear`，现有 `internal/issuetracker/linear` 只允许作为迁移期遗留边界。
+- **Issue Tracker 集成** 不迁入 `internal/service/...`；Linear 具体实现的归属是 `internal/integration/linear`，旧顶层 `internal/issuetracker/linear` 已删除。
 - **应用配置** 的归属是 `internal/runtime/config`，不迁移到 `pkg/config`；旧顶层 `internal/config` 已删除。
 - 日志和观测能力的归属是 `internal/runtime/logging` 与 `internal/runtime/observability`；旧顶层 `internal/logging` 与 `internal/observability` 已删除。
-- Hertz hook/server 的长期归属是 `internal/transport/hertz...`，现有 `internal/control/hertz*` 只允许作为迁移期遗留边界。
+- Hertz hook/server 的归属是 `internal/transport/hertz...`，旧 `internal/control/hertz*` 已删除。
 - **应用配置** 与 **Workflow 配置** 分工明确：应用级个性化默认值不应为了读取方便重复塞进 workflow。
 - **合入目标分支** 的长期优先级为 CLI `--merge-target` > `conf/config.yaml` > 默认 `main`；旧 `workflow merge.target` 仅作为兼容期来源。
 - **合入目标分支** 在 `conf/config.yaml` 中的 canonical key 是 `git.merge_target`。
@@ -140,7 +140,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - `internal/transport/...`：入站协议层，包括 Hertz HTTP hook/server、HTTP error envelope 和协议模型转换。
 - `biz/...`：标准 Hertz 生成外壳，是控制面生成模型、handler skeleton 和 router 的权威来源。
 
-迁移顺序为：先统一文档和边界检查；再退役旧 `internal/generated` scaffold 生成链；再拆分顶层 `internal/types`；再迁移 runtime、integration 和 transport；最后收口 service-rooted 业务迁移与 smoke。当前旧 `internal/generated` 与 `internal/types` 已删除；迁移期间仍允许其他旧顶层 shim，但 shim 只能转发到新归属，不得承载新增业务逻辑。
+迁移顺序为：先统一文档和边界检查；再退役旧 `internal/generated` scaffold 生成链；再拆分顶层 `internal/types`；再迁移 runtime、integration 和 transport；最后收口 service-rooted 业务迁移与 smoke。当前旧 `internal/generated`、`internal/types`、`internal/config`、`internal/logging`、`internal/observability`、`internal/issuetracker` 与 `internal/control/hertz*` 已删除；迁移期间仍允许其他旧顶层 shim，但 shim 只能转发到新归属，不得承载新增业务逻辑。
 
 不再把 `adapter` 或 `platform` 作为长期目录名：前者不能清楚表达第三方系统接入，后者不能清楚表达本地运行支撑。若某个能力无法归入上述语义根，应先更新 PRD 或创建 follow-up，再新增目录。
 

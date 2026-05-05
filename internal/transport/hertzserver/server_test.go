@@ -13,10 +13,10 @@ import (
 	"time"
 
 	corecodex "github.com/zeefan1555/symphony-go/internal/codex"
-	"github.com/zeefan1555/symphony-go/internal/control/hertzserver"
 	runtimeconfig "github.com/zeefan1555/symphony-go/internal/runtime/config"
 	"github.com/zeefan1555/symphony-go/internal/runtime/observability"
 	"github.com/zeefan1555/symphony-go/internal/service/control"
+	"github.com/zeefan1555/symphony-go/internal/transport/hertzserver"
 	coreworkspace "github.com/zeefan1555/symphony-go/internal/workspace"
 )
 

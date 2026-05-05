@@ -15,8 +15,8 @@ import (
 	workflowmodel "github.com/zeefan1555/symphony-go/biz/model/workflow"
 	workspacemodel "github.com/zeefan1555/symphony-go/biz/model/workspace"
 	"github.com/zeefan1555/symphony-go/biz/router"
-	"github.com/zeefan1555/symphony-go/internal/control/hertzhook"
 	controlplane "github.com/zeefan1555/symphony-go/internal/service/control"
+	"github.com/zeefan1555/symphony-go/internal/transport/hertzhook"
 )
 
 type Control = controlplane.ControlService

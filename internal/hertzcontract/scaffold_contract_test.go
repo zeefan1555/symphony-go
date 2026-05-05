@@ -261,7 +261,7 @@ func TestGeneratedHertzBoundaryCheckCoversBizAndServiceBoundaries(t *testing.T) 
 		"internal/service",
 		"github.com/cloudwego/hertz/pkg/app",
 		"app\\.RequestContext",
-		"internal/issuetracker",
+		"internal/integration",
 	} {
 		if !strings.Contains(checkScript, want) {
 			t.Fatalf("generated Hertz boundary check missing %q", want)

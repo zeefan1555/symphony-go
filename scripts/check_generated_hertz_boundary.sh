@@ -27,7 +27,7 @@ check_generated_tree() {
     fi
 
     if [ "$forbid_business_imports" = "yes" ] &&
-      grep -Eq 'internal/(orchestrator|workspace|codex|workflow|issuetracker|service)' "$file"; then
+      grep -Eq 'internal/(orchestrator|workspace|codex|workflow|integration|service)' "$file"; then
       echo "generated Hertz file imports business internals: ${file#$repo_root/}" >&2
       exit 1
     fi
@@ -49,7 +49,7 @@ check_internal_service_boundary() {
       exit 1
     fi
 
-    if grep -Eq 'internal/issuetracker' "$file"; then
+    if grep -Eq 'internal/integration' "$file"; then
       echo "internal service imports issue tracker integration: ${file#$repo_root/}" >&2
       exit 1
     fi
