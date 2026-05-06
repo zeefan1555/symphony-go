@@ -37,21 +37,22 @@ type WorkflowReloader interface {
 }
 
 type Options struct {
-	Workflow              *runtimeconfig.Workflow
-	Reloader              WorkflowReloader
-	Tracker               Tracker
-	TrackerFactory        func(runtimeconfig.TrackerConfig) (Tracker, error)
-	Workspace             *workspace.Manager
-	WorkspaceFactory      func(runtimeconfig.WorkspaceConfig, runtimeconfig.HooksConfig) *workspace.Manager
-	Runner                AgentRunner
-	RunnerFactory         func(runtimeconfig.CodexConfig) AgentRunner
-	WorkflowRunnerFactory func(runtimeconfig.Config) (AgentRunner, error)
-	NewTimer              func(time.Duration, func()) *time.Timer
-	Logger                *logging.Logger
-	Once                  bool
-	IssueFilter           string
-	RepoRoot              string
-	MergeTarget           string
+	Workflow                 *runtimeconfig.Workflow
+	Reloader                 WorkflowReloader
+	Tracker                  Tracker
+	TrackerFactory           func(runtimeconfig.TrackerConfig) (Tracker, error)
+	Workspace                *workspace.Manager
+	WorkspaceFactory         func(runtimeconfig.WorkspaceConfig, runtimeconfig.HooksConfig) *workspace.Manager
+	Runner                   AgentRunner
+	RunnerFactory            func(runtimeconfig.CodexConfig) AgentRunner
+	WorkflowRunnerFactory    func(runtimeconfig.Config) (AgentRunner, error)
+	RunnerFactoryWithTracker func(runtimeconfig.CodexConfig, Tracker) AgentRunner
+	NewTimer                 func(time.Duration, func()) *time.Timer
+	Logger                   *logging.Logger
+	Once                     bool
+	IssueFilter              string
+	RepoRoot                 string
+	MergeTarget              string
 }
 
 type Orchestrator struct {
@@ -525,7 +526,9 @@ func (o *Orchestrator) reloadDependencies(loaded *runtimeconfig.Workflow) (Track
 	}
 	o.configureWorkspaceObserver(workspaceManager)
 	runner := opts.Runner
-	if opts.WorkflowRunnerFactory != nil {
+	if opts.RunnerFactoryWithTracker != nil {
+		runner = opts.RunnerFactoryWithTracker(loaded.Config.Codex, tracker)
+	} else if opts.WorkflowRunnerFactory != nil {
 		next, err := opts.WorkflowRunnerFactory(loaded.Config)
 		if err != nil {
 			return nil, nil, nil, err

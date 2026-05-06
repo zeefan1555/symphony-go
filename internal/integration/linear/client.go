@@ -302,6 +302,28 @@ func (c *Client) GraphQL(ctx context.Context, query string, variables map[string
 }
 
 func (c *Client) GraphQLRaw(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
+	respBody, err := c.doGraphQL(ctx, query, variables, true)
+	if err != nil {
+		return nil, err
+	}
+	var body map[string]any
+	if err := json.Unmarshal(respBody, &body); err != nil {
+		return nil, err
+	}
+	if body == nil {
+		body = map[string]any{}
+	}
+	return body, nil
+}
+
+func (c *Client) RawGraphQL(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
+	return c.GraphQLRaw(ctx, query, variables)
+}
+
+func (c *Client) doGraphQL(ctx context.Context, query string, variables map[string]any, emptyNilVariables bool) ([]byte, error) {
+	if variables == nil && emptyNilVariables {
+		variables = map[string]any{}
+	}
 	payload := map[string]any{"query": query, "variables": variables}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -326,11 +348,7 @@ func (c *Client) GraphQLRaw(ctx context.Context, query string, variables map[str
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Linear GraphQL status %d: %s", resp.StatusCode, string(respBody))
 	}
-	var body map[string]any
-	if err := json.Unmarshal(respBody, &body); err != nil {
-		return nil, err
-	}
-	return body, nil
+	return respBody, nil
 }
 
 func (c *Client) resolveStateID(ctx context.Context, issueID, stateName string) (string, error) {

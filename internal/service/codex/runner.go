@@ -29,6 +29,19 @@ type Runner struct {
 	dynamicTools *DynamicToolExecutor
 }
 
+type LinearGraphQLExecutor func(context.Context, string, map[string]any) (map[string]any, error)
+
+type linearGraphQLExecutor struct {
+	exec LinearGraphQLExecutor
+}
+
+func (e linearGraphQLExecutor) GraphQLRaw(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
+	if e.exec == nil {
+		return nil, fmt.Errorf("Linear GraphQL executor is not configured")
+	}
+	return e.exec(ctx, query, variables)
+}
+
 type Event struct {
 	Name    string
 	Payload map[string]any
@@ -77,6 +90,17 @@ func New(cfg runtimeconfig.CodexConfig, opts ...Option) *Runner {
 		opt(r)
 	}
 	return r
+}
+
+func NewWithLinearGraphQL(cfg runtimeconfig.CodexConfig, exec LinearGraphQLExecutor) *Runner {
+	return New(cfg, WithDynamicToolExecutor(NewDynamicToolExecutor(linearGraphQLExecutor{exec: exec})))
+}
+
+func (r *Runner) DynamicToolSpecs() []any {
+	if r == nil || r.dynamicTools == nil {
+		return []any{}
+	}
+	return r.dynamicTools.ToolSpecs()
 }
 
 func (r *Runner) Run(ctx context.Context, workspacePath string, prompt string, issue issuemodel.Issue, onEvent func(Event)) (Result, error) {
@@ -417,7 +441,10 @@ func (s *session) handleDynamicToolCall(ctx context.Context, payload map[string]
 }
 
 func toolCallName(params map[string]any) string {
-	for _, key := range []string{"tool", "name"} {
+	if params == nil {
+		return ""
+	}
+	for _, key := range []string{"tool", "name", "toolName"} {
 		if raw, ok := params[key].(string); ok {
 			if name := strings.TrimSpace(raw); name != "" {
 				return name

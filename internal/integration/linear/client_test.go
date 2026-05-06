@@ -44,6 +44,85 @@ func TestGraphQLSendsUTF8JSONHeadersAndBody(t *testing.T) {
 	}
 }
 
+func TestRawGraphQLSendsUTF8JSONHeadersAuthAndEmptyVariables(t *testing.T) {
+	var sawRequest bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawRequest = true
+		if got := r.Header.Get("Authorization"); got != "lin_secret_token" {
+			t.Fatalf("Authorization = %q", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+			t.Fatalf("Content-Type = %q", got)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["query"] != "query Viewer { viewer { id } }" {
+			t.Fatalf("query = %#v", payload["query"])
+		}
+		variables, ok := payload["variables"].(map[string]any)
+		if !ok || len(variables) != 0 {
+			t.Fatalf("variables = %#v, want empty object", payload["variables"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"viewer":{"id":"usr_123"}}}`))
+	}))
+	defer server.Close()
+
+	client := &Client{Endpoint: server.URL, APIKey: "lin_secret_token", HTTPClient: server.Client()}
+	body, err := client.RawGraphQL(context.Background(), "query Viewer { viewer { id } }", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawRequest {
+		t.Fatal("server did not receive request")
+	}
+	data := body["data"].(map[string]any)
+	viewer := data["viewer"].(map[string]any)
+	if viewer["id"] != "usr_123" {
+		t.Fatalf("body = %#v", body)
+	}
+}
+
+func TestRawGraphQLPreservesTopLevelErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":null,"errors":[{"message":"Unknown field"}]}`))
+	}))
+	defer server.Close()
+
+	client := &Client{Endpoint: server.URL, APIKey: "lin_secret_token", HTTPClient: server.Client()}
+	body, err := client.RawGraphQL(context.Background(), "query Bad { nope }", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	errorsValue, ok := body["errors"].([]any)
+	if !ok || len(errorsValue) != 1 {
+		t.Fatalf("errors = %#v", body["errors"])
+	}
+}
+
+func TestRawGraphQLHTTPErrorDoesNotLeakToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "temporary outage", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := &Client{Endpoint: server.URL, APIKey: "lin_secret_token", HTTPClient: server.Client()}
+	_, err := client.RawGraphQL(context.Background(), "query Viewer { viewer { id } }", map[string]any{})
+	if err == nil {
+		t.Fatal("RawGraphQL error = nil, want HTTP status error")
+	}
+	text := err.Error()
+	if !strings.Contains(text, "503") {
+		t.Fatalf("error = %q, want status", text)
+	}
+	if strings.Contains(text, "lin_secret_token") {
+		t.Fatalf("error leaked token: %q", text)
+	}
+}
+
 func TestUpsertWorkpadUpdatesExistingChineseComment(t *testing.T) {
 	var updated bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

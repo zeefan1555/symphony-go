@@ -35,6 +35,9 @@ func TestNewRuntimeAssemblesRunDependencies(t *testing.T) {
 	if runtime.Loaded == nil {
 		t.Fatal("runtime Loaded workflow is nil")
 	}
+	if runtime.runner == nil || len(runtime.runner.DynamicToolSpecs()) != 1 {
+		t.Fatal("runtime Codex runner is missing Linear GraphQL dynamic tool")
+	}
 	if got := runtime.Loaded.Config.Workspace.Root; !filepath.IsAbs(got) {
 		t.Fatalf("workspace root = %q, want absolute path", got)
 	}

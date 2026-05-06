@@ -52,6 +52,7 @@ type Runtime struct {
 	Service        runtimeService
 	ControlServer  controlServer
 	ControlAddress string
+	runner         *codex.Runner
 	Logger         io.Closer
 }
 
@@ -143,12 +144,11 @@ func NewRuntime(opts Options) (*Runtime, error) {
 		WorkspaceFactory: func(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *workspace.Manager {
 			return workspace.New(cfg.Root, hooks)
 		},
-		WorkflowRunnerFactory: func(cfg runtimeconfig.Config) (orchestrator.AgentRunner, error) {
-			linearClient, err := linear.New(cfg.Tracker)
-			if err != nil {
-				return nil, err
+		RunnerFactoryWithTracker: func(cfg runtimeconfig.CodexConfig, tracker orchestrator.Tracker) orchestrator.AgentRunner {
+			if linearTracker, ok := tracker.(*linear.Client); ok {
+				return codex.New(cfg, codex.WithDynamicToolExecutor(codex.NewDynamicToolExecutor(linearTracker)))
 			}
-			return codex.New(cfg.Codex, codex.WithDynamicToolExecutor(codex.NewDynamicToolExecutor(linearClient))), nil
+			return codex.New(cfg)
 		},
 		Logger:      log,
 		Reloader:    reloader,
@@ -169,6 +169,7 @@ func NewRuntime(opts Options) (*Runtime, error) {
 			Tracker:   tracker,
 			Config:    loaded.Config,
 		})),
+		runner: runner,
 		Logger: log,
 	}, nil
 }

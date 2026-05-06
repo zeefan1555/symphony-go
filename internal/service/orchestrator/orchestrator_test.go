@@ -2208,8 +2208,8 @@ func TestRefreshWorkflowRebuildsDependenciesFromFactories(t *testing.T) {
 		WorkspaceFactory: func(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *workspace.Manager {
 			return workspace.New(cfg.Root, hooks)
 		},
-		RunnerFactory: func(cfg runtimeconfig.CodexConfig) AgentRunner {
-			return configRunner{command: cfg.Command}
+		RunnerFactoryWithTracker: func(cfg runtimeconfig.CodexConfig, tracker Tracker) AgentRunner {
+			return configRunner{command: cfg.Command, trackerProject: tracker.(configTracker).projectSlug}
 		},
 	})
 
@@ -2230,6 +2230,9 @@ func TestRefreshWorkflowRebuildsDependenciesFromFactories(t *testing.T) {
 	}
 	if runner := o.opts.Runner.(configRunner); runner.command != "new-codex" {
 		t.Fatalf("runner command = %q, want new-codex", runner.command)
+	}
+	if runner := o.opts.Runner.(configRunner); runner.trackerProject != "new-project" {
+		t.Fatalf("runner tracker project = %q, want new-project", runner.trackerProject)
 	}
 	if interval := o.Snapshot().Polling.IntervalMS; interval != 2000 {
 		t.Fatalf("snapshot interval = %d, want 2000", interval)
@@ -2602,7 +2605,8 @@ func (t *reloadFailureTracker) UpdateIssueState(context.Context, string, string)
 }
 
 type configRunner struct {
-	command string
+	command        string
+	trackerProject string
 }
 
 func (configRunner) RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error) {

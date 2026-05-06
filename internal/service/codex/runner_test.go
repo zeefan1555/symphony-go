@@ -377,6 +377,27 @@ sleep 5
 	}
 }
 
+func TestRunnerDoesNotAdvertiseDynamicToolsWithoutExecutor(t *testing.T) {
+	workspacePath := t.TempDir()
+	fake, trace := writeCompletingFakeCodex(t)
+	t.Setenv("TRACE_FILE", trace)
+
+	runner := New(runtimeconfig.CodexConfig{
+		Command:        fake,
+		ApprovalPolicy: "never",
+		ThreadSandbox:  "workspace-write",
+		TurnTimeoutMS:  5000,
+		ReadTimeoutMS:  5000,
+	})
+
+	if _, err := runner.Run(context.Background(), workspacePath, "prompt", issuemodel.Issue{Identifier: "ZEE-1", Title: "no tools"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if tools := threadDynamicTools(t, trace); len(tools) != 0 {
+		t.Fatalf("dynamicTools = %#v, want empty", tools)
+	}
+}
+
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
@@ -415,4 +436,107 @@ func turnWritableRoots(t *testing.T, tracePath string) [][]string {
 		roots = append(roots, toStringSlice(sandboxPolicy["writableRoots"]))
 	}
 	return roots
+}
+
+func writeCompletingFakeCodex(t *testing.T) (string, string) {
+	t.Helper()
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	trace := filepath.Join(t.TempDir(), "trace.jsonl")
+	script := `#!/bin/sh
+trace="$TRACE_FILE"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-1"}}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1"}}}'
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return fake, trace
+}
+
+func writeToolCallFakeCodex(t *testing.T, toolCall string) (string, string) {
+	t.Helper()
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	trace := filepath.Join(t.TempDir(), "trace.jsonl")
+	script := `#!/bin/sh
+trace="$TRACE_FILE"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-1"}}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1"}}}'
+printf '%s\n' '` + toolCall + `'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"method":"thread/tokenUsage/updated","params":{"tokenUsage":{"total":{"inputTokens":1,"outputTokens":2,"totalTokens":3}}}}'
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return fake, trace
+}
+
+func threadDynamicTools(t *testing.T, tracePath string) []any {
+	t.Helper()
+	for _, payload := range tracePayloads(t, tracePath) {
+		if payload["method"] != "thread/start" {
+			continue
+		}
+		params := payload["params"].(map[string]any)
+		tools, _ := params["dynamicTools"].([]any)
+		return tools
+	}
+	t.Fatal("thread/start not found")
+	return nil
+}
+
+func toolResponseResult(t *testing.T, tracePath string, id int) map[string]any {
+	t.Helper()
+	for _, payload := range tracePayloads(t, tracePath) {
+		if responseID, ok := numericID(payload["id"]); ok && responseID == id {
+			result, _ := payload["result"].(map[string]any)
+			if result == nil {
+				t.Fatalf("tool response missing result: %#v", payload)
+			}
+			return result
+		}
+	}
+	t.Fatalf("tool response id=%d not found", id)
+	return nil
+}
+
+func tracePayloads(t *testing.T, tracePath string) []map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payloads []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if line == "" {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			t.Fatalf("invalid trace line %q: %v", line, err)
+		}
+		payloads = append(payloads, payload)
+	}
+	return payloads
 }
