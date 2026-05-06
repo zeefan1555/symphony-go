@@ -1468,7 +1468,7 @@ func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
 	issue := issuemodel.Issue{
 		ID:         "issue-id",
 		Identifier: "ZEE-REVIEWER",
-		Title:      "reviewer agent smoke",
+		Title:      "same issue review smoke",
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
@@ -1725,6 +1725,61 @@ func TestRunAgentDoesNotAutoPromoteAfterCommitWhenAgentMovesToAIReview(t *testin
 	}
 
 	if got, want := tracker.states, []string{"AI Review"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunAgentContinuesIntoAIReviewInSameIssueSession(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := issuemodel.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-SAME-AGENT",
+		Title:      "same agent issue",
+		State:      "In Progress",
+	}
+	tracker := &recordingTracker{issue: issue}
+	runner := &aiReviewSameSessionRunner{tracker: tracker}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates:   []string{"In Progress", "AI Review"},
+					TerminalStates: []string{"Done"},
+				},
+				Agent: runtimeconfig.AgentConfig{
+					MaxTurns: 2,
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
+						Mode:     "auto",
+						OnAIFail: "rework",
+					},
+				},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), ".worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+
+	if runner.calls != 1 {
+		t.Fatalf("runner calls = %d, want one session for the issue", runner.calls)
+	}
+	if got, want := len(runner.prompts), 2; got != want {
+		t.Fatalf("prompts = %d, want %d", got, want)
+	}
+	if got := runner.prompts[1]; got.Text != aiReviewContinuationPromptText || !got.Continuation {
+		t.Fatalf("AI Review continuation prompt = %#v, want same-session continuation", got)
+	}
+	if got := runner.prompts[1].Issue; got == nil || got.State != "AI Review" {
+		t.Fatalf("AI Review continuation issue = %#v, want AI Review", got)
+	}
+	if got, want := tracker.states, []string{"AI Review", "Done"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
 }
@@ -2622,6 +2677,25 @@ func (r stateChangingRunner) RunSession(ctx context.Context, request codex.Sessi
 		}
 	}
 	return completeFakeSession(ctx, request, nil)
+}
+
+type aiReviewSameSessionRunner struct {
+	tracker *recordingTracker
+	calls   int
+	prompts []codex.TurnPrompt
+}
+
+func (r *aiReviewSameSessionRunner) RunSession(ctx context.Context, request codex.SessionRequest, _ func(codex.Event)) (codex.SessionResult, error) {
+	r.calls++
+	return completeFakeSession(ctx, request, func(prompt codex.TurnPrompt) {
+		r.prompts = append(r.prompts, prompt)
+		switch len(r.prompts) {
+		case 1:
+			_ = r.tracker.UpdateIssueState(ctx, request.Issue.ID, "AI Review")
+		case 2:
+			_ = r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Done")
+		}
+	})
 }
 
 type observingStateChangingRunner struct {

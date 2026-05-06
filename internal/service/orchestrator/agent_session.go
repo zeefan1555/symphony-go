@@ -64,7 +64,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 	var nextIssue *issuemodel.Issue
 	maxTurnsReached := false
 	noRetryNeeded := false
-	reviewFinal := ""
+	lastAgentMessage := ""
 	request := codex.SessionRequest{
 		WorkspacePath: workspacePath,
 		Issue:         issue,
@@ -72,6 +72,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 	}
 	request.AfterTurn = func(ctx context.Context, result codex.Result, turn int) (codex.TurnPrompt, bool, error) {
 		o.logIssue(issue, "turn_completed", "Codex turn completed", map[string]any{"session_id": result.SessionID})
+		turnState := issue.State
 		refreshed, err := rt.tracker.FetchIssue(ctx, issue.ID)
 		if err != nil {
 			return codex.TurnPrompt{}, false, err
@@ -80,7 +81,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			noRetryNeeded = true
 			return codex.TurnPrompt{}, false, nil
 		}
-		if phase == phaseReviewer && refreshed.State == "AI Review" && reviewFinalPasses(reviewFinal) {
+		if refreshed.State == "AI Review" && turnState == "AI Review" && reviewFinalPasses(lastAgentMessage) {
 			if err := rt.tracker.UpdateIssueState(ctx, refreshed.ID, "Merging"); err != nil {
 				return codex.TurnPrompt{}, false, err
 			}
@@ -98,7 +99,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			next := issue
 			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
 		}
-		if refreshed.State == "Human Review" || refreshed.State == "In Review" || refreshed.State == "AI Review" {
+		if refreshed.State == "Human Review" || refreshed.State == "In Review" {
 			nextIssue = &refreshed
 			return codex.TurnPrompt{}, false, nil
 		}
@@ -106,10 +107,32 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			maxTurnsReached = true
 			return codex.TurnPrompt{}, false, nil
 		}
+		if refreshed.State == "AI Review" {
+			issue = refreshed
+			o.setRunning(observability.RunningEntry{
+				IssueID:         issue.ID,
+				IssueIdentifier: issue.Identifier,
+				State:           issue.State,
+				WorkspacePath:   workspacePath,
+				TurnCount:       turn + 1,
+				StartedAt:       time.Now(),
+			})
+			next := issue
+			return codex.TurnPrompt{Text: aiReviewContinuationPromptText, Continuation: true, Issue: &next}, true, nil
+		}
 		if refreshed.State == "Merging" {
 			if phase != phaseReviewer {
-				nextIssue = &refreshed
-				return codex.TurnPrompt{}, false, nil
+				issue = refreshed
+				o.setRunning(observability.RunningEntry{
+					IssueID:         issue.ID,
+					IssueIdentifier: issue.Identifier,
+					State:           issue.State,
+					WorkspacePath:   workspacePath,
+					TurnCount:       turn + 1,
+					StartedAt:       time.Now(),
+				})
+				next := issue
+				return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
 			}
 			issue = refreshed
 			o.setRunning(observability.RunningEntry{
@@ -132,13 +155,12 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			TurnCount:       turn + 1,
 			StartedAt:       time.Now(),
 		})
-		return codex.TurnPrompt{Text: continuationPromptText, Continuation: true}, true, nil
+		next := issue
+		return codex.TurnPrompt{Text: continuationPromptText, Continuation: true, Issue: &next}, true, nil
 	}
 	_, err = rt.runner.RunSession(ctx, request, func(event codex.Event) {
-		if phase == phaseReviewer {
-			if text := completedAgentMessageText(event); text != "" {
-				reviewFinal = text
-			}
+		if text := completedAgentMessageText(event); text != "" {
+			lastAgentMessage = text
 		}
 		o.updateRunningFromEvent(issue.ID, event)
 		o.logIssue(issue, "codex_event", event.Name, event.Payload)

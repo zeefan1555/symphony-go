@@ -260,3 +260,26 @@ make hertz-generate
 scripts/check_generated_hertz_boundary.sh
 ./test.sh ./internal/hertzcontract ./internal/transport/hertzserver
 ```
+
+## 2026-05-06: 单个 issue 默认只用一个 agent
+
+### 用户纠正
+
+- 用户指出：希望一个 issue 由一个 agent 处理，不要在处理同一个 issue 时多开其他 agent。
+
+### 错误模式
+
+- 这是流程错误：原规则只写了子代理使用条件，没有明确单个 issue 的默认执行边界，容易在 issue run 中过早拆出并行 agent。
+
+### 防复犯规则
+
+- 处理单个 Linear issue 时，默认由当前 agent 端到端负责规划、执行、验证和收口。
+- 不要为同一个 issue 额外多开子代理、reviewer 或 worker；只有用户明确要求并行 agent，或任务被明确拆成多个独立 issue 时，才考虑多 agent。
+
+### 固定动作
+
+- 开始 issue run 前检查子代理策略是否仍保留单 agent 约束：
+
+```bash
+rg -n "单个 Linear issue|同一个 issue|多开子代理|单 agent" AGENTS.md lesson.md
+```

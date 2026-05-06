@@ -12,7 +12,8 @@ const (
 	phaseImplementer agentPhase = "implementer"
 	phaseReviewer    agentPhase = "reviewer"
 
-	mergingContinuationPromptText = "Continue in the same reviewer session and execute the merge protocol for this issue. Re-check the current workspace and issue state, perform the required merge steps, run the smallest relevant verification, move the issue to Done only after the merge is complete, and report concrete results or blockers."
+	aiReviewContinuationPromptText = "Continue in the same issue session and execute the AI Review protocol for this issue. Re-check the issue, workpad, diff, commits, review feedback, and validation evidence. If the work is correct, report Review: PASS so the orchestrator can continue to Merging in this same session; if it is not correct, record actionable findings, move the issue to Rework, and report concrete blockers."
+	mergingContinuationPromptText  = "Continue in the same issue session and execute the merge protocol for this issue. Re-check the current workspace and issue state, perform the required merge steps, run the smallest relevant verification, move the issue to Done only after the merge is complete, and report concrete results or blockers."
 )
 
 func (o *Orchestrator) runAgentWith(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue, attempt int) error {
