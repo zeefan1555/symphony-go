@@ -1,4 +1,7 @@
 {
   "git.autoRepositoryDetection": "subFolders",
-  "git.repositoryScanMaxDepth": 2
+  "git.repositoryScanMaxDepth": 2,
+  "git.scanRepositories": [
+    ".worktrees"
+  ]
 }
