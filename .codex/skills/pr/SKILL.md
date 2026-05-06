@@ -7,17 +7,20 @@ description: Use when Symphony Go reaches Merging for a GitHub PR based merge fl
 
 This skill is scoped to `/Users/bytedance/symphony-go`.
 
-Use the bundled script for the mechanical merge flow. The agent's job is to
-prepare the PR title/body and inspect blockers; the script owns the ordered
-commands through root pull. The Go orchestrator owns issue worktree cleanup
-through the configured workspace hooks after this skill returns successfully.
+Use the bundled script for the mechanical PR flow. The agent's job is to
+prepare the PR title/body and inspect blockers; the script owns push, PR
+creation/update, checks, and squash merge. Repo-root `main` checkout sync is not
+owned by the issue worktree agent because the agent may not have stable write
+permission outside the issue worktree. The Go orchestrator/operator owns root
+checkout sync and issue worktree cleanup after this skill returns successfully.
 
 ## Goals
 
 - Turn the current issue worktree branch into a GitHub PR if one does not exist.
 - Keep the branch, PR title, PR body, and visible comments up to date in Chinese.
 - Wait for checks and review feedback, then squash-merge the PR.
-- Pull the merged result back into the root `main` checkout.
+- Fetch `origin/main` and report root checkout status, but do not pull or mutate
+  the repo-root `main` checkout from the issue worktree agent.
 - Leave issue worktree cleanup to the Go orchestrator after the merge is visible
   on `origin/main`.
 
@@ -58,10 +61,12 @@ EOF
   --pr-body-file "$tmp_body"
 ```
 
-The script prints the PR URL, merge commit, and root checkout status. Copy those
-facts into the persistent Linear workpad in Chinese. After the script finishes,
-do not remove the issue worktree manually; return success so the orchestrator can
-run the configured workspace cleanup path.
+The script prints the PR URL, merge commit, root checkout status, and root sync
+ownership note. Copy those facts into the persistent Linear workpad in Chinese.
+After the script finishes, do not remove the issue worktree manually and do not
+pull the repo-root checkout from the issue worktree agent; return success so the
+orchestrator/operator can run the configured root sync and workspace cleanup
+paths.
 
 ## Script Flow
 
@@ -98,15 +103,12 @@ run the configured workspace cleanup path.
 7. Squash-merge:
    - use the PR title/body as merge subject/body;
    - `gh pr merge --squash --subject "$pr_title" --body "$pr_body"`.
-8. Sync root checkout after merge:
-   - `git -C "$repo_root" fetch origin main`.
-   - If the root checkout has local runtime edits, only clear paths that are
-     byte-for-byte identical to `origin/main`. Stop on any divergent local edit.
-   - `git -C "$repo_root" switch main`
-   - `git -C "$repo_root" pull --ff-only origin main`
-9. Report evidence in the workpad: PR URL, merge commit/result, and root pull
-   result. Do not remove the issue worktree in this skill; cleanup is owned by
-   the orchestrator workspace manager.
+8. Fetch `origin/main` and report root checkout status. Do not switch, restore,
+   delete, or pull the repo-root checkout from the issue worktree agent.
+9. Report evidence in the workpad: PR URL, merge commit/result, root status, and
+   the note that root checkout sync is owned by the orchestrator/operator. Do
+   not remove the issue worktree in this skill; cleanup is owned by the
+   orchestrator workspace manager.
 
 ## Manual Fallback
 
@@ -117,16 +119,12 @@ PR, inspect the current PR/root/worktree state before retrying.
 
 ## Root Checkout Safety
 
-The root checkout may contain temporary runtime copies of the same changes that
-were just merged. Before pulling, clear only files that exactly match
-`origin/main`; this avoids deleting unrelated user edits.
-
-The bundled script implements this safety check, including untracked
-directories. Manual fallback must use the same rule: for tracked paths, compare
-the working tree to `origin/main` before `git restore`; for untracked
-directories, compare every contained file with `git show origin/main:<path>`
-before deleting it. Never delete a whole untracked directory from only the
-top-level `?? dir/` status line.
+The root checkout may contain unrelated user edits or files protected by the
+runner sandbox. The issue worktree agent must not switch, restore, delete, or
+pull the repo-root checkout. If root sync is needed for local developer
+convenience after PR merge, it must be handled by the orchestrator/operator from
+the repo-root context after verifying the root checkout is clean or explicitly
+safe to update.
 
 ## Failure Handling
 
@@ -135,7 +133,7 @@ top-level `?? dir/` status line.
 - If mergeability is `UNKNOWN`, wait and re-check.
 - If mergeability is `CONFLICTING`, fetch `origin/main`, resolve conflicts in
   the issue worktree, rerun validation, commit, and push.
-- Do not force-remove worktrees or reset the root checkout unless every affected
-  path has been proven identical to `origin/main`.
+- Do not force-remove worktrees, reset the root checkout, restore root files, or
+  pull root `main` from the issue worktree agent.
 - If `gh pr checks --watch` says `no checks reported`, treat it as no remote
   checks to wait for; rely on the local validation already run by the script.

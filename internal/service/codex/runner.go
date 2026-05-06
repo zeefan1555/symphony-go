@@ -234,9 +234,6 @@ func (r *Runner) turnSandboxPolicy(workspacePath string, issue issuemodel.Issue)
 		for _, root := range gitMetadataRoots(workspacePath) {
 			roots = appendUnique(roots, root)
 		}
-		if strings.EqualFold(issue.State, "Merging") {
-			roots = appendUnique(roots, gitCommonWorktreeRoot(workspacePath))
-		}
 		values := make([]any, 0, len(roots))
 		for _, root := range roots {
 			values = append(values, root)
@@ -535,14 +532,6 @@ func gitMetadataRoots(workspacePath string) []string {
 		roots = appendUnique(roots, gitRevParsePath(workspacePath, flag))
 	}
 	return roots
-}
-
-func gitCommonWorktreeRoot(workspacePath string) string {
-	commonDir := gitRevParsePath(workspacePath, "--git-common-dir")
-	if commonDir == "" || filepath.Base(commonDir) != ".git" {
-		return ""
-	}
-	return filepath.Dir(commonDir)
 }
 
 func gitRevParsePath(workspacePath, flag string) string {

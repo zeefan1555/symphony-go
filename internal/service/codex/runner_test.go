@@ -67,7 +67,7 @@ printf '%s\n' '{"method":"turn/completed"}'
 	}
 }
 
-func TestMergingTurnSandboxIncludesMainCheckoutRoot(t *testing.T) {
+func TestMergingTurnSandboxDoesNotIncludeMainCheckoutRoot(t *testing.T) {
 	repoRoot := t.TempDir()
 	git(t, repoRoot, "init")
 	git(t, repoRoot, "config", "user.email", "test@example.com")
@@ -89,10 +89,13 @@ func TestMergingTurnSandboxIncludesMainCheckoutRoot(t *testing.T) {
 	}
 
 	mergingRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, issuemodel.Issue{State: "Merging"})["writableRoots"])
-	for _, want := range []string{worktreePath, filepath.Join(canonicalRepoRoot, ".git"), canonicalRepoRoot} {
+	for _, want := range []string{worktreePath, filepath.Join(canonicalRepoRoot, ".git")} {
 		if !containsString(mergingRoots, want) {
 			t.Fatalf("merging roots missing %q: %#v", want, mergingRoots)
 		}
+	}
+	if containsString(mergingRoots, canonicalRepoRoot) {
+		t.Fatalf("merging roots unexpectedly include main checkout root %q: %#v", canonicalRepoRoot, mergingRoots)
 	}
 }
 
@@ -161,8 +164,8 @@ printf '%s\n' '{"method":"turn/completed"}'
 	if containsString(turnRoots[0], canonicalRepoRoot) {
 		t.Fatalf("review turn roots unexpectedly include main checkout root %q: %#v", canonicalRepoRoot, turnRoots[0])
 	}
-	if !containsString(turnRoots[1], canonicalRepoRoot) {
-		t.Fatalf("merge continuation roots missing main checkout root %q: %#v", canonicalRepoRoot, turnRoots[1])
+	if containsString(turnRoots[1], canonicalRepoRoot) {
+		t.Fatalf("merge continuation roots unexpectedly include main checkout root %q: %#v", canonicalRepoRoot, turnRoots[1])
 	}
 }
 

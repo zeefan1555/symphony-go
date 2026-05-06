@@ -1,5 +1,39 @@
 # Lessons
 
+## 2026-05-06: AI Review 后应直接进入 PR skill 快路径
+
+### 用户纠正
+
+- 用户指出：简单 smoke 跑到 10 分钟不合理；此前已经写过 `pr` skill，`AI Review` 完成后应该直接使用该 skill，而不是继续走更重的 merge/land 流程。
+- 用户进一步指出：agent 在 issue worktree 目录下处理，没有稳定权限写 repo-root `main` checkout，因此 `pr` skill 不应该承诺同步 repo-root `main`。
+
+### 错误模式
+
+- 这是流程错误：workflow 回退成实现阶段先创建 PR、先做完整 feedback sweep，`Merging` 再走 `land` skill，导致 PR/check/review 相关动作被拆散且重复。
+- 这是技术判断错误：`pr` skill 应该封装 push、PR 创建/更新、checks 和 squash merge；把 repo-root `main` sync 放进 child agent 会把权限边界问题变成假 blocker。
+
+### 防复犯规则
+
+- `AI Review` 阶段只审本地 commit、diff、workpad 和验证证据；review 通过后进入 `Merging`，直接执行 `.codex/skills/pr/SKILL.md` 的 PR merge flow。
+- `Merging` 阶段不要重新展开实现、review 或完整历史 workpad；脚本前只做最小状态检查和 PR title/body 准备。
+- PR feedback sweep、remote checks、PR metadata 和 squash merge 归 `pr` skill/script 统一处理，不要在移动到 `AI Review` 前提前重复执行。
+- issue worktree agent 不负责写 repo-root `main` checkout；root sync 只能由 orchestrator/operator 在 repo-root context 中确认安全后执行。
+
+### 固定动作
+
+- 修改 workflow merge 路径时先核对：
+
+```bash
+rg -n "pr/SKILL|pr_merge_flow|land/SKILL|Merging 快路径|AI Review" WORKFLOW.md internal/service/workflow/workflow_test.go
+```
+
+- 验证 workflow 合同时至少运行：
+
+```bash
+./test.sh ./internal/service/workflow
+git diff --check
+```
+
 ## 2026-05-05: Symphony Go 业务与运行支撑应归入 service-rooted 结构
 
 ### 用户纠正

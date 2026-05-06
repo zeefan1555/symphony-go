@@ -3,6 +3,35 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 18:25 +08 - ZEE-102 follow-up
+
+- Trigger: 用户指出简单 smoke 不应该跑到 10 分钟，并提醒此前已经写过 `pr` skill，`AI Review` 完成后应该直接使用该 skill。
+- Evidence:
+  - `.symphony/logs/run-20260506-180424.human.log` 显示 ZEE-102 从 `18:04:24` 到 `18:15:58`，总耗时约 11 分 34 秒。
+  - 同一日志中 82 个可见 shell command 累计耗时约 69.6 秒，worktree hook 约 1.17 秒，主要耗时来自 agent 在命令之间的上下文读取、workpad 更新、PR 前置 sweep、自审和状态流转。
+  - `Merging` 里执行 `.codex/skills/land/scripts/land_pr_flow.sh`，但用户期望的是直接走 `.codex/skills/pr/SKILL.md` 的 PR merge flow。
+  - ZEE-102 还证明 root checkout sync 不应由 issue worktree agent 承担：PR 已 merge 且 `origin/main` 可见后，child 仍可能因 repo-root `main` 文件写入权限卡在 root pull/unlink。
+- Optimization:
+  - Workflow 层：实现阶段收敛到本地 validation + commit + workpad handoff；不再要求移动到 `AI Review` 前提前创建 PR、跑完整 PR feedback sweep 或等待 remote checks。
+  - Workflow 层：`AI Review` 只审本地 diff、commit range、workpad 和验证证据。
+  - Workflow 层：review 通过后进入 `Merging`，直接打开 `.codex/skills/pr/SKILL.md`，优先运行 `.codex/skills/pr/scripts/pr_merge_flow.sh`，由 PR skill 统一负责 push、PR 创建/更新、feedback sweep、checks 和 squash merge。
+  - Skill/代码层：`pr_merge_flow.sh` 不再 switch/pull/restore repo-root `main` checkout；Merging turn 不再把 repo-root main checkout 加入 writable roots。root sync 由 orchestrator/operator 在 repo-root context 中处理。
+  - 测试层：更新 repo workflow contract，禁止 `land` skill 文案回归，并锁住 `Merging 快路径`。
+- Files:
+  - `WORKFLOW.md`
+  - `.codex/skills/pr/SKILL.md`
+  - `.codex/skills/pr/scripts/pr_merge_flow.sh`
+  - `internal/service/codex/runner.go`
+  - `internal/service/codex/runner_test.go`
+  - `internal/service/workflow/workflow_test.go`
+  - `lesson.md`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`./test.sh ./internal/service/workflow ./internal/service/codex`
+  - 通过：`./build.sh`
+  - 通过：`bash -n .codex/skills/pr/scripts/pr_merge_flow.sh`
+  - 通过：`git diff --check`
+
 ## 2026-05-06 16:53 +08 - ZEE-97
 
 - Trigger: 用户要求跑一个简单中文冒烟任务，观察从创建 issue 到全自动处理完成的大致耗时和瓶颈。

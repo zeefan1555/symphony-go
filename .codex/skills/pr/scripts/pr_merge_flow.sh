@@ -13,7 +13,7 @@ Usage: pr_merge_flow.sh [--repo-root PATH] [--target BRANCH] [--commit-message M
 
 Run the Symphony PR merge flow from an issue worktree:
   validate, optionally commit local issue changes, push, create/update PR,
-  wait for checks, squash merge, and sync the root checkout.
+  wait for checks, squash merge, and report root checkout status.
 EOF
 }
 
@@ -177,58 +177,11 @@ gh pr merge "$pr_number" --repo "$repo_name" --squash --subject "$pr_title" --bo
 
 git -C "$repo_root" fetch origin "$target"
 
-clear_untracked_path() {
-  local rel="$1"
-  local abs="$repo_root/$rel"
-  if [ -d "$abs" ]; then
-    while IFS= read -r -d '' file; do
-      local child="${file#"$repo_root"/}"
-      if git -C "$repo_root" show "origin/$target:$child" >"$tmp_build_log" 2>/dev/null && cmp -s "$file" "$tmp_build_log"; then
-        rm -f "$file"
-      else
-        echo "root checkout has divergent untracked file: $child" >&2
-        exit 1
-      fi
-    done < <(find "$abs" -type f -print0)
-    find "$abs" -type d -empty -delete 2>/dev/null || true
-  else
-    if git -C "$repo_root" show "origin/$target:$rel" >"$tmp_build_log" 2>/dev/null && cmp -s "$abs" "$tmp_build_log"; then
-      rm -f "$abs"
-    else
-      echo "root checkout has divergent untracked file: $rel" >&2
-      exit 1
-    fi
-  fi
-}
-
-while IFS= read -r line; do
-  [ -z "$line" ] && continue
-  status="${line:0:2}"
-  path="${line:3}"
-  case "$status" in
-    '??')
-      clear_untracked_path "$path"
-      ;;
-    *)
-      if git -C "$repo_root" diff --quiet "origin/$target" -- "$path"; then
-        git -C "$repo_root" restore --staged --worktree -- "$path"
-      else
-        echo "root checkout has divergent local edit: $path" >&2
-        exit 1
-      fi
-      ;;
-  esac
-done < <(git -C "$repo_root" status --porcelain)
-
-git -C "$repo_root" switch "$target"
-git -C "$repo_root" pull --ff-only origin "$target"
-
 merge_commit="$(gh pr view "$pr_number" --repo "$repo_name" --json mergeCommit --jq '.mergeCommit.oid // ""')"
-
-cd "$repo_root"
 
 cat <<EOF
 PR: https://github.com/$repo_name/pull/$pr_number
 merge_commit: $merge_commit
 root_status: $(git -C "$repo_root" status --short --branch | head -1)
+root_sync: skipped; repo-root checkout sync is owned by the orchestrator/operator, not the issue worktree agent
 EOF
