@@ -16,9 +16,9 @@ _Avoid_: 把所有 Go struct 原样翻译成 protobuf
 用 IDL 按子系统能力描述内部实现边界，帮助维护者和 agent 理解职责并生成框架脚手架。
 _Avoid_: 稳定产品 API, 运行时 struct 镜像
 
-**诊断控制面 API**:
-通过 Hertz 暴露内部子系统能力的本地 HTTP 接口，用于 operator、TUI、agent、调试和 smoke harness。
-_Avoid_: 稳定产品 API, 远程公网 API
+**产品控制面 API**:
+通过 Hertz 暴露核心子系统能力的稳定 `/api/v1` HTTP 接口，用于 operator、TUI、agent、调试和 smoke harness。
+_Avoid_: 临时调试入口, 未声明的远程公网 API
 
 **公共模型 IDL**:
 可被 HTTP 和 RPC 控制面共同复用的稳定数据模型定义。
@@ -108,7 +108,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 
 - 一个 **控制面 API** 可以读取或触发一个或多个 **Issue Run**。
 - **控制面 IDL** 描述 **控制面 API** 的稳定边界，不直接拥有 **运行时状态**。
-- **内部架构脚手架 IDL** 描述 orchestrator、workspace、agent runner 等内部子系统的能力边界，并可通过 **诊断控制面 API** 暴露为本地 HTTP 路由。
+- **内部架构脚手架 IDL** 描述 orchestrator、workspace、agent runner 等内部子系统的能力边界，并可通过 **产品控制面 API** 暴露为 HTTP 路由。
 - **内部架构脚手架 IDL** 按运行子系统分文件，而不是按 workflow 状态或一次性需求分文件。
 - **主 IDL 入口** include 平铺的领域 IDL 文件；子 IDL 只定义 **接口顶层契约** 和可嵌套模型，不定义 service。
 - **主 IDL 入口** 中的 service method 默认都是 **业务 POST 接口**；健康检查等非业务路由不属于该规则。
@@ -171,10 +171,10 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - “生成代码目录”最初解析为 `internal/generated/hertz/...`，随后短期采用根级生成目录，现已改为 `gen/hertz/...`；旧内部 scaffold 生成链只作为 ZEE-78 之前的待退役遗留，不是长期权威边界。
 - “Hertz 标准根目录布局”已被重新解析为 `gen/hertz/...` 生成外壳，不迁移程序入口；主入口仍是 `cmd/symphony-go/main.go`。
 - “手写业务目录”已解析为新增统一 `internal/service/...`，并将 orchestrator、workspace、codex、workflow、control 等核心业务包逐步迁入该层，而不是只作为 handler facade。
-- `run --once --issue` 已解析为诊断/测试辅助，不是 Symphony 的主领域能力。
+- `run --once --issue` 已解析为诊断/测试辅助，不是 Symphony 的主领域能力，也不自动成为产品 API。
 - 第一版外部控制面已解析为优先实现 **HTTP 控制面**；**RPC 控制面** 保留为后续适配层。
 - “每个接口必须独立定义 Req/Resp”已解析为所有 IDL service method 的 **接口顶层契约** 规则，不只约束外部 **控制面 IDL**。
-- “内部 scaffold 变成外部 HTTP 路由”已解析为暴露 **诊断控制面 API**，不是把这些接口承诺为稳定产品 API。
+- “内部 scaffold 变成外部 HTTP 路由”已重新解析为暴露 **产品控制面 API**；只有 `idl/main.proto` 明确声明的 `/api/v1` 接口才具备稳定产品契约。
 - “scaffold Adapter”已解析为旧设计残留；当前长期链路使用 **Hertz 绑定层** 和 **手写服务实现**，不新增单实现 Adapter seam。
 - “所有核心函数都被 Hz 管理”已解析为 Hz 管理 HTTP 契约、路由注册、handler 骨架和生成模型；业务逻辑仍由 **手写服务实现** 拥有。
 - “统一 main.proto 生成”已解析为 **主 IDL 入口** 拥有唯一 service 和所有 route annotations；只 include 子 IDL 不足以让 Hertz 注册子 service 路由。

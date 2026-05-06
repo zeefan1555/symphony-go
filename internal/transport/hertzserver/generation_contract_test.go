@@ -61,7 +61,10 @@ func TestMaintainerWorkflowDocumentsIDLBoundariesAndGeneration(t *testing.T) {
 		"`idl/main.proto`",
 		"`idl/common.proto`",
 		"`idl/control.proto`",
+		"`idl/observability.proto`",
 		"`idl/orchestrator.proto`",
+		"`idl/runtime.proto`",
+		"`idl/tracker.proto`",
 		"`idl/workspace.proto`",
 		"`idl/workflow.proto`",
 		"`idl/codex_session.proto`",
@@ -337,7 +340,12 @@ func expectedHertzMethodContracts() []hertzMethodContract {
 		{Domain: "control", Method: "GetState", Route: "/api/v1/control/get-state"},
 		{Domain: "control", Method: "Refresh", Route: "/api/v1/control/refresh"},
 		{Domain: "control", Method: "GetIssue", Route: "/api/v1/control/get-issue"},
+		{Domain: "observability", Method: "GetObservabilitySnapshot", Route: "/api/v1/observability/get-snapshot"},
 		{Domain: "orchestrator", Method: "ProjectIssueRun", Route: "/api/v1/orchestrator/project-issue-run"},
+		{Domain: "runtime", Method: "GetRuntimeSettings", Route: "/api/v1/runtime/get-settings"},
+		{Domain: "tracker", Method: "ListTrackerIssues", Route: "/api/v1/tracker/list-issues"},
+		{Domain: "tracker", Method: "GetTrackerIssue", Route: "/api/v1/tracker/get-issue"},
+		{Domain: "tracker", Method: "UpdateTrackerIssueState", Route: "/api/v1/tracker/update-issue-state"},
 		{Domain: "workspace", Method: "ResolveWorkspacePath", Route: "/api/v1/workspace/resolve"},
 		{Domain: "workspace", Method: "ValidateWorkspacePath", Route: "/api/v1/workspace/validate"},
 		{Domain: "workspace", Method: "PrepareWorkspace", Route: "/api/v1/workspace/prepare"},
@@ -358,11 +366,14 @@ func childContractIDLPaths() []string {
 
 func childContractIDLPathByDomain() map[string]string {
 	return map[string]string{
-		"control":      "control.proto",
-		"orchestrator": "orchestrator.proto",
-		"workspace":    "workspace.proto",
-		"workflow":     "workflow.proto",
-		"codexsession": "codex_session.proto",
+		"control":       "control.proto",
+		"observability": "observability.proto",
+		"orchestrator":  "orchestrator.proto",
+		"runtime":       "runtime.proto",
+		"tracker":       "tracker.proto",
+		"workspace":     "workspace.proto",
+		"workflow":      "workflow.proto",
+		"codexsession":  "codex_session.proto",
 	}
 }
 

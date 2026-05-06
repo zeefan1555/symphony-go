@@ -8,7 +8,10 @@ import (
 	codexsessionmodel "symphony-go/gen/hertz/model/codexsession"
 	commonmodel "symphony-go/gen/hertz/model/common"
 	controlmodel "symphony-go/gen/hertz/model/control"
+	observabilitymodel "symphony-go/gen/hertz/model/observability"
 	orchestratormodel "symphony-go/gen/hertz/model/orchestrator"
+	runtimemodel "symphony-go/gen/hertz/model/runtime"
+	trackermodel "symphony-go/gen/hertz/model/tracker"
 	workflowmodel "symphony-go/gen/hertz/model/workflow"
 	workspacemodel "symphony-go/gen/hertz/model/workspace"
 )
@@ -16,7 +19,12 @@ import (
 type ControlService interface {
 	GetState(context.Context) (*commonmodel.RuntimeState, error)
 	GetIssue(context.Context, string) (*commonmodel.IssueDetail, error)
+	GetObservabilitySnapshot(context.Context) (*observabilitymodel.GetObservabilitySnapshotResp, error)
 	ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error)
+	GetRuntimeSettings(context.Context) (*runtimemodel.GetRuntimeSettingsResp, error)
+	ListTrackerIssues(context.Context, []string) (*trackermodel.ListTrackerIssuesResp, error)
+	GetTrackerIssue(context.Context, string) (*trackermodel.GetTrackerIssueResp, error)
+	UpdateTrackerIssueState(context.Context, string, string) (*trackermodel.UpdateTrackerIssueStateResp, error)
 	ResolveWorkspacePath(context.Context, string) (*workspacemodel.ResolveWorkspacePathResp, error)
 	ValidateWorkspacePath(context.Context, string) (*workspacemodel.ValidateWorkspacePathResp, error)
 	PrepareWorkspace(context.Context, string) (*workspacemodel.PrepareWorkspaceResp, error)
@@ -53,8 +61,28 @@ func (unavailableControlService) GetIssue(context.Context, string) (*commonmodel
 	return nil, NewError(404, "issue_not_found", "issue not found")
 }
 
+func (unavailableControlService) GetObservabilitySnapshot(context.Context) (*observabilitymodel.GetObservabilitySnapshotResp, error) {
+	return nil, NewError(503, "observability_unavailable", "observability snapshot is unavailable")
+}
+
 func (unavailableControlService) ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error) {
 	return nil, NewError(404, "issue_run_not_found", "issue run not found")
+}
+
+func (unavailableControlService) GetRuntimeSettings(context.Context) (*runtimemodel.GetRuntimeSettingsResp, error) {
+	return nil, NewError(503, "runtime_unavailable", "runtime settings are unavailable")
+}
+
+func (unavailableControlService) ListTrackerIssues(context.Context, []string) (*trackermodel.ListTrackerIssuesResp, error) {
+	return nil, NewError(503, "tracker_unavailable", "issue tracker is unavailable")
+}
+
+func (unavailableControlService) GetTrackerIssue(context.Context, string) (*trackermodel.GetTrackerIssueResp, error) {
+	return nil, NewError(503, "tracker_unavailable", "issue tracker is unavailable")
+}
+
+func (unavailableControlService) UpdateTrackerIssueState(context.Context, string, string) (*trackermodel.UpdateTrackerIssueStateResp, error) {
+	return nil, NewError(503, "tracker_unavailable", "issue tracker is unavailable")
 }
 
 func (unavailableControlService) ResolveWorkspacePath(context.Context, string) (*workspacemodel.ResolveWorkspacePathResp, error) {

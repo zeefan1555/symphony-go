@@ -16,6 +16,7 @@ import (
 	"symphony-go/internal/runtime/observability"
 	"symphony-go/internal/service/codex"
 	"symphony-go/internal/service/control"
+	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/workspace"
 	"symphony-go/internal/transport/hertzserver"
 )
@@ -35,6 +36,13 @@ type fakeCodexRunner struct {
 	request codex.SessionRequest
 	result  codex.SessionResult
 	err     error
+}
+
+type fakeTracker struct {
+	issues      []issuemodel.Issue
+	issue       issuemodel.Issue
+	updateID    string
+	updateState string
 }
 
 func (p snapshotProvider) Snapshot() observability.Snapshot {
@@ -64,6 +72,24 @@ func (p *refreshSnapshotProvider) RequestRefresh(ctx context.Context) (bool, err
 func (f *fakeCodexRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
 	f.request = request
 	return f.result, f.err
+}
+
+func (f *fakeTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
+	return append([]issuemodel.Issue(nil), f.issues...), nil
+}
+
+func (f *fakeTracker) FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error) {
+	return append([]issuemodel.Issue(nil), f.issues...), nil
+}
+
+func (f *fakeTracker) FetchIssue(context.Context, string) (issuemodel.Issue, error) {
+	return f.issue, nil
+}
+
+func (f *fakeTracker) UpdateIssueState(_ context.Context, issueID, stateName string) error {
+	f.updateID = issueID
+	f.updateState = stateName
+	return nil
 }
 
 func TestStateRouteReturnsEmptyRuntimeState(t *testing.T) {
@@ -275,6 +301,185 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 	}
 	if state.LastError != "last error" {
 		t.Fatalf("last_error = %q, want last error", state.LastError)
+	}
+}
+
+func TestObservabilitySnapshotRouteReturnsStableProjection(t *testing.T) {
+	generatedAt := time.Date(2026, 5, 6, 1, 2, 3, 0, time.UTC)
+	service := control.NewService(snapshotProvider{snapshot: observability.Snapshot{
+		GeneratedAt: generatedAt,
+		Running: []observability.RunningEntry{{
+			IssueID:         "issue-1",
+			IssueIdentifier: "ZEE-101",
+			State:           "In Progress",
+		}},
+	}})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp := postJSON(t, baseURL, "/api/v1/observability/get-snapshot", "{}")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		Boundary struct {
+			Name string `json:"name"`
+		} `json:"boundary"`
+		State struct {
+			GeneratedAt string `json:"generated_at"`
+			Running     []struct {
+				IssueIdentifier string `json:"issue_identifier"`
+			} `json:"running"`
+		} `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Boundary.Name != "observability.snapshot" {
+		t.Fatalf("boundary = %#v, want observability snapshot", body.Boundary)
+	}
+	if body.State.GeneratedAt != "2026-05-06T01:02:03Z" || len(body.State.Running) != 1 || body.State.Running[0].IssueIdentifier != "ZEE-101" {
+		t.Fatalf("state = %#v, want ZEE-101 runtime projection", body.State)
+	}
+}
+
+func TestRuntimeSettingsRouteReturnsNonSecretSettings(t *testing.T) {
+	service := control.NewServiceWithOptions(control.ServiceOptions{
+		Config: runtimeconfig.Config{
+			Tracker: runtimeconfig.TrackerConfig{
+				Kind:           "linear",
+				APIKey:         "lin_secret",
+				ProjectSlug:    "demo",
+				ActiveStates:   []string{"Todo"},
+				TerminalStates: []string{"Done"},
+			},
+			Server:    runtimeconfig.ServerConfig{Port: 18080, PortSet: true},
+			Polling:   runtimeconfig.PollingConfig{IntervalMS: 30000},
+			Workspace: runtimeconfig.WorkspaceConfig{Root: "/tmp/workspaces"},
+			Merge:     runtimeconfig.MergeConfig{Target: "main"},
+			Agent:     runtimeconfig.AgentConfig{MaxConcurrentAgents: 2, MaxTurns: 4, MaxRetryBackoffMS: 60000},
+			Codex:     runtimeconfig.CodexConfig{ThreadSandbox: "workspace-write", TurnTimeoutMS: 1000, ReadTimeoutMS: 2000, StallTimeoutMS: 3000},
+		},
+	})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp := postJSON(t, baseURL, "/api/v1/runtime/get-settings", "{}")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		Boundary struct {
+			Name string `json:"name"`
+		} `json:"boundary"`
+		Settings struct {
+			TrackerKind         string   `json:"tracker_kind"`
+			TrackerProjectSlug  string   `json:"tracker_project_slug"`
+			TrackerActiveStates []string `json:"tracker_active_states"`
+			ServerPort          int      `json:"server_port"`
+			MergeTarget         string   `json:"merge_target"`
+			WorkspaceRoot       string   `json:"workspace_root"`
+		} `json:"settings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Boundary.Name != "runtime.settings" {
+		t.Fatalf("boundary = %#v, want runtime settings", body.Boundary)
+	}
+	if body.Settings.TrackerKind != "linear" || body.Settings.TrackerProjectSlug != "demo" || strings.Join(body.Settings.TrackerActiveStates, ",") != "Todo" {
+		t.Fatalf("tracker settings = %#v, want non-secret tracker settings", body.Settings)
+	}
+	if body.Settings.ServerPort != 18080 || body.Settings.MergeTarget != "main" || body.Settings.WorkspaceRoot != "/tmp/workspaces" {
+		t.Fatalf("runtime settings = %#v, want server/workspace/merge settings", body.Settings)
+	}
+}
+
+func TestTrackerRoutesDelegateToControlService(t *testing.T) {
+	priority := 2
+	createdAt := time.Date(2026, 5, 6, 1, 2, 3, 0, time.UTC)
+	tracker := &fakeTracker{
+		issues: []issuemodel.Issue{{
+			ID:         "issue-1",
+			Identifier: "ZEE-101",
+			Title:      "Expose tracker",
+			Priority:   &priority,
+			State:      "Todo",
+			Labels:     []string{"api"},
+			BlockedBy:  []issuemodel.BlockerRef{{ID: "issue-0", Identifier: "ZEE-100", State: "In Progress"}},
+			CreatedAt:  &createdAt,
+		}},
+		issue: issuemodel.Issue{ID: "issue-2", Identifier: "ZEE-102", State: "Done"},
+	}
+	service := control.NewServiceWithOptions(control.ServiceOptions{Tracker: tracker})
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	listResp := postJSON(t, baseURL, "/api/v1/tracker/list-issues", `{"state_names":["Todo"]}`)
+	defer listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list status = %d, want %d", listResp.StatusCode, http.StatusOK)
+	}
+	var listed struct {
+		Boundary struct {
+			Name string `json:"name"`
+		} `json:"boundary"`
+		Issues []struct {
+			IssueIdentifier string `json:"issue_identifier"`
+			Priority        int    `json:"priority"`
+			BlockedBy       []struct {
+				IssueIdentifier string `json:"issue_identifier"`
+			} `json:"blocked_by"`
+			CreatedAt string `json:"created_at"`
+		} `json:"issues"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if listed.Boundary.Name != "tracker.issue" || len(listed.Issues) != 1 {
+		t.Fatalf("listed = %#v, want one tracker issue", listed)
+	}
+	if listed.Issues[0].IssueIdentifier != "ZEE-101" || listed.Issues[0].Priority != 2 || len(listed.Issues[0].BlockedBy) != 1 || listed.Issues[0].CreatedAt != "2026-05-06T01:02:03Z" {
+		t.Fatalf("listed issue = %#v, want projected tracker fields", listed.Issues[0])
+	}
+
+	getResp := postJSON(t, baseURL, "/api/v1/tracker/get-issue", `{"issue_identifier":"ZEE-102"}`)
+	defer getResp.Body.Close()
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("get status = %d, want %d", getResp.StatusCode, http.StatusOK)
+	}
+	var fetched struct {
+		Issue struct {
+			IssueIdentifier string `json:"issue_identifier"`
+			State           string `json:"state"`
+		} `json:"issue"`
+	}
+	if err := json.NewDecoder(getResp.Body).Decode(&fetched); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	if fetched.Issue.IssueIdentifier != "ZEE-102" || fetched.Issue.State != "Done" {
+		t.Fatalf("fetched = %#v, want ZEE-102 Done", fetched.Issue)
+	}
+
+	updateResp := postJSON(t, baseURL, "/api/v1/tracker/update-issue-state", `{"issue_id":"issue-2","state_name":"Done"}`)
+	defer updateResp.Body.Close()
+	if updateResp.StatusCode != http.StatusOK {
+		t.Fatalf("update status = %d, want %d", updateResp.StatusCode, http.StatusOK)
+	}
+	var updated struct {
+		IssueID   string `json:"issue_id"`
+		StateName string `json:"state_name"`
+		Updated   bool   `json:"updated"`
+	}
+	if err := json.NewDecoder(updateResp.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode update response: %v", err)
+	}
+	if tracker.updateID != "issue-2" || tracker.updateState != "Done" || !updated.Updated {
+		t.Fatalf("updated = %#v tracker id=%q state=%q", updated, tracker.updateID, tracker.updateState)
 	}
 }
 

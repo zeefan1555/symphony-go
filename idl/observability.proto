@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package observability;
+
+option go_package = "symphony-go/gen/hertz/model/observability";
+
+import "common.proto";
+
+message GetObservabilitySnapshotReq {}
+
+message GetObservabilitySnapshotResp {
+  common.CapabilityBoundary boundary = 1;
+  common.RuntimeState state = 2;
+}

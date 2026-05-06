@@ -13,6 +13,7 @@ import (
 	"symphony-go/internal/runtime/observability"
 	"symphony-go/internal/service/codex"
 	"symphony-go/internal/service/control"
+	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/workspace"
 )
 
@@ -30,6 +31,16 @@ type fakeControlCodexRunner struct {
 	request codex.SessionRequest
 	result  codex.SessionResult
 	err     error
+}
+
+type fakeIssueTracker struct {
+	activeStates []string
+	listStates   []string
+	fetchedID    string
+	updateID     string
+	updateState  string
+	issues       []issuemodel.Issue
+	issue        issuemodel.Issue
 }
 
 func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
@@ -120,6 +131,27 @@ func (f *fakeControlCodexRunner) RunSession(ctx context.Context, request codex.S
 	return f.result, f.err
 }
 
+func (f *fakeIssueTracker) FetchActiveIssues(ctx context.Context, states []string) ([]issuemodel.Issue, error) {
+	f.activeStates = append([]string(nil), states...)
+	return append([]issuemodel.Issue(nil), f.issues...), nil
+}
+
+func (f *fakeIssueTracker) FetchIssuesByStates(ctx context.Context, states []string) ([]issuemodel.Issue, error) {
+	f.listStates = append([]string(nil), states...)
+	return append([]issuemodel.Issue(nil), f.issues...), nil
+}
+
+func (f *fakeIssueTracker) FetchIssue(ctx context.Context, id string) (issuemodel.Issue, error) {
+	f.fetchedID = id
+	return f.issue, nil
+}
+
+func (f *fakeIssueTracker) UpdateIssueState(ctx context.Context, issueID, stateName string) error {
+	f.updateID = issueID
+	f.updateState = stateName
+	return nil
+}
+
 func TestServiceRefreshRequestsProviderPoll(t *testing.T) {
 	provider := &fakeRefreshProvider{results: []bool{true, false}}
 	service := control.NewService(provider)
@@ -194,6 +226,136 @@ func TestServiceProjectsIssueRunState(t *testing.T) {
 	_, err = service.ProjectIssueRun(context.Background(), "")
 	if !errors.Is(err, control.ErrInvalidIssueIdentifier) {
 		t.Fatalf("ProjectIssueRun empty error = %v, want ErrInvalidIssueIdentifier", err)
+	}
+}
+
+func TestServiceExposesRuntimeSettingsWithoutSecrets(t *testing.T) {
+	service := control.NewServiceWithOptions(control.ServiceOptions{
+		Config: runtimeconfig.Config{
+			Tracker: runtimeconfig.TrackerConfig{
+				Kind:           "linear",
+				APIKey:         "lin_secret",
+				ProjectSlug:    "demo",
+				ActiveStates:   []string{"Todo", "In Progress"},
+				TerminalStates: []string{"Done"},
+			},
+			Server:    runtimeconfig.ServerConfig{Port: 18080, PortSet: true},
+			Polling:   runtimeconfig.PollingConfig{IntervalMS: 30000},
+			Workspace: runtimeconfig.WorkspaceConfig{Root: "/tmp/workspaces"},
+			Merge:     runtimeconfig.MergeConfig{Target: "main"},
+			Agent:     runtimeconfig.AgentConfig{MaxConcurrentAgents: 2, MaxTurns: 4, MaxRetryBackoffMS: 60000},
+			Codex:     runtimeconfig.CodexConfig{ThreadSandbox: "workspace-write", TurnTimeoutMS: 1000, ReadTimeoutMS: 2000, StallTimeoutMS: 3000},
+		},
+	})
+
+	result, err := service.RuntimeSettings(context.Background())
+	if err != nil {
+		t.Fatalf("RuntimeSettings returned error: %v", err)
+	}
+	if result.Boundary.Name != "runtime.settings" {
+		t.Fatalf("boundary = %#v, want runtime settings", result.Boundary)
+	}
+	settings := result.Settings
+	if settings.TrackerKind != "linear" || settings.TrackerProjectSlug != "demo" {
+		t.Fatalf("tracker settings = %#v, want non-secret tracker fields", settings)
+	}
+	if strings.Contains(settings.TrackerProjectSlug, "lin_secret") {
+		t.Fatalf("runtime settings leaked tracker API key: %#v", settings)
+	}
+	if settings.ServerPort != 18080 || !settings.ServerPortSet || settings.MergeTarget != "main" {
+		t.Fatalf("runtime settings = %#v, want server and merge config", settings)
+	}
+}
+
+func TestServiceExposesObservabilitySnapshot(t *testing.T) {
+	generatedAt := time.Date(2026, 5, 6, 1, 2, 3, 0, time.UTC)
+	service := control.NewService(fakeSnapshotProvider{snapshot: observability.Snapshot{
+		GeneratedAt: generatedAt,
+		Running: []observability.RunningEntry{{
+			IssueID:         "issue-1",
+			IssueIdentifier: "ZEE-101",
+			State:           "In Progress",
+		}},
+	}})
+
+	result, err := service.ObservabilitySnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("ObservabilitySnapshot returned error: %v", err)
+	}
+	if result.Boundary.Name != "observability.snapshot" {
+		t.Fatalf("boundary = %#v, want observability snapshot", result.Boundary)
+	}
+	if result.State.GeneratedAt != generatedAt || len(result.State.Running) != 1 {
+		t.Fatalf("snapshot = %#v, want projected runtime state", result.State)
+	}
+}
+
+func TestServiceDelegatesTrackerProductAPI(t *testing.T) {
+	priority := 1
+	createdAt := time.Date(2026, 5, 6, 1, 2, 3, 0, time.UTC)
+	updatedAt := createdAt.Add(time.Hour)
+	tracker := &fakeIssueTracker{
+		issues: []issuemodel.Issue{{
+			ID:          "issue-1",
+			Identifier:  "ZEE-101",
+			Title:       "Product API",
+			Description: "Expose tracker",
+			Priority:    &priority,
+			State:       "Todo",
+			BranchName:  "branch",
+			URL:         "https://linear.app/issue/ZEE-101",
+			Labels:      []string{"api"},
+			BlockedBy:   []issuemodel.BlockerRef{{ID: "blocker-1", Identifier: "ZEE-100", State: "In Progress"}},
+			CreatedAt:   &createdAt,
+			UpdatedAt:   &updatedAt,
+		}},
+		issue: issuemodel.Issue{ID: "issue-2", Identifier: "ZEE-102", State: "Done"},
+	}
+	service := control.NewServiceWithOptions(control.ServiceOptions{
+		Tracker: tracker,
+		Config:  runtimeconfig.Config{Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"Todo"}}},
+	})
+
+	listed, err := service.ListTrackerIssues(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTrackerIssues returned error: %v", err)
+	}
+	if strings.Join(tracker.activeStates, ",") != "Todo" {
+		t.Fatalf("active states = %#v, want config active states", tracker.activeStates)
+	}
+	if listed.Boundary.Name != "tracker.issue" || len(listed.Issues) != 1 {
+		t.Fatalf("listed = %#v, want one tracker issue", listed)
+	}
+	issue := listed.Issues[0]
+	if issue.IssueIdentifier != "ZEE-101" || issue.Priority == nil || *issue.Priority != 1 || len(issue.BlockedBy) != 1 {
+		t.Fatalf("issue projection = %#v, want full tracker issue", issue)
+	}
+	if issue.CreatedAt != "2026-05-06T01:02:03Z" || issue.UpdatedAt != "2026-05-06T02:02:03Z" {
+		t.Fatalf("issue timestamps = %#v", issue)
+	}
+
+	filtered, err := service.ListTrackerIssues(context.Background(), []string{" Done ", ""})
+	if err != nil {
+		t.Fatalf("ListTrackerIssues with states returned error: %v", err)
+	}
+	if len(filtered.Issues) != 1 || strings.Join(tracker.listStates, ",") != "Done" {
+		t.Fatalf("filtered = %#v states=%#v, want Done filter", filtered, tracker.listStates)
+	}
+
+	fetched, err := service.GetTrackerIssue(context.Background(), "ZEE-102")
+	if err != nil {
+		t.Fatalf("GetTrackerIssue returned error: %v", err)
+	}
+	if tracker.fetchedID != "ZEE-102" || fetched.Issue.IssueIdentifier != "ZEE-102" {
+		t.Fatalf("fetched = %#v id=%q, want ZEE-102", fetched, tracker.fetchedID)
+	}
+
+	updated, err := service.UpdateTrackerIssueState(context.Background(), control.TrackerIssueStateInput{IssueID: "issue-2", StateName: "Done"})
+	if err != nil {
+		t.Fatalf("UpdateTrackerIssueState returned error: %v", err)
+	}
+	if tracker.updateID != "issue-2" || tracker.updateState != "Done" || !updated.Updated {
+		t.Fatalf("updated = %#v tracker id=%q state=%q", updated, tracker.updateID, tracker.updateState)
 	}
 }
 

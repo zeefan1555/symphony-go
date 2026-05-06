@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/observability"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
@@ -24,6 +25,8 @@ var (
 	ErrInvalidWorkflowPath      = errors.New("workflow path is required")
 	ErrCodexRunnerRequired      = errors.New("codex runner required")
 	ErrInvalidCodexTurnRequest  = errors.New("invalid codex turn request")
+	ErrIssueTrackerRequired     = errors.New("issue tracker required")
+	ErrInvalidIssueState        = errors.New("issue state is required")
 )
 
 const (
@@ -47,10 +50,22 @@ type CodexSessionRunner interface {
 	RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
 }
 
+type IssueTracker interface {
+	FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error)
+	FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error)
+	FetchIssue(context.Context, string) (issuemodel.Issue, error)
+	UpdateIssueState(context.Context, string, string) error
+}
+
 type ControlService interface {
 	RuntimeState(context.Context) (RuntimeState, error)
 	IssueDetail(context.Context, string) (IssueDetail, error)
+	ObservabilitySnapshot(context.Context) (ObservabilitySnapshot, error)
 	ProjectIssueRun(context.Context, string) (IssueRunProjection, error)
+	RuntimeSettings(context.Context) (RuntimeSettingsResult, error)
+	ListTrackerIssues(context.Context, []string) (TrackerIssueList, error)
+	GetTrackerIssue(context.Context, string) (TrackerIssueResult, error)
+	UpdateTrackerIssueState(context.Context, TrackerIssueStateInput) (TrackerIssueStateResult, error)
 	ResolveWorkspacePath(context.Context, string) (WorkspacePreparation, error)
 	ValidateWorkspacePath(context.Context, string) (WorkspacePathValidation, error)
 	PrepareWorkspace(context.Context, string) (WorkspacePreparation, error)
@@ -65,22 +80,42 @@ type Service struct {
 	provider  SnapshotProvider
 	workspace *workspace.Manager
 	runner    CodexSessionRunner
+	tracker   IssueTracker
+	config    runtimeconfig.Config
+}
+
+type ServiceOptions struct {
+	Provider  SnapshotProvider
+	Workspace *workspace.Manager
+	Runner    CodexSessionRunner
+	Tracker   IssueTracker
+	Config    runtimeconfig.Config
 }
 
 func NewService(provider SnapshotProvider) *Service {
-	return &Service{provider: provider}
+	return NewServiceWithOptions(ServiceOptions{Provider: provider})
 }
 
 func NewServiceWithWorkspace(provider SnapshotProvider, manager *workspace.Manager) *Service {
-	return &Service{provider: provider, workspace: manager}
+	return NewServiceWithOptions(ServiceOptions{Provider: provider, Workspace: manager})
 }
 
 func NewServiceWithCodexRunner(provider SnapshotProvider, runner CodexSessionRunner) *Service {
-	return &Service{provider: provider, runner: runner}
+	return NewServiceWithOptions(ServiceOptions{Provider: provider, Runner: runner})
 }
 
 func NewServiceWithWorkspaceAndCodexRunner(provider SnapshotProvider, manager *workspace.Manager, runner CodexSessionRunner) *Service {
-	return &Service{provider: provider, workspace: manager, runner: runner}
+	return NewServiceWithOptions(ServiceOptions{Provider: provider, Workspace: manager, Runner: runner})
+}
+
+func NewServiceWithOptions(opts ServiceOptions) *Service {
+	return &Service{
+		provider:  opts.Provider,
+		workspace: opts.Workspace,
+		runner:    opts.Runner,
+		tracker:   opts.Tracker,
+		config:    opts.Config,
+	}
 }
 
 func (s *Service) RuntimeState(ctx context.Context) (RuntimeState, error) {
@@ -106,6 +141,17 @@ func (s *Service) IssueDetail(ctx context.Context, issueIdentifier string) (Issu
 	return FindIssueDetail(ProjectSnapshot(s.provider.Snapshot()), issueIdentifier)
 }
 
+func (s *Service) ObservabilitySnapshot(ctx context.Context) (ObservabilitySnapshot, error) {
+	state, err := s.RuntimeState(ctx)
+	if err != nil {
+		return ObservabilitySnapshot{}, err
+	}
+	return ObservabilitySnapshot{
+		Boundary: ObservabilityBoundary(),
+		State:    state,
+	}, nil
+}
+
 func (s *Service) ProjectIssueRun(ctx context.Context, issueIdentifier string) (IssueRunProjection, error) {
 	if err := ctx.Err(); err != nil {
 		return IssueRunProjection{}, err
@@ -117,6 +163,109 @@ func (s *Service) ProjectIssueRun(ctx context.Context, issueIdentifier string) (
 		return IssueRunProjection{}, ErrSnapshotProviderRequired
 	}
 	return ProjectIssueRunState(ProjectSnapshot(s.provider.Snapshot()), issueIdentifier), nil
+}
+
+func (s *Service) RuntimeSettings(ctx context.Context) (RuntimeSettingsResult, error) {
+	if err := ctx.Err(); err != nil {
+		return RuntimeSettingsResult{}, err
+	}
+	if s == nil {
+		return RuntimeSettingsResult{}, nil
+	}
+	cfg := s.config
+	return RuntimeSettingsResult{
+		Boundary: RuntimeBoundary(),
+		Settings: RuntimeSettings{
+			TrackerKind:           cfg.Tracker.Kind,
+			TrackerProjectSlug:    cfg.Tracker.ProjectSlug,
+			TrackerActiveStates:   append([]string(nil), cfg.Tracker.ActiveStates...),
+			TrackerTerminalStates: append([]string(nil), cfg.Tracker.TerminalStates...),
+			ServerPort:            cfg.Server.Port,
+			ServerPortSet:         cfg.Server.PortSet,
+			PollingIntervalMS:     cfg.Polling.IntervalMS,
+			WorkspaceRoot:         cfg.Workspace.Root,
+			MergeTarget:           cfg.Merge.Target,
+			MaxConcurrentAgents:   cfg.Agent.MaxConcurrentAgents,
+			MaxTurns:              cfg.Agent.MaxTurns,
+			MaxRetryBackoffMS:     cfg.Agent.MaxRetryBackoffMS,
+			CodexThreadSandbox:    cfg.Codex.ThreadSandbox,
+			CodexTurnTimeoutMS:    cfg.Codex.TurnTimeoutMS,
+			CodexReadTimeoutMS:    cfg.Codex.ReadTimeoutMS,
+			CodexStallTimeoutMS:   cfg.Codex.StallTimeoutMS,
+		},
+	}, nil
+}
+
+func (s *Service) ListTrackerIssues(ctx context.Context, stateNames []string) (TrackerIssueList, error) {
+	if err := ctx.Err(); err != nil {
+		return TrackerIssueList{}, err
+	}
+	if s == nil || s.tracker == nil {
+		return TrackerIssueList{}, ErrIssueTrackerRequired
+	}
+	states := cleanStates(stateNames)
+	var (
+		issues []issuemodel.Issue
+		err    error
+	)
+	if len(states) == 0 {
+		issues, err = s.tracker.FetchActiveIssues(ctx, s.config.Tracker.ActiveStates)
+	} else {
+		issues, err = s.tracker.FetchIssuesByStates(ctx, states)
+	}
+	if err != nil {
+		return TrackerIssueList{}, err
+	}
+	return TrackerIssueList{
+		Boundary: TrackerBoundary(),
+		Issues:   trackerIssueModels(issues),
+	}, nil
+}
+
+func (s *Service) GetTrackerIssue(ctx context.Context, issueIdentifier string) (TrackerIssueResult, error) {
+	if err := ctx.Err(); err != nil {
+		return TrackerIssueResult{}, err
+	}
+	if strings.TrimSpace(issueIdentifier) == "" {
+		return TrackerIssueResult{}, ErrInvalidIssueIdentifier
+	}
+	if s == nil || s.tracker == nil {
+		return TrackerIssueResult{}, ErrIssueTrackerRequired
+	}
+	issue, err := s.tracker.FetchIssue(ctx, issueIdentifier)
+	if err != nil {
+		return TrackerIssueResult{}, err
+	}
+	return TrackerIssueResult{
+		Boundary: TrackerBoundary(),
+		Issue:    trackerIssueModel(issue),
+	}, nil
+}
+
+func (s *Service) UpdateTrackerIssueState(ctx context.Context, input TrackerIssueStateInput) (TrackerIssueStateResult, error) {
+	if err := ctx.Err(); err != nil {
+		return TrackerIssueStateResult{}, err
+	}
+	issueID := strings.TrimSpace(input.IssueID)
+	if issueID == "" {
+		return TrackerIssueStateResult{}, ErrInvalidIssueIdentifier
+	}
+	stateName := strings.TrimSpace(input.StateName)
+	if stateName == "" {
+		return TrackerIssueStateResult{}, ErrInvalidIssueState
+	}
+	if s == nil || s.tracker == nil {
+		return TrackerIssueStateResult{}, ErrIssueTrackerRequired
+	}
+	if err := s.tracker.UpdateIssueState(ctx, issueID, stateName); err != nil {
+		return TrackerIssueStateResult{}, err
+	}
+	return TrackerIssueStateResult{
+		Boundary:  TrackerBoundary(),
+		IssueID:   issueID,
+		StateName: stateName,
+		Updated:   true,
+	}, nil
 }
 
 func (s *Service) ResolveWorkspacePath(ctx context.Context, issueIdentifier string) (WorkspacePreparation, error) {
@@ -404,16 +553,170 @@ func ProjectIssueRunState(state RuntimeState, issueIdentifier string) IssueRunPr
 	}
 }
 
+func ObservabilityBoundary() CapabilityBoundary {
+	return CapabilityBoundary{
+		Name:               "observability.snapshot",
+		Purpose:            "Expose runtime observability as a stable product control-plane projection.",
+		HandwrittenAdapter: "internal/service/control",
+	}
+}
+
+func RuntimeBoundary() CapabilityBoundary {
+	return CapabilityBoundary{
+		Name:               "runtime.settings",
+		Purpose:            "Expose non-secret runtime settings resolved by the handwritten runtime configuration layer.",
+		HandwrittenAdapter: "internal/service/control",
+	}
+}
+
+func TrackerBoundary() CapabilityBoundary {
+	return CapabilityBoundary{
+		Name:               "tracker.issue",
+		Purpose:            "Read and update issue tracker state through the handwritten tracker integration boundary.",
+		HandwrittenAdapter: "internal/service/control",
+	}
+}
+
+func cleanStates(states []string) []string {
+	cleaned := make([]string, 0, len(states))
+	for _, state := range states {
+		if trimmed := strings.TrimSpace(state); trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	return cleaned
+}
+
+func trackerIssueModels(issues []issuemodel.Issue) []TrackerIssue {
+	models := make([]TrackerIssue, 0, len(issues))
+	for _, issue := range issues {
+		models = append(models, trackerIssueModel(issue))
+	}
+	return models
+}
+
+func trackerIssueModel(issue issuemodel.Issue) TrackerIssue {
+	blockers := make([]TrackerBlockerRef, 0, len(issue.BlockedBy))
+	for _, blocker := range issue.BlockedBy {
+		blockers = append(blockers, TrackerBlockerRef{
+			IssueID:         blocker.ID,
+			IssueIdentifier: blocker.Identifier,
+			State:           blocker.State,
+		})
+	}
+
+	model := TrackerIssue{
+		IssueID:         issue.ID,
+		IssueIdentifier: issue.Identifier,
+		Title:           issue.Title,
+		Description:     issue.Description,
+		State:           issue.State,
+		BranchName:      issue.BranchName,
+		URL:             issue.URL,
+		Labels:          append([]string(nil), issue.Labels...),
+		BlockedBy:       blockers,
+	}
+	if issue.Priority != nil {
+		model.Priority = issue.Priority
+	}
+	if issue.CreatedAt != nil {
+		model.CreatedAt = formatOptionalTime(*issue.CreatedAt)
+	}
+	if issue.UpdatedAt != nil {
+		model.UpdatedAt = formatOptionalTime(*issue.UpdatedAt)
+	}
+	return model
+}
+
+func formatOptionalTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
 type CapabilityBoundary struct {
 	Name               string `json:"name"`
 	Purpose            string `json:"purpose"`
 	HandwrittenAdapter string `json:"handwritten_adapter"`
 }
 
+type ObservabilitySnapshot struct {
+	Boundary CapabilityBoundary `json:"boundary"`
+	State    RuntimeState       `json:"state"`
+}
+
 type IssueRunProjection struct {
 	Boundary        CapabilityBoundary `json:"boundary"`
 	IssueIdentifier string             `json:"issue_identifier"`
 	RuntimeState    string             `json:"runtime_state"`
+}
+
+type RuntimeSettingsResult struct {
+	Boundary CapabilityBoundary `json:"boundary"`
+	Settings RuntimeSettings    `json:"settings"`
+}
+
+type RuntimeSettings struct {
+	TrackerKind           string   `json:"tracker_kind"`
+	TrackerProjectSlug    string   `json:"tracker_project_slug"`
+	TrackerActiveStates   []string `json:"tracker_active_states"`
+	TrackerTerminalStates []string `json:"tracker_terminal_states"`
+	ServerPort            int      `json:"server_port"`
+	ServerPortSet         bool     `json:"server_port_set"`
+	PollingIntervalMS     int      `json:"polling_interval_ms"`
+	WorkspaceRoot         string   `json:"workspace_root"`
+	MergeTarget           string   `json:"merge_target"`
+	MaxConcurrentAgents   int      `json:"max_concurrent_agents"`
+	MaxTurns              int      `json:"max_turns"`
+	MaxRetryBackoffMS     int      `json:"max_retry_backoff_ms"`
+	CodexThreadSandbox    string   `json:"codex_thread_sandbox"`
+	CodexTurnTimeoutMS    int      `json:"codex_turn_timeout_ms"`
+	CodexReadTimeoutMS    int      `json:"codex_read_timeout_ms"`
+	CodexStallTimeoutMS   int      `json:"codex_stall_timeout_ms"`
+}
+
+type TrackerIssueList struct {
+	Boundary CapabilityBoundary `json:"boundary"`
+	Issues   []TrackerIssue     `json:"issues"`
+}
+
+type TrackerIssueResult struct {
+	Boundary CapabilityBoundary `json:"boundary"`
+	Issue    TrackerIssue       `json:"issue"`
+}
+
+type TrackerIssueStateInput struct {
+	IssueID   string `json:"issue_id"`
+	StateName string `json:"state_name"`
+}
+
+type TrackerIssueStateResult struct {
+	Boundary  CapabilityBoundary `json:"boundary"`
+	IssueID   string             `json:"issue_id"`
+	StateName string             `json:"state_name"`
+	Updated   bool               `json:"updated"`
+}
+
+type TrackerIssue struct {
+	IssueID         string              `json:"issue_id"`
+	IssueIdentifier string              `json:"issue_identifier"`
+	Title           string              `json:"title"`
+	Description     string              `json:"description"`
+	Priority        *int                `json:"priority,omitempty"`
+	State           string              `json:"state"`
+	BranchName      string              `json:"branch_name"`
+	URL             string              `json:"url"`
+	Labels          []string            `json:"labels"`
+	BlockedBy       []TrackerBlockerRef `json:"blocked_by"`
+	CreatedAt       string              `json:"created_at,omitempty"`
+	UpdatedAt       string              `json:"updated_at,omitempty"`
+}
+
+type TrackerBlockerRef struct {
+	IssueID         string `json:"issue_id"`
+	IssueIdentifier string `json:"issue_identifier"`
+	State           string `json:"state"`
 }
 
 func WorkspaceBoundary() CapabilityBoundary {

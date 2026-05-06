@@ -1,6 +1,6 @@
-# Hertz 控制面 IDL 与生成工作流
+# Hertz 产品控制面 IDL 与生成工作流
 
-本文档固化 Hertz-first 控制面的维护流程。它面向改 IDL、运行 Buf lint、重新生成脚手架和 review 控制面改动的人。
+本文档固化 Hertz-first 产品控制面的维护流程。它面向改 IDL、运行 Buf lint、重新生成脚手架和 review `/api/v1` 稳定产品 API 的人。
 
 ## 目录边界
 
@@ -10,7 +10,7 @@
 
 `idl/common.proto` 放公共模型，例如 runtime state、issue detail 和 error envelope。这个文件只描述 transport-neutral 数据模型，不承载 HTTP 路由语义，也不能作为 service method 的顶层请求或响应。
 
-`idl/control.proto`、`idl/orchestrator.proto`、`idl/workspace.proto`、`idl/workflow.proto` 和 `idl/codex_session.proto` 是平铺领域 IDL。它们只放对应 method 的专属 `XxxReq` / `XxxResp` contract 和必要嵌套模型；可以引用公共模型作为字段，但不定义 service，也不放 route annotations。
+`idl/control.proto`、`idl/observability.proto`、`idl/orchestrator.proto`、`idl/runtime.proto`、`idl/tracker.proto`、`idl/workspace.proto`、`idl/workflow.proto` 和 `idl/codex_session.proto` 是平铺领域 IDL。它们只放对应 method 的专属 `XxxReq` / `XxxResp` contract 和必要嵌套模型；可以引用公共模型作为字段，但不定义 service，也不放 route annotations。
 
 `gen/hertz/...` 是 Hertz 生成代码外壳。`gen/hertz/handler`、`gen/hertz/model` 和 `gen/hertz/router` 是 Hertz 生成代码目录。这里的 model、router 和默认 handler skeleton 由 `hz` 生成，review 时不要把生成噪音当作主要讨论对象。
 
@@ -22,7 +22,7 @@
 
 ## 新增接口流程
 
-新增诊断控制面 API 时按固定顺序做：
+新增产品控制面 API 时按固定顺序做：
 
 1. 在对应平铺领域 IDL 中新增专属 `XxxReq` / `XxxResp` message。即使请求或响应暂时为空，也必须定义独立 message；不要复用其他接口的 Req/Resp，也不要让公共模型直接作为 service rpc 的顶层类型。
 2. 在 `idl/main.proto` 的唯一 `SymphonyAPI` service 中注册 rpc，并使用 `(api.post)` 动作式路由。业务 POST 接口统一从 request body 取输入，字段应使用 `(api.body)` 标明来源。
@@ -48,7 +48,7 @@ make hertz-generate
 
 ## Review 重点
 
-控制面变更应优先 review IDL 契约和手写传输层，并同步检查业务服务边界：先确认 `idl/main.proto`、`idl/common.proto`、`idl/control.proto`、`idl/orchestrator.proto`、`idl/workspace.proto`、`idl/workflow.proto` 与 `idl/codex_session.proto` 的输入、输出、错误模型和 route annotations 是否符合诊断控制面 API 语义，再确认 `internal/transport/hertzbinding/` 与 `internal/transport/hertzserver/` 是否只承担 binding/HTTP 职责，最后确认 `internal/service/control/` 保持手写服务实现边界。
+控制面变更应优先 review IDL 契约和手写传输层，并同步检查业务服务边界：先确认 `idl/main.proto`、`idl/common.proto`、`idl/control.proto`、`idl/observability.proto`、`idl/orchestrator.proto`、`idl/runtime.proto`、`idl/tracker.proto`、`idl/workspace.proto`、`idl/workflow.proto` 与 `idl/codex_session.proto` 的输入、输出、错误模型和 route annotations 是否符合稳定产品控制面 API 语义，再确认 `internal/transport/hertzbinding/` 与 `internal/transport/hertzserver/` 是否只承担 binding/HTTP 职责，最后确认 `internal/service/control/` 保持手写服务实现边界。
 
 `gen/hertz/handler`、`gen/hertz/model` 和 `gen/hertz/router` 的大体积 diff 通常来自 `hz` 生成。review 时只需要确认生成命令来自 `make hertz-generate`，且生成结果和 IDL 变更一致；不要把生成代码噪音当成主要讨论对象。
 
@@ -60,4 +60,4 @@ make hertz-generate
 
 未来 Kitex 只能新增专用 RPC 传输层和 IDL，并复用公共模型和控制面语义。不要为了未来 RPC 消费者把 Hertz annotations 下沉到公共模型，也不要让 Kitex 设计污染当前 Hertz-first 结构。
 
-第一版不实现 Kitex runtime，也不把 `run --once --issue` 变成产品 API。单次运行命令仍是本地调试入口；产品控制面只暴露当前 IDL 明确声明的 HTTP 能力。
+第一版不实现 Kitex runtime，也不把 `run --once --issue` 变成产品 API。单次运行命令仍是本地调试入口；产品控制面只暴露当前 IDL 明确声明的 HTTP 能力。`/api/v1` 是稳定产品 API；破坏性变更必须新增版本或先写明废弃策略，不能静默重命名 route、字段或错误 envelope。

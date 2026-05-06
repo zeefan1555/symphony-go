@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package tracker;
+
+option go_package = "symphony-go/gen/hertz/model/tracker";
+
+import "api.proto";
+import "common.proto";
+
+message ListTrackerIssuesReq {
+  repeated string state_names = 1 [(api.body) = "state_names"];
+}
+
+message ListTrackerIssuesResp {
+  common.CapabilityBoundary boundary = 1;
+  repeated TrackerIssue issues = 2;
+}
+
+message GetTrackerIssueReq {
+  string issue_identifier = 1 [(api.body) = "issue_identifier"];
+}
+
+message GetTrackerIssueResp {
+  common.CapabilityBoundary boundary = 1;
+  TrackerIssue issue = 2;
+}
+
+message UpdateTrackerIssueStateReq {
+  string issue_id = 1 [(api.body) = "issue_id"];
+  string state_name = 2 [(api.body) = "state_name"];
+}
+
+message UpdateTrackerIssueStateResp {
+  common.CapabilityBoundary boundary = 1;
+  string issue_id = 2;
+  string state_name = 3;
+  bool updated = 4;
+}
+
+message TrackerIssue {
+  string issue_id = 1;
+  string issue_identifier = 2;
+  string title = 3;
+  string description = 4;
+  optional int32 priority = 5;
+  string state = 6;
+  string branch_name = 7;
+  string url = 8;
+  repeated string labels = 9;
+  repeated TrackerBlockerRef blocked_by = 10;
+  optional string created_at = 11;
+  optional string updated_at = 12;
+}
+
+message TrackerBlockerRef {
+  string issue_id = 1;
+  string issue_identifier = 2;
+  string state = 3;
+}

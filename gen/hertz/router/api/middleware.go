@@ -51,12 +51,52 @@ func _refreshMw() []app.HandlerFunc {
 	return nil
 }
 
+func _observabilityMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getobservabilitysnapshotMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
 func _orchestratorMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
 func _projectissuerunMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _runtimeMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _getruntimesettingsMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _trackerMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _gettrackerissueMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _listtrackerissuesMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _updatetrackerissuestateMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }

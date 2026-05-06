@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package runtime;
+
+option go_package = "symphony-go/gen/hertz/model/runtime";
+
+import "common.proto";
+
+message GetRuntimeSettingsReq {}
+
+message GetRuntimeSettingsResp {
+  common.CapabilityBoundary boundary = 1;
+  RuntimeSettings settings = 2;
+}
+
+message RuntimeSettings {
+  string tracker_kind = 1;
+  string tracker_project_slug = 2;
+  repeated string tracker_active_states = 3;
+  repeated string tracker_terminal_states = 4;
+  int32 server_port = 5;
+  bool server_port_set = 6;
+  int32 polling_interval_ms = 7;
+  string workspace_root = 8;
+  string merge_target = 9;
+  int32 max_concurrent_agents = 10;
+  int32 max_turns = 11;
+  int32 max_retry_backoff_ms = 12;
+  string codex_thread_sandbox = 13;
+  int32 codex_turn_timeout_ms = 14;
+  int32 codex_read_timeout_ms = 15;
+  int32 codex_stall_timeout_ms = 16;
+}

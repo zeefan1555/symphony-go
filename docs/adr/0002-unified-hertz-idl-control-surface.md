@@ -1,6 +1,6 @@
 # Unified Hertz IDL Control Surface
 
-Symphony Go will use `idl/main.proto` as the only Hertz generation entry for business HTTP interfaces. Buf lint is the automated IDL check before generation. The main IDL owns the single service and all route annotations, while flat domain IDL files define only dedicated `XxxReq`/`XxxResp` contracts and nested models; generated handlers must delegate to handwritten service implementations.
+Symphony Go will use `idl/main.proto` as the only Hertz generation entry for stable product HTTP interfaces. Buf lint is the automated IDL check before generation. The main IDL owns the single service and all route annotations, while flat domain IDL files define only dedicated `XxxReq`/`XxxResp` contracts and nested models; generated handlers must delegate to handwritten service implementations.
 
 ## Considered Options
 
@@ -10,4 +10,4 @@ Symphony Go will use `idl/main.proto` as the only Hertz generation entry for bus
 
 ## Consequences
 
-All business HTTP routes registered from the main IDL use POST action-style paths so local operator, TUI, agent, and smoke-harness callers can share one calling convention. Internal scaffold capabilities become local diagnostic control-plane APIs rather than stable product APIs. Hertz owns interface contracts, route registration, generated models, and handler skeletons; handwritten service and transport layers remain the authority for business behaviour and side effects.
+All business HTTP routes registered from the main IDL use POST action-style paths so local operator, TUI, agent, and smoke-harness callers can share one calling convention. Core subsystem capabilities become stable `/api/v1` product control-plane APIs only when they are declared in `idl/main.proto`. Hertz owns interface contracts, route registration, generated models, and handler skeletons; handwritten service and transport layers remain the authority for business behaviour and side effects.

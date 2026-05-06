@@ -8,7 +8,10 @@ import (
 	codexsessionmodel "symphony-go/gen/hertz/model/codexsession"
 	commonmodel "symphony-go/gen/hertz/model/common"
 	controlmodel "symphony-go/gen/hertz/model/control"
+	observabilitymodel "symphony-go/gen/hertz/model/observability"
 	orchestratormodel "symphony-go/gen/hertz/model/orchestrator"
+	runtimemodel "symphony-go/gen/hertz/model/runtime"
+	trackermodel "symphony-go/gen/hertz/model/tracker"
 	workflowmodel "symphony-go/gen/hertz/model/workflow"
 	workspacemodel "symphony-go/gen/hertz/model/workspace"
 	controlplane "symphony-go/internal/service/control"
@@ -43,12 +46,72 @@ func (a ControlBinding) GetIssue(ctx context.Context, issueIdentifier string) (*
 	return issueDetailModel(detail), nil
 }
 
+func (a ControlBinding) GetObservabilitySnapshot(ctx context.Context) (*observabilitymodel.GetObservabilitySnapshotResp, error) {
+	snapshot, err := a.control.ObservabilitySnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &observabilitymodel.GetObservabilitySnapshotResp{
+		Boundary: capabilityBoundaryModel(snapshot.Boundary),
+		State:    runtimeStateModel(snapshot.State),
+	}, nil
+}
+
 func (a ControlBinding) ProjectIssueRun(ctx context.Context, issueIdentifier string) (*orchestratormodel.ProjectIssueRunResp, error) {
 	projection, err := a.control.ProjectIssueRun(ctx, issueIdentifier)
 	if err != nil {
 		return nil, controlHTTPError(err)
 	}
 	return issueRunProjectionModel(projection), nil
+}
+
+func (a ControlBinding) GetRuntimeSettings(ctx context.Context) (*runtimemodel.GetRuntimeSettingsResp, error) {
+	result, err := a.control.RuntimeSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &runtimemodel.GetRuntimeSettingsResp{
+		Boundary: capabilityBoundaryModel(result.Boundary),
+		Settings: runtimeSettingsModel(result.Settings),
+	}, nil
+}
+
+func (a ControlBinding) ListTrackerIssues(ctx context.Context, stateNames []string) (*trackermodel.ListTrackerIssuesResp, error) {
+	result, err := a.control.ListTrackerIssues(ctx, stateNames)
+	if err != nil {
+		return nil, controlTrackerHTTPError(err)
+	}
+	return &trackermodel.ListTrackerIssuesResp{
+		Boundary: capabilityBoundaryModel(result.Boundary),
+		Issues:   trackerIssueModels(result.Issues),
+	}, nil
+}
+
+func (a ControlBinding) GetTrackerIssue(ctx context.Context, issueIdentifier string) (*trackermodel.GetTrackerIssueResp, error) {
+	result, err := a.control.GetTrackerIssue(ctx, issueIdentifier)
+	if err != nil {
+		return nil, controlTrackerHTTPError(err)
+	}
+	return &trackermodel.GetTrackerIssueResp{
+		Boundary: capabilityBoundaryModel(result.Boundary),
+		Issue:    trackerIssueModel(result.Issue),
+	}, nil
+}
+
+func (a ControlBinding) UpdateTrackerIssueState(ctx context.Context, issueID, stateName string) (*trackermodel.UpdateTrackerIssueStateResp, error) {
+	result, err := a.control.UpdateTrackerIssueState(ctx, controlplane.TrackerIssueStateInput{
+		IssueID:   issueID,
+		StateName: stateName,
+	})
+	if err != nil {
+		return nil, controlTrackerHTTPError(err)
+	}
+	return &trackermodel.UpdateTrackerIssueStateResp{
+		Boundary:  capabilityBoundaryModel(result.Boundary),
+		IssueID:   result.IssueID,
+		StateName: result.StateName,
+		Updated:   result.Updated,
+	}, nil
 }
 
 func (a ControlBinding) ResolveWorkspacePath(ctx context.Context, issueIdentifier string) (*workspacemodel.ResolveWorkspacePathResp, error) {
@@ -166,6 +229,19 @@ func controlCodexHTTPError(err error) error {
 		return NewError(400, "invalid_codex_turn_request", "issue identifier, workspace path, and prompt text are required")
 	case errors.Is(err, controlplane.ErrCodexRunnerRequired):
 		return NewError(503, "codex_runner_unavailable", "codex runner is unavailable")
+	default:
+		return err
+	}
+}
+
+func controlTrackerHTTPError(err error) error {
+	switch {
+	case errors.Is(err, controlplane.ErrInvalidIssueIdentifier):
+		return NewError(400, "invalid_issue_identifier", "issue identifier is required")
+	case errors.Is(err, controlplane.ErrInvalidIssueState):
+		return NewError(400, "invalid_issue_state", "issue state is required")
+	case errors.Is(err, controlplane.ErrIssueTrackerRequired):
+		return NewError(503, "tracker_unavailable", "issue tracker is unavailable")
 	default:
 		return err
 	}
@@ -348,6 +424,69 @@ func codexTurnSummaryModel(summary controlplane.CodexTurnSummary) *codexsessionm
 		SessionID: summary.SessionID,
 		TurnCount: summary.TurnCount,
 	}
+}
+
+func runtimeSettingsModel(settings controlplane.RuntimeSettings) *runtimemodel.RuntimeSettings {
+	return &runtimemodel.RuntimeSettings{
+		TrackerKind:           settings.TrackerKind,
+		TrackerProjectSlug:    settings.TrackerProjectSlug,
+		TrackerActiveStates:   append([]string(nil), settings.TrackerActiveStates...),
+		TrackerTerminalStates: append([]string(nil), settings.TrackerTerminalStates...),
+		ServerPort:            int32(settings.ServerPort),
+		ServerPortSet:         settings.ServerPortSet,
+		PollingIntervalMs:     int32(settings.PollingIntervalMS),
+		WorkspaceRoot:         settings.WorkspaceRoot,
+		MergeTarget:           settings.MergeTarget,
+		MaxConcurrentAgents:   int32(settings.MaxConcurrentAgents),
+		MaxTurns:              int32(settings.MaxTurns),
+		MaxRetryBackoffMs:     int32(settings.MaxRetryBackoffMS),
+		CodexThreadSandbox:    settings.CodexThreadSandbox,
+		CodexTurnTimeoutMs:    int32(settings.CodexTurnTimeoutMS),
+		CodexReadTimeoutMs:    int32(settings.CodexReadTimeoutMS),
+		CodexStallTimeoutMs:   int32(settings.CodexStallTimeoutMS),
+	}
+}
+
+func trackerIssueModels(issues []controlplane.TrackerIssue) []*trackermodel.TrackerIssue {
+	models := make([]*trackermodel.TrackerIssue, 0, len(issues))
+	for _, issue := range issues {
+		models = append(models, trackerIssueModel(issue))
+	}
+	return models
+}
+
+func trackerIssueModel(issue controlplane.TrackerIssue) *trackermodel.TrackerIssue {
+	blockers := make([]*trackermodel.TrackerBlockerRef, 0, len(issue.BlockedBy))
+	for _, blocker := range issue.BlockedBy {
+		blockers = append(blockers, &trackermodel.TrackerBlockerRef{
+			IssueID:         blocker.IssueID,
+			IssueIdentifier: blocker.IssueIdentifier,
+			State:           blocker.State,
+		})
+	}
+
+	model := &trackermodel.TrackerIssue{
+		IssueID:         issue.IssueID,
+		IssueIdentifier: issue.IssueIdentifier,
+		Title:           issue.Title,
+		Description:     issue.Description,
+		State:           issue.State,
+		BranchName:      issue.BranchName,
+		Url:             issue.URL,
+		Labels:          append([]string(nil), issue.Labels...),
+		BlockedBy:       blockers,
+	}
+	if issue.Priority != nil {
+		priority := int32(*issue.Priority)
+		model.Priority = &priority
+	}
+	if issue.CreatedAt != "" {
+		model.CreatedAt = stringPtr(issue.CreatedAt)
+	}
+	if issue.UpdatedAt != "" {
+		model.UpdatedAt = stringPtr(issue.UpdatedAt)
+	}
+	return model
 }
 
 func capabilityBoundaryModel(boundary controlplane.CapabilityBoundary) *commonmodel.CapabilityBoundary {

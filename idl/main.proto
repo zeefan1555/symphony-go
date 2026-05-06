@@ -6,7 +6,10 @@ option go_package = "symphony-go/gen/hertz/model/api";
 
 import "api.proto";
 import "control.proto";
+import "observability.proto";
 import "orchestrator.proto";
+import "runtime.proto";
+import "tracker.proto";
 import "workspace.proto";
 import "workflow.proto";
 import "codex_session.proto";
@@ -21,8 +24,23 @@ service SymphonyAPI {
   rpc GetIssue(control.GetIssueReq) returns (control.GetIssueResp) {
     option (api.post) = "/api/v1/control/get-issue";
   }
+  rpc GetObservabilitySnapshot(observability.GetObservabilitySnapshotReq) returns (observability.GetObservabilitySnapshotResp) {
+    option (api.post) = "/api/v1/observability/get-snapshot";
+  }
   rpc ProjectIssueRun(orchestrator.ProjectIssueRunReq) returns (orchestrator.ProjectIssueRunResp) {
     option (api.post) = "/api/v1/orchestrator/project-issue-run";
+  }
+  rpc GetRuntimeSettings(runtime.GetRuntimeSettingsReq) returns (runtime.GetRuntimeSettingsResp) {
+    option (api.post) = "/api/v1/runtime/get-settings";
+  }
+  rpc ListTrackerIssues(tracker.ListTrackerIssuesReq) returns (tracker.ListTrackerIssuesResp) {
+    option (api.post) = "/api/v1/tracker/list-issues";
+  }
+  rpc GetTrackerIssue(tracker.GetTrackerIssueReq) returns (tracker.GetTrackerIssueResp) {
+    option (api.post) = "/api/v1/tracker/get-issue";
+  }
+  rpc UpdateTrackerIssueState(tracker.UpdateTrackerIssueStateReq) returns (tracker.UpdateTrackerIssueStateResp) {
+    option (api.post) = "/api/v1/tracker/update-issue-state";
   }
   rpc ResolveWorkspacePath(workspace.ResolveWorkspacePathReq) returns (workspace.ResolveWorkspacePathResp) {
     option (api.post) = "/api/v1/workspace/resolve";

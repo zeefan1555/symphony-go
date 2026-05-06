@@ -10,7 +10,10 @@ import (
 	codexsession "symphony-go/gen/hertz/model/codexsession"
 	common "symphony-go/gen/hertz/model/common"
 	control "symphony-go/gen/hertz/model/control"
+	observability "symphony-go/gen/hertz/model/observability"
 	orchestrator "symphony-go/gen/hertz/model/orchestrator"
+	runtime "symphony-go/gen/hertz/model/runtime"
+	tracker "symphony-go/gen/hertz/model/tracker"
 	workflow "symphony-go/gen/hertz/model/workflow"
 	workspace "symphony-go/gen/hertz/model/workspace"
 	"symphony-go/internal/transport/hertzbinding"
@@ -278,6 +281,120 @@ func RunTurn(ctx context.Context, c *app.RequestContext) {
 		WorkspacePath:   req.WorkspacePath,
 		PromptText:      req.PromptText,
 	})
+	if err != nil {
+		envelope, status := hertzbinding.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetObservabilitySnapshot .
+// @router /api/v1/observability/get-snapshot [POST]
+func GetObservabilitySnapshot(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req observability.GetObservabilitySnapshotReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp, err := hertzbinding.CurrentService().GetObservabilitySnapshot(ctx)
+	if err != nil {
+		envelope, status := hertzbinding.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetRuntimeSettings .
+// @router /api/v1/runtime/get-settings [POST]
+func GetRuntimeSettings(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req runtime.GetRuntimeSettingsReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.String(consts.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp, err := hertzbinding.CurrentService().GetRuntimeSettings(ctx)
+	if err != nil {
+		envelope, status := hertzbinding.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// ListTrackerIssues .
+// @router /api/v1/tracker/list-issues [POST]
+func ListTrackerIssues(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req tracker.ListTrackerIssuesReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_tracker_request",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzbinding.CurrentService().ListTrackerIssues(ctx, req.StateNames)
+	if err != nil {
+		envelope, status := hertzbinding.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// GetTrackerIssue .
+// @router /api/v1/tracker/get-issue [POST]
+func GetTrackerIssue(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req tracker.GetTrackerIssueReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_issue_identifier",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzbinding.CurrentService().GetTrackerIssue(ctx, req.IssueIdentifier)
+	if err != nil {
+		envelope, status := hertzbinding.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}
+
+// UpdateTrackerIssueState .
+// @router /api/v1/tracker/update-issue-state [POST]
+func UpdateTrackerIssueState(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req tracker.UpdateTrackerIssueStateReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_issue_state",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzbinding.CurrentService().UpdateTrackerIssueState(ctx, req.IssueID, req.StateName)
 	if err != nil {
 		envelope, status := hertzbinding.ErrorEnvelope(err)
 		c.JSON(status, envelope)

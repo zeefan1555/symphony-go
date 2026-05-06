@@ -32,8 +32,22 @@ func Register(r *server.Hertz) {
 				_control.POST("/refresh", append(_refreshMw(), api.Refresh)...)
 			}
 			{
+				_observability := _v1.Group("/observability", _observabilityMw()...)
+				_observability.POST("/get-snapshot", append(_getobservabilitysnapshotMw(), api.GetObservabilitySnapshot)...)
+			}
+			{
 				_orchestrator := _v1.Group("/orchestrator", _orchestratorMw()...)
 				_orchestrator.POST("/project-issue-run", append(_projectissuerunMw(), api.ProjectIssueRun)...)
+			}
+			{
+				_runtime := _v1.Group("/runtime", _runtimeMw()...)
+				_runtime.POST("/get-settings", append(_getruntimesettingsMw(), api.GetRuntimeSettings)...)
+			}
+			{
+				_tracker := _v1.Group("/tracker", _trackerMw()...)
+				_tracker.POST("/get-issue", append(_gettrackerissueMw(), api.GetTrackerIssue)...)
+				_tracker.POST("/list-issues", append(_listtrackerissuesMw(), api.ListTrackerIssues)...)
+				_tracker.POST("/update-issue-state", append(_updatetrackerissuestateMw(), api.UpdateTrackerIssueState)...)
 			}
 			{
 				_workflow := _v1.Group("/workflow", _workflowMw()...)
