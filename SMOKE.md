@@ -2,3 +2,4 @@
 正式 workflow 冒烟 ZEE-101
 正式 workflow 性能冒烟 ZEE-102
 PR skill root sync 边界冒烟 ZEE-103
+Merge PASS 收口性能冒烟 ZEE-104
