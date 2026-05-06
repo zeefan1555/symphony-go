@@ -62,6 +62,7 @@ query SymphonyGoIssueStatesByIDs($ids: [ID!], $first: Int!) {
       id
       identifier
       state { name }
+      inverseRelations { nodes { type issue { id identifier state { name } } } }
     }
   }
 }`

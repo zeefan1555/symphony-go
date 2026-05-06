@@ -297,6 +297,7 @@ func TestFetchIssuesByStatesUsesProvidedStatesAndNormalizes(t *testing.T) {
 func TestFetchIssueStatesByIDsUsesIDListQueryAndNormalizes(t *testing.T) {
 	var sawIDs bool
 	var sawIDType bool
+	var sawInverseRelations bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -306,13 +307,16 @@ func TestFetchIssueStatesByIDsUsesIDListQueryAndNormalizes(t *testing.T) {
 		if strings.Contains(query, "$ids: [ID!]") {
 			sawIDType = true
 		}
+		if strings.Contains(query, "inverseRelations") {
+			sawInverseRelations = true
+		}
 		variables := payload["variables"].(map[string]any)
 		ids := variables["ids"].([]any)
 		if len(ids) == 2 && ids[0] == "i1" && ids[1] == "i2" {
 			sawIDs = true
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"issues":{"nodes":[{"id":"i1","identifier":"ZEE-1","state":{"name":"Done"}},{"id":"i2","identifier":"ZEE-2","state":{"name":"Todo"}}]}}}`))
+		_, _ = w.Write([]byte(`{"data":{"issues":{"nodes":[{"id":"i1","identifier":"ZEE-1","state":{"name":"Done"},"inverseRelations":{"nodes":[{"type":"blocks","issue":{"id":"b1","identifier":"ZEE-0","state":{"name":"In Progress"}}}]}},{"id":"i2","identifier":"ZEE-2","state":{"name":"Todo"},"inverseRelations":{"nodes":[]}}]}}}`))
 	}))
 	defer server.Close()
 
@@ -327,8 +331,14 @@ func TestFetchIssueStatesByIDsUsesIDListQueryAndNormalizes(t *testing.T) {
 	if !sawIDs {
 		t.Fatal("FetchIssueStatesByIDs did not send ids variable")
 	}
+	if !sawInverseRelations {
+		t.Fatal("FetchIssueStatesByIDs did not query inverseRelations issue blockers")
+	}
 	if len(issues) != 2 || issues[0].Identifier != "ZEE-1" || issues[1].State != "Todo" {
 		t.Fatalf("issues = %#v", issues)
+	}
+	if len(issues[0].BlockedBy) != 1 || issues[0].BlockedBy[0].Identifier != "ZEE-0" {
+		t.Fatalf("blockers = %#v", issues[0].BlockedBy)
 	}
 }
 

@@ -377,6 +377,56 @@ sleep 5
 	}
 }
 
+func TestRunnerClassifiesFailedAndCancelledTurns(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+	}{
+		{name: "failed", method: "turn/failed"},
+		{name: "cancelled", method: "turn/cancelled"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			workspacePath := t.TempDir()
+			fake := filepath.Join(t.TempDir(), "fake-codex")
+			script := fmt.Sprintf(`#!/bin/sh
+IFS= read -r line
+printf '%%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+IFS= read -r line
+printf '%%s\n' '{"id":2,"result":{"thread":{"id":"thread-failed"}}}'
+IFS= read -r line
+printf '%%s\n' '{"id":3,"result":{"turn":{"id":"turn-failed"}}}'
+printf '%%s\n' '{"method":"%s","params":{"reason":"classified"}}'
+`, tc.method)
+			if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			runner := New(runtimeconfig.CodexConfig{
+				Command:        fake,
+				ApprovalPolicy: "never",
+				ThreadSandbox:  "workspace-write",
+				TurnTimeoutMS:  5000,
+				ReadTimeoutMS:  5000,
+			})
+			result, err := runner.RunSession(context.Background(), SessionRequest{
+				WorkspacePath: workspacePath,
+				Issue:         issuemodel.Issue{Identifier: "ZEE-FAIL", Title: "failure"},
+				Prompts:       []TurnPrompt{{Text: "fail"}},
+			}, nil)
+			if err == nil {
+				t.Fatal("expected failed turn error")
+			}
+			if !strings.Contains(err.Error(), tc.method) {
+				t.Fatalf("error = %v, want method %q", err, tc.method)
+			}
+			if result.SessionID != "thread-failed-turn-failed" || len(result.Turns) != 1 {
+				t.Fatalf("partial result = %#v, want failed turn identity preserved", result)
+			}
+		})
+	}
+}
+
 func TestRunnerDoesNotAdvertiseDynamicToolsWithoutExecutor(t *testing.T) {
 	workspacePath := t.TempDir()
 	fake, trace := writeCompletingFakeCodex(t)

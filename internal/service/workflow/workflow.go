@@ -4,16 +4,26 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
+	"time"
 
+	"github.com/osteele/liquid"
 	"gopkg.in/yaml.v3"
 	runtimeconfig "symphony-go/internal/runtime/config"
 	issuemodel "symphony-go/internal/service/issue"
 )
 
-var variablePattern = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}`)
-var attemptBlockPattern = regexp.MustCompile(`(?s)\{%[[:space:]]*if[[:space:]]+attempt[[:space:]]*%\}(.*?)\{%[[:space:]]*endif[[:space:]]*%\}`)
+const defaultPromptTemplate = `You are working on a Linear issue.
+
+Identifier: {{ issue.identifier }}
+Title: {{ issue.title }}
+
+Body:
+{% if issue.description %}
+{{ issue.description }}
+{% else %}
+No description provided.
+{% endif %}`
 
 func Load(path string) (*runtimeconfig.Workflow, error) {
 	content, err := os.ReadFile(path)
@@ -35,29 +45,20 @@ func Load(path string) (*runtimeconfig.Workflow, error) {
 }
 
 func Render(template string, issue issuemodel.Issue, attempt *int) (string, error) {
-	rendered := attemptBlockPattern.ReplaceAllStringFunc(template, func(match string) string {
-		if attempt == nil {
-			return ""
-		}
-		parts := attemptBlockPattern.FindStringSubmatch(match)
-		if len(parts) == 2 {
-			return parts[1]
-		}
-		return match
-	})
+	source := template
+	if strings.TrimSpace(source) == "" {
+		source = defaultPromptTemplate
+	}
 
-	missing := ""
-	rendered = variablePattern.ReplaceAllStringFunc(rendered, func(match string) string {
-		key := variablePattern.FindStringSubmatch(match)[1]
-		value, ok := templateValue(key, issue, attempt)
-		if !ok {
-			missing = key
-			return match
-		}
-		return value
-	})
-	if missing != "" {
-		return "", fmt.Errorf("unknown template variable %q", missing)
+	engine := liquid.NewEngine()
+	engine.StrictVariables()
+	parsed, err := engine.ParseString(source)
+	if err != nil {
+		return "", fmt.Errorf("template_parse_error: %w template=%q", err, source)
+	}
+	rendered, err := parsed.RenderString(renderBindings(issue, attempt))
+	if err != nil {
+		return "", fmt.Errorf("template_render_error: %w", err)
 	}
 	return rendered, nil
 }
@@ -75,28 +76,59 @@ func splitFrontMatter(content []byte) ([]byte, []byte) {
 	return []byte(strings.Join(lines[1:], "\n")), nil
 }
 
-func templateValue(key string, issue issuemodel.Issue, attempt *int) (string, bool) {
-	switch key {
-	case "attempt":
-		if attempt == nil {
-			return "", true
-		}
-		return fmt.Sprintf("%d", *attempt), true
-	case "issue.id":
-		return issue.ID, true
-	case "issue.identifier":
-		return issue.Identifier, true
-	case "issue.title":
-		return issue.Title, true
-	case "issue.state":
-		return issue.State, true
-	case "issue.labels":
-		return strings.Join(issue.Labels, ", "), true
-	case "issue.url":
-		return issue.URL, true
-	case "issue.description":
-		return issue.Description, true
-	default:
-		return "", false
+func renderBindings(issue issuemodel.Issue, attempt *int) liquid.Bindings {
+	bindings := liquid.Bindings{
+		"attempt": nil,
+		"issue":   issueBinding(issue),
 	}
+	if attempt != nil {
+		bindings["attempt"] = *attempt
+	}
+	return bindings
+}
+
+func issueBinding(issue issuemodel.Issue) map[string]any {
+	blockers := make([]map[string]any, 0, len(issue.BlockedBy))
+	for _, blocker := range issue.BlockedBy {
+		blockers = append(blockers, map[string]any{
+			"id":         blocker.ID,
+			"identifier": blocker.Identifier,
+			"state":      blocker.State,
+		})
+	}
+	return map[string]any{
+		"id":          issue.ID,
+		"identifier":  issue.Identifier,
+		"title":       issue.Title,
+		"description": optionalString(issue.Description),
+		"priority":    optionalInt(issue.Priority),
+		"state":       issue.State,
+		"branch_name": optionalString(issue.BranchName),
+		"url":         optionalString(issue.URL),
+		"labels":      issue.Labels,
+		"blocked_by":  blockers,
+		"created_at":  optionalTime(issue.CreatedAt),
+		"updated_at":  optionalTime(issue.UpdatedAt),
+	}
+}
+
+func optionalString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+
+func optionalInt(value *int) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func optionalTime(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+	return value.UTC().Format(time.RFC3339)
 }

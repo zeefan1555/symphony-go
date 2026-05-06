@@ -199,6 +199,11 @@ func (o *Orchestrator) pollDispatched(ctx context.Context) ([]<-chan struct{}, e
 			o.logIssue(issue, "dispatch_skipped", reason, nil)
 			continue
 		}
+		refreshed, ok := o.revalidateCandidateForDispatch(ctx, rt, issue)
+		if !ok {
+			continue
+		}
+		issue = refreshed
 		fmt.Printf("issue=%s state=%s title=%s\n", issue.Identifier, issue.State, issue.Title)
 		done, ok := o.dispatchIssueDone(ctx, issue, 0)
 		if !ok {
@@ -208,6 +213,59 @@ func (o *Orchestrator) pollDispatched(ctx context.Context) ([]<-chan struct{}, e
 		dispatched = append(dispatched, done)
 	}
 	return dispatched, nil
+}
+
+func (o *Orchestrator) revalidateCandidateForDispatch(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue) (issuemodel.Issue, bool) {
+	issues, err := rt.tracker.FetchIssueStatesByIDs(ctx, []string{issue.ID})
+	if err != nil {
+		o.logIssue(issue, "dispatch_skipped", "issue refresh failed before dispatch", map[string]any{"error": err.Error()})
+		return issuemodel.Issue{}, false
+	}
+	if len(issues) == 0 {
+		o.logIssue(issue, "dispatch_skipped", "issue disappeared before dispatch", nil)
+		return issuemodel.Issue{}, false
+	}
+	refreshed, found := refreshedIssueByID(issues, issue.ID)
+	if !found {
+		o.logIssue(issue, "dispatch_skipped", "issue disappeared before dispatch", nil)
+		return issuemodel.Issue{}, false
+	}
+	refreshed = mergeIssueRefresh(issue, refreshed)
+	ok, reason := candidateEligible(refreshed, o.eligibilityState())
+	if !ok {
+		o.logIssue(refreshed, "dispatch_skipped", "stale candidate after issue refresh", map[string]any{"reason": reason})
+		return issuemodel.Issue{}, false
+	}
+	return refreshed, true
+}
+
+func refreshedIssueByID(issues []issuemodel.Issue, id string) (issuemodel.Issue, bool) {
+	for _, issue := range issues {
+		if issue.ID == id {
+			return issue, true
+		}
+	}
+	return issuemodel.Issue{}, false
+}
+
+func mergeIssueRefresh(base, refreshed issuemodel.Issue) issuemodel.Issue {
+	merged := base
+	if refreshed.ID != "" {
+		merged.ID = refreshed.ID
+	}
+	if refreshed.Identifier != "" {
+		merged.Identifier = refreshed.Identifier
+	}
+	if refreshed.Title != "" {
+		merged.Title = refreshed.Title
+	}
+	if refreshed.State != "" {
+		merged.State = refreshed.State
+	}
+	if refreshed.BlockedBy != nil {
+		merged.BlockedBy = refreshed.BlockedBy
+	}
+	return merged
 }
 
 func (o *Orchestrator) reconcileRunning(ctx context.Context) error {

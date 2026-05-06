@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	issuemodel "symphony-go/internal/service/issue"
 )
@@ -59,6 +60,86 @@ merge:
 	for _, want := range []string{"ZEE-中文", "中文标题", "第 2 次续跑", "中文描述"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered prompt missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
+func TestRenderSupportsLiquidControlFlowAndIssueMetadata(t *testing.T) {
+	priority := 2
+	createdAt := time.Date(2026, 2, 26, 18, 6, 48, 0, time.FixedZone("SGT", 8*60*60))
+	updatedAt := time.Date(2026, 2, 26, 18, 7, 3, 0, time.UTC)
+	issue := issuemodel.Issue{
+		ID:          "issue-1",
+		Identifier:  "ZEE-101",
+		Title:       "Render parity",
+		Description: "Render through Liquid.",
+		Priority:    &priority,
+		State:       "Todo",
+		BranchName:  "zeefan/render-parity",
+		URL:         "https://linear.app/demo/issue/ZEE-101",
+		Labels:      []string{"backend", "workflow"},
+		BlockedBy:   []issuemodel.BlockerRef{{ID: "blocker-1", Identifier: "ZEE-100", State: "Done"}},
+		CreatedAt:   &createdAt,
+		UpdatedAt:   &updatedAt,
+	}
+	attempt := 3
+	template := `Ticket {{ issue.identifier }} priority={{ issue.priority }} branch={{ issue.branch_name }}
+{% if issue.description %}{{ issue.description }}{% else %}No description{% endif %}
+{% for label in issue.labels %}[{{ label }}]{% endfor %}
+{% for blocker in issue.blocked_by %}blocked_by={{ blocker.identifier }}:{{ blocker.state }}{% endfor %}
+created={{ issue.created_at }} updated={{ issue.updated_at }}
+{% if attempt %}attempt={{ attempt }}{% endif %}`
+
+	rendered, err := Render(template, issue, &attempt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Ticket ZEE-101 priority=2 branch=zeefan/render-parity",
+		"Render through Liquid.",
+		"[backend][workflow]",
+		"blocked_by=ZEE-100:Done",
+		"created=2026-02-26T10:06:48Z",
+		"updated=2026-02-26T18:07:03Z",
+		"attempt=3",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered prompt missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
+func TestRenderUsesStrictVariables(t *testing.T) {
+	_, err := Render("Work on {{ missing.ticket_id }}", issuemodel.Issue{Identifier: "ZEE-1"}, nil)
+	if err == nil {
+		t.Fatal("expected strict variable error")
+	}
+	if !strings.Contains(err.Error(), "template_render_error") {
+		t.Fatalf("error = %v, want template_render_error", err)
+	}
+}
+
+func TestRenderSurfacesInvalidTemplateWithContext(t *testing.T) {
+	_, err := Render("{% if issue.identifier %}", issuemodel.Issue{Identifier: "ZEE-1"}, nil)
+	if err == nil {
+		t.Fatal("expected template parse error")
+	}
+	if !strings.Contains(err.Error(), "template_parse_error") || !strings.Contains(err.Error(), "{% if issue.identifier %}") {
+		t.Fatalf("error = %v, want template_parse_error with template context", err)
+	}
+}
+
+func TestRenderUsesDefaultPromptForBlankTemplate(t *testing.T) {
+	rendered, err := Render(" \n\t", issuemodel.Issue{
+		Identifier: "ZEE-DEFAULT",
+		Title:      "Default prompt",
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Identifier: ZEE-DEFAULT", "Title: Default prompt", "No description provided."} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("default prompt missing %q:\n%s", want, rendered)
 		}
 	}
 }

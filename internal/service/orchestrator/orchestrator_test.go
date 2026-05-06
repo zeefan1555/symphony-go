@@ -333,6 +333,83 @@ func TestPollDispatchesTwoIssuesConcurrently(t *testing.T) {
 	close(runner.release)
 }
 
+func TestPollSkipsCandidateThatTurnsTerminalBeforeDispatch(t *testing.T) {
+	ctx := context.Background()
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-STALE", Title: "stale", State: "In Progress"}
+	tracker := &reconciliationTracker{
+		activeIssues: []issuemodel.Issue{issue},
+		stateIssues:  []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}},
+	}
+	runner := &countingRunner{started: make(chan string, 1)}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates:   []string{"In Progress"},
+					TerminalStates: []string{"Done"},
+				},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	if err := o.poll(ctx); err != nil {
+		t.Fatalf("poll returned error: %v", err)
+	}
+	select {
+	case id := <-runner.started:
+		t.Fatalf("runner started for stale issue %s, want skip", id)
+	default:
+	}
+	if calls := tracker.calls(); strings.Join(calls, ",") != "FetchActiveIssues,FetchIssueStatesByIDs" {
+		t.Fatalf("tracker calls = %v, want active fetch then dispatch refresh", calls)
+	}
+}
+
+func TestPollSkipsTodoCandidateThatBecomesBlockedBeforeDispatch(t *testing.T) {
+	ctx := context.Background()
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-BLOCKED", Title: "blocked", State: "Todo"}
+	tracker := &reconciliationTracker{
+		activeIssues: []issuemodel.Issue{issue},
+		stateIssues: []issuemodel.Issue{{
+			ID:         issue.ID,
+			Identifier: issue.Identifier,
+			Title:      issue.Title,
+			State:      "Todo",
+			BlockedBy:  []issuemodel.BlockerRef{{ID: "blocker-1", Identifier: "ZEE-0", State: "In Progress"}},
+		}},
+	}
+	runner := &countingRunner{started: make(chan string, 1)}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates:   []string{"Todo", "In Progress"},
+					TerminalStates: []string{"Done"},
+				},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	if err := o.poll(ctx); err != nil {
+		t.Fatalf("poll returned error: %v", err)
+	}
+	select {
+	case id := <-runner.started:
+		t.Fatalf("runner started for blocked issue %s, want skip", id)
+	default:
+	}
+}
+
 func TestRunOnceWaitsForDispatchedWorkerCompletion(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -2456,9 +2533,7 @@ func (t *snapshotTracker) FetchIssue(context.Context, string) (issuemodel.Issue,
 }
 
 func (t *snapshotTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
-	issue := t.issue
-	issue.State = "Done"
-	return []issuemodel.Issue{issue}, nil
+	return []issuemodel.Issue{t.issue}, nil
 }
 
 func (t *snapshotTracker) UpdateIssueState(_ context.Context, _ string, state string) error {
@@ -2676,7 +2751,9 @@ func (t *listTracker) FetchIssue(_ context.Context, issueID string) (issuemodel.
 }
 
 func (t *listTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
-	return nil, nil
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]issuemodel.Issue(nil), t.issues...), nil
 }
 
 func (t *listTracker) UpdateIssueState(_ context.Context, issueID string, state string) error {
