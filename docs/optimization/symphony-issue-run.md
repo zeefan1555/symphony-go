@@ -3,6 +3,34 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 15:09 +08 - repo-only
+
+- Trigger: 用户根据 ZEE-93 MCP smoke 结果纠正方向：MCP 写入会触发审批，不能作为全自动 child workflow；应参考 `ref/elixir-symphony-example/.codex/skills/linear/SKILL.md`，回到本仓 listener 使用的 Linear GraphQL 路径。
+- Evidence:
+  - ZEE-93 retry 证明 listener 使用有效 `LINEAR_API_KEY` 后能完成 `Todo -> In Progress`、创建 `.worktrees/ZEE-93` 并启动 child Codex。
+  - 同一轮 child 使用 Linear MCP/app 读取可行，但 `save_comment` 写入触发 `mcpServer/elicitation/request`，runner 报错 `codex requested interactive MCP approval; unattended runs must not use MCP write tools`。
+  - 参考 skill `ref/elixir-symphony-example/.codex/skills/linear/SKILL.md` 的主路径是 `linear_graphql`，包括 issue 查询、team states、`issueUpdate`、`commentCreate` 和 `commentUpdate`。
+  - 代码层 `internal/integration/linear/client.go` 的 listener/tracker 也是 Linear GraphQL HTTP client，而不是 MCP 写入。
+- Optimization:
+  - Workflow 层：把 Linear 前置条件改回 `linear_graphql`，明确派生会话不要使用 Linear MCP/app issue/comment 写入。
+  - Skill/文档层：同步 `linear`、`linear-cli`、`symphony-issue-run`、`tdd-acceptance-pr`、`prd-issue-run` 和 `docs/agents/issue-tracker.md`，让自动化路径统一指向 GraphQL。
+  - 测试层：更新 repo workflow contract，锁住 `linear_graphql`、`issueUpdate`、`commentCreate` / `commentUpdate` 约束，并防止旧 MCP smoke 文案回归。
+- Files:
+  - `WORKFLOW.md`
+  - `.codex/skills/linear/SKILL.md`
+  - `.codex/skills/linear-cli/SKILL.md`
+  - `.codex/skills/symphony-issue-run/SKILL.md`
+  - `.codex/skills/tdd-acceptance-pr/SKILL.md`
+  - `.codex/skills/prd-issue-run/SKILL.md`
+  - `docs/agents/issue-tracker.md`
+  - `internal/service/workflow/workflow_test.go`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`git diff --check`
+  - 通过：`./test.sh ./internal/service/workflow`
+  - 通过：`make build`
+- Follow-up: 如果后续真实 child session 没有注入 `linear_graphql`，应把 Linear workpad/status 写入下沉到 orchestrator-owned GraphQL client，而不是回退 MCP 写入。
+
 ## 2026-05-06 14:55 +08 - ZEE-93
 
 - Trigger: 启动 MCP smoke issue-scoped listener，验证服务能否监听 Linear `Todo` 工单，并观察派生 Codex 会话是否使用 Linear MCP/app 工具。

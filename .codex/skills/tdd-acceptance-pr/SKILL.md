@@ -17,9 +17,9 @@ deterministic PR script, but do not reduce this flow to "go use another skill".
 - Work from the issue branch/worktree. If changes are on root `main`, move them
   to the requested feature branch/worktree without losing files.
 - Identify the Linear issue id from prompt, branch, PR body, or worktree path.
-- `gh` must be authenticated. In the current MCP smoke workflow, write Linear
-  through Linear MCP/app tools and do not fall back to `linear_graphql` or
-  `linear` CLI.
+- `gh` must be authenticated. For unattended Symphony child sessions, write
+  Linear through `linear_graphql`; do not use Linear MCP/app issue or comment
+  writes because they can require approval.
 - If the TDD evidence is stale or interrupted, rerun the smallest relevant tests.
 
 ## Acceptance Review

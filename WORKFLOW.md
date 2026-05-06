@@ -87,17 +87,17 @@ No description provided.
 
 只在当前 repo root 和该 issue 的 repository worktree 内工作，不要触碰其他路径。
 
-## 前置条件：使用 Linear MCP/app 工具，不要使用 Linear CLI
+## 前置条件：使用 `linear_graphql`，不要使用 Linear MCP/app 工具
 
-Agent 必须能和 Linear 通信。本 workflow 的冒烟目标是验证派生 Codex 会话能否使用 Linear MCP/app 工具，所以所有 Linear 读写默认使用当前会话可用的 Linear MCP/app 工具。不要使用 `linear` CLI 或 `linear_graphql` 作为兜底；如果 Linear MCP/app 工具在派生会话中不可用、需要交互式审批或调用失败，停止并记录 blocker，让外层 listener 日志暴露真实工具能力。
+Agent 必须能和 Linear 通信。本 workflow 的无人值守目标是验证派生 Codex 会话能否沿用 Symphony listener 使用的 Linear GraphQL 路径，而不是触发需要交互审批的 Linear MCP/app 写入。所有 Linear 读写默认使用当前会话注入的 `linear_graphql` 工具；如果该工具不可用，停止并记录 blocker，让外层 listener/orchestrator 通过自己的 Linear GraphQL client 接管状态和 workpad 写入。
 
 具体规则：
 
-- 读取 issue、team states、comments：使用 Linear MCP/app 读取工具，例如 `linear_get_issue` / `linear_list_comments` 或等价工具。
-- 更新 issue 状态：使用 Linear MCP/app issue 更新工具，例如 `linear_save_issue` 或等价工具。
-- 创建或更新 `## Codex Workpad`：使用 Linear MCP/app comment 工具，例如 `linear_save_comment` 或等价工具。
+- 读取 issue、team states、comments：使用 `linear_graphql` query，只请求当前步骤需要的字段。
+- 更新 issue 状态：先读取 team states 拿到目标 `stateId`，再使用 `linear_graphql` 的 `issueUpdate` mutation。
+- 创建或更新 `## Codex Workpad`：使用 `linear_graphql` 的 `commentCreate` / `commentUpdate` mutation。
 - 不读取 `.codex/skills/linear-cli/SKILL.md`，不执行 `linear auth whoami`、`linear issue view`、`linear issue update`、`linear issue comment ...` 等 CLI 命令。
-- 不调用 `linear_graphql`。本轮如果 MCP/app 工具缺失，正确结果是暴露 blocker，而不是绕回 GraphQL 或 CLI。
+- 不调用 Linear MCP/app issue/comment 工具作为兜底。无人值守 child session 中的 MCP 写入会触发审批，正确结果是暴露 blocker，而不是绕回 MCP 或 CLI。
 
 ## 默认姿态
 
@@ -116,7 +116,7 @@ Agent 必须能和 Linear 通信。本 workflow 的冒烟目标是验证派生 C
 
 ## 相关技能
 
-- Linear MCP/app：操作 Linear；本轮 smoke 要求派生会话优先使用 MCP/app 工具。
+- `linear`：使用 `.codex/skills/linear/SKILL.md` 的 `linear_graphql` 协议操作 Linear。
 - `pr`：当 issue 进入 `Merging` 时，使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow 创建/更新 PR、等待检查、squash merge，并同步 root `main`。
 
 ## Review 路由原则
@@ -163,7 +163,7 @@ Agent 必须能和 Linear 通信。本 workflow 的冒烟目标是验证派生 C
    - 如果 worktree 有未解释的脏改动，先在 workpad 记录并判断是否属于当前 issue；不要覆盖不理解的改动。
    - 如果当前分支不是 issue 分支，停止并记录 blocker，不要在错误分支上继续。
 5. 对 `Todo` ticket，启动顺序必须严格如下：
-   - 通过 Linear MCP/app issue 更新工具将状态更新为 `In Progress`
+   - 通过 `linear_graphql` issue update mutation 将状态更新为 `In Progress`
    - 查找或创建 `## Codex Workpad` bootstrap comment
    - 然后才开始分析、计划和实现
 6. 如果状态和 issue 内容不一致，添加一条短 comment 说明，然后走最稳妥的流程。
@@ -314,7 +314,7 @@ Agent 必须能和 Linear 通信。本 workflow 的冒烟目标是验证派生 C
 - 如果 issue 状态是 `Backlog`，不要修改它；等待人类移动到 `Todo`。
 - 不要编辑 issue body/description 来记录计划或进度。
 - 每个 issue 只使用一个持久 workpad comment：`## Codex Workpad`。
-- 如果 session 内无法通过 Linear MCP/app 工具编辑 comment，先记录 blocker；不要调用 Linear CLI 或 `linear_graphql` 兜底。
+- 如果 session 内无法通过 `linear_graphql` 编辑 comment，先记录 blocker；不要调用 Linear MCP/app 或 Linear CLI 兜底。
 - 临时 proof edit 只允许用于本地验证，commit 前必须恢复。
 - 如果发现超出范围的改进，创建单独 Backlog issue，不要扩大当前 scope；该 issue 要有清晰标题、描述、验收标准、同 project 归属、与当前 issue 的 `related` 链接，并在依赖当前 issue 时设置 `blockedBy`。
 - 未达到 `AI Review` 完成门槛前，不要移动到 `AI Review`；达到门槛后由 implementer agent 移动到 `AI Review`。

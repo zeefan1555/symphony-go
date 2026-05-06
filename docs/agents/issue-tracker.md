@@ -4,8 +4,9 @@
 
 ## 约定
 
-- 当前 MCP 冒烟 workflow 中，派生会话的 Linear 读写优先使用 Linear MCP/app 工具。
-- 不要在 MCP 冒烟里退回 `linear` CLI 或 `linear_graphql`；如果派生会话没有可用 MCP/app 工具，应记录 blocker。
+- 当前无人值守 workflow 中，派生会话的 Linear 读写使用注入的 `linear_graphql` 工具，和 listener 的 Linear GraphQL client 保持同一路径。
+- 不要在无人值守 child session 中使用 Linear MCP/app issue/comment 写入；MCP 写入可能触发审批，无法保证全自动化。
+- 不要从派生会话退回 `linear` CLI；如果 `linear_graphql` 不可用，应记录 blocker，让外层 listener/orchestrator 接管状态和 workpad 写入。
 - 对外可见文本默认使用中文，包括 Linear workpad 和交接记录。
 - 工作流执行类任务使用一个标题为 `## Codex Workpad` 的持久 Linear 评论作为进度事实源。
 - 除非用户或工作流明确要求其他状态，新建后续任务默认放到 `Backlog`。
