@@ -317,3 +317,28 @@ scripts/check_generated_hertz_boundary.sh
 ```bash
 rg -n "单个 Linear issue|同一个 issue|多开子代理|单 agent" AGENTS.md lesson.md
 ```
+
+## 2026-05-06: 语义评论仍由 AI 写
+
+### 用户纠正
+
+- 用户指出：监听服务不应该替 AI 写评论；监听服务不会分析评论内容是否完整，语义判断和 evidence 仍应由 AI 完成。
+
+### 错误模式
+
+- 这是技术判断错误：我把 workpad/comment 的样板化成本和语义完成性判断混在一起，过早建议把评论生成下沉到 orchestrator。
+- 这是边界错误：orchestrator 可以做确定性状态收口，但不应承担理解 issue、判断验收是否完成、生成交接证据的职责。
+
+### 防复犯规则
+
+- AI 负责分析 issue、更新 workpad/comment、写最终 evidence 和判断是否满足验收。
+- Orchestrator 只根据窄机器契约做确定性续航或收口，例如 `Review: PASS`、`Merge: PASS`。
+- 不要让监听服务替 AI 判断评论内容是否充分，也不要让监听服务生成语义 handoff 评论。
+
+### 固定动作
+
+- 修改 workflow 或 orchestrator 状态收口前，先检查是否越过 AI/comment 边界：
+
+```bash
+rg -n "Merge: PASS|Review: PASS|workpad|comment|Done" WORKFLOW.md internal/service/orchestrator .codex/skills
+```

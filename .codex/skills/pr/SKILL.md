@@ -72,6 +72,12 @@ to `Done`; return a final message beginning with `Merge: PASS` and include the
 PR URL, merge commit, and root status so the orchestrator can mark `Done` and
 run cleanup.
 
+Shell wrapper safety: do not use `status` as a shell variable name. In zsh,
+`status` is a readonly special parameter for the last exit code, so assigning
+the previous exit code to that name can fail after the PR has already merged
+and make the agent do unnecessary recovery work. Use names like
+`script_status` or `pr_status` when wrapping this script.
+
 Normal Merging path should be short: confirm this `SKILL.md` has been opened,
 run `test -x "$repo_root/.codex/skills/pr/scripts/pr_merge_flow.sh"`, prepare
 the title/body, then run the command above. Do not `sed` or otherwise expand the

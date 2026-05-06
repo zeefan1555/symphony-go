@@ -148,6 +148,8 @@ func TestRepoWorkflowUsesAIReviewPRSkillFastPath(t *testing.T) {
 		"agent 不直接移动 issue 到 `Done`",
 		"issue worktree agent 不负责写 repo-root `main` checkout",
 		"repo-root `main` checkout sync 由 orchestrator/operator 在 repo-root context 收尾",
+		"后续 continuation prompt 只用于阶段续航",
+		"正常简单任务不要为每个小命令更新 workpad",
 		"不要从 issue worktree agent 执行 `git -C /Users/bytedance/symphony-go pull --ff-only origin main`",
 		"`origin/main` 已 fetch 到该 merge commit",
 		"每一条 actionable reviewer comment",
@@ -219,10 +221,15 @@ func TestRepoSkillsDocumentFastPullAndMergePassContract(t *testing.T) {
 		"Do not `sed` or otherwise expand the",
 		"finish with a `Merge: PASS` message instead of moving the",
 		"Final response must start with `Merge: PASS`",
+		"do not use `status` as a shell variable name",
+		"`script_status` or `pr_status`",
 	} {
 		if !strings.Contains(prText, want) {
 			t.Fatalf("pr skill missing %q", want)
 		}
+	}
+	if strings.Contains(prText, "status=$?") {
+		t.Fatal("pr skill still demonstrates assigning to zsh readonly status variable")
 	}
 
 	runRaw, err := os.ReadFile(filepath.Join("..", "..", "..", ".codex", "skills", "symphony-issue-run", "SKILL.md"))

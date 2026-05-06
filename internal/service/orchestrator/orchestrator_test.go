@@ -1689,6 +1689,28 @@ func TestMergingPassFinalAutoPromotesToDone(t *testing.T) {
 	}
 }
 
+func TestMergingContinuationPromptKeepsDoneWithOrchestrator(t *testing.T) {
+	for _, want := range []string{
+		"Use the PR skill fast path",
+		"update the workpad once with merge evidence",
+		"Do not move Linear to Done from the agent",
+		"final reply must start with Merge: PASS",
+		"orchestrator can mark Done",
+	} {
+		if !strings.Contains(mergingContinuationPromptText, want) {
+			t.Fatalf("merging continuation prompt missing %q:\n%s", want, mergingContinuationPromptText)
+		}
+	}
+	for _, forbidden := range []string{
+		"move the issue to Done",
+		"move Linear to Done only after",
+	} {
+		if strings.Contains(mergingContinuationPromptText, forbidden) {
+			t.Fatalf("merging continuation prompt still contains forbidden wording %q:\n%s", forbidden, mergingContinuationPromptText)
+		}
+	}
+}
+
 func TestMergingWithoutPassDoesNotAutoPromoteToDone(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
