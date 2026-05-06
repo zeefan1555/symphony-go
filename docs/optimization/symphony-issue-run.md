@@ -3,6 +3,27 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 14:55 +08 - ZEE-93
+
+- Trigger: 启动 MCP smoke issue-scoped listener，验证服务能否监听 Linear `Todo` 工单，并观察派生 Codex 会话是否使用 Linear MCP/app 工具。
+- Evidence:
+  - Linear issue: `ZEE-93`，创建于 `Todo`，随后因 blocker 由监督会话移动到 `Human Review`。
+  - daemon log: `.symphony/logs/ZEE-93-20260506-145248.out`。
+  - listener 启动命令：`./bin/symphony-go run --workflow ./WORKFLOW.md --no-tui --issue ZEE-93 --merge-target main`。
+  - daemon log 连续记录 `Linear GraphQL status 401: Authentication required, not authenticated`，发生在 `startup_cleanup_fetch_failed` 和 `poll_error`，因此没有创建 `.worktrees/ZEE-93`，也没有启动 child Codex session。
+  - 当前 shell 的 `LINEAR_API_KEY` 存在但直接 GraphQL `viewer` 查询返回 `HTTP Error 401: Unauthorized`；`linear auth whoami` 同样返回 `You need to authenticate to access this operation.`。
+  - 监督会话已通过 Linear MCP 写入 ZEE-93 的 `## Codex Workpad` comment，说明 MCP connector 本身可写，但 Go listener 的 tracker auth 仍依赖 `WORKFLOW.md` 中的 `tracker.api_key: $LINEAR_API_KEY`。
+- Optimization:
+  - 本轮不改代码；先把结论记录为环境/auth blocker。派生会话是否能使用 Linear MCP/app 工具尚未被验证，因为 listener 在 poll 阶段已失败。
+  - 后续要么注入有效 `LINEAR_API_KEY` 后重跑 ZEE-93，要么把 Go listener 的 Linear tracker auth 设计为可复用 MCP/app 授权，但后者是代码级新需求，不能用 workflow 文案伪装完成。
+- Files:
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`git diff --check`
+  - 通过：`./test.sh ./internal/service/workflow`
+  - 通过：`make build`
+- Follow-up: 补有效 Linear API key 后，把 ZEE-93 从 `Human Review` 移回 `Todo` 或新建一张 Todo issue，再启动 listener 观察 child session tool calls。
+
 ## 2026-05-06 14:51 +08 - repo-only
 
 - Trigger: 用户希望把 Linear 读写从 CLI/`linear_graphql` 切到 MCP，启动服务后通过真实 Linear issue smoke 验证派生 Codex 会话是否会使用 Linear MCP/app 工具。
