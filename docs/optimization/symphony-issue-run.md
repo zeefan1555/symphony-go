@@ -24,6 +24,26 @@
   - 通过：`make build`
 - Follow-up: 补有效 Linear API key 后，把 ZEE-93 从 `Human Review` 移回 `Todo` 或新建一张 Todo issue，再启动 listener 观察 child session tool calls。
 
+## 2026-05-06 15:02 +08 - ZEE-93 retry with valid key
+
+- Trigger: 用户提供新的 Linear API key，要求继续验证同一条 MCP smoke。
+- Evidence:
+  - 新 key 通过 GraphQL `viewer` 查询，返回当前用户 `zee fan`。
+  - ZEE-93 从 `Human Review` 移回 `Todo` 后，listener 使用同一个临时环境 key 启动：`.symphony/logs/ZEE-93-20260506-145834.out`。
+  - human log `.symphony/logs/run-20260506-145834.human.log` 记录 `Todo -> In Progress`、`.worktrees/ZEE-93` 创建、child Codex session 启动。
+  - 第一轮 child 因读取 memory 输出过长触发 `bufio.Scanner: token too long`，orchestrator 随后自动启动第二轮 child。
+  - 第二轮 child 未退回 `linear` CLI 或 `linear_graphql`，并通过 Linear MCP/app 完成 `get_issue`、`list_comments`、team states 读取；JSONL 里对应工具事件是 `mcpToolCall`。
+  - child 尝试用 Linear MCP `save_comment` 更新 Workpad 时触发 `mcpServer/elicitation/request`，runner 报错 `codex requested interactive MCP approval; unattended runs must not use MCP write tools`。
+- Optimization:
+  - 本轮结论是框架差距而不是 auth 问题：Go listener tracker auth 可通过有效 API key 解决；child session 的 Linear MCP 读可用；Linear MCP 写在无人值守 run 中会触发交互审批并失败。
+  - 当前暂不改代码。后续若要让 MCP 写成为正常路径，需要在 Codex app-server / runner 层提供明确的 MCP approval policy 或 orchestrator-owned Linear 写入，不应只靠 workflow 文案要求 child 写 MCP。
+- Files:
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`git diff --check`
+  - 通过：ZEE-93 listener retry 到 child MCP read；blocker 证据写入 ZEE-93 Workpad。
+- Follow-up: 设计一条最小代码改动：要么支持 unattended MCP write auto-approval allowlist，要么恢复 child read-only MCP、由 orchestrator 负责 Linear writes。
+
 ## 2026-05-06 14:51 +08 - repo-only
 
 - Trigger: 用户希望把 Linear 读写从 CLI/`linear_graphql` 切到 MCP，启动服务后通过真实 Linear issue smoke 验证派生 Codex 会话是否会使用 Linear MCP/app 工具。
