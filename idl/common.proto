@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package common;
+
+option go_package = "symphony-go/gen/hertz/model/common";
+
+message CapabilityBoundary {
+  string name = 1;
+  string purpose = 2;
+  string handwritten_adapter = 3;
+}
+
+message RuntimeCounts {
+  int32 running = 1;
+  int32 retrying = 2;
+}
+
+message TokenUsage {
+  int32 input_tokens = 1;
+  int32 output_tokens = 2;
+  int32 total_tokens = 3;
+}
+
+message IssueRun {
+  string issue_id = 1;
+  string issue_identifier = 2;
+  string state = 3;
+  optional string workspace_path = 4;
+  optional string session_id = 5;
+  optional int32 pid = 6;
+  int32 turn_count = 7;
+  optional string last_event = 8;
+  optional string last_message = 9;
+  optional string started_at = 10;
+  optional string last_event_at = 11;
+  TokenUsage tokens = 12;
+  double runtime_seconds = 13;
+}
+
+message RetryRun {
+  string issue_id = 1;
+  string issue_identifier = 2;
+  int32 attempt = 3;
+  string due_at = 4;
+  optional string error = 5;
+  optional string workspace_path = 6;
+}
+
+message CodexTotals {
+  int32 input_tokens = 1;
+  int32 output_tokens = 2;
+  int32 total_tokens = 3;
+  double seconds_running = 4;
+}
+
+message PollingStatus {
+  bool checking = 1;
+  optional string next_poll_at = 2;
+  int64 next_poll_in_ms = 3;
+  int32 interval_ms = 4;
+  optional string last_poll_at = 5;
+}
+
+message RuntimeState {
+  string generated_at = 1;
+  RuntimeCounts counts = 2;
+  repeated IssueRun running = 3;
+  repeated RetryRun retrying = 4;
+  CodexTotals codex_totals = 5;
+  PollingStatus polling = 6;
+  optional string last_error = 7;
+}
+
+message IssueDetail {
+  string issue_id = 1;
+  string issue_identifier = 2;
+  string status = 3;
+  optional IssueRun running = 4;
+  optional RetryRun retry = 5;
+}
+
+message ErrorDetail {
+  string code = 1;
+  string message = 2;
+}
+
+message ErrorEnvelope {
+  ErrorDetail error = 1;
+}

@@ -10,7 +10,7 @@ _Avoid_: 内部状态机接口、运行时 struct 镜像
 
 **控制面 IDL**:
 用 IDL 表达的控制面 API 契约，只描述未来可能被外部调用的接口和稳定消息。
-_Avoid_: 把所有 Go struct 原样翻译成 thrift
+_Avoid_: 把所有 Go struct 原样翻译成 protobuf
 
 **内部架构脚手架 IDL**:
 用 IDL 按子系统能力描述内部实现边界，帮助维护者和 agent 理解职责并生成框架脚手架。
@@ -29,7 +29,7 @@ _Avoid_: HTTP 路由 IDL, Kitex 专用模型
 _Avoid_: 复用公共 Empty, 直接返回公共模型, 多个接口共享同一个 Req 或 Resp
 
 **主 IDL 入口**:
-`idl/main.thrift` 中拥有唯一 Hertz service 和全部 HTTP route annotations 的生成入口。
+`idl/main.proto` 中拥有唯一 Hertz service 和全部 HTTP route annotations 的生成入口。
 _Avoid_: 只 include 子 IDL, 子 IDL 内定义 service route
 
 **业务 POST 接口**:
@@ -152,7 +152,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 
 ## Example dialogue
 
-> **Dev:** “要不要把 orchestrator 的 running map 放进 thrift?”
+> **Dev:** “要不要把 orchestrator 的 running map 放进 protobuf?”
 > **Domain expert:** “不要。IDL 只定义控制面 API；running map 是运行时状态，只能通过状态查询响应被投影出来。”
 >
 > **Dev:** “那能不能用 IDL 描述 workspace 和 agent runner 的能力边界，方便生成脚手架?”
@@ -163,7 +163,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 
 ## Flagged ambiguities
 
-- “抽 IDL”已解析为抽取 **控制面 IDL**，不是把现有 Go struct 批量翻译成 thrift。
+- “抽 IDL”已解析为抽取 **控制面 IDL**，不是把现有 Go struct 批量翻译成 protobuf。
 - “核心接口抽 IDL”已解析为抽取 **内部架构脚手架 IDL**，按能力分类描述内部边界并生成脚手架，不默认暴露外部 HTTP API。
 - “按类别分文件”已解析为按运行子系统分文件，例如 orchestrator、workspace、agent runner、workflow、tracker、observability；不按 workflow 状态阶段分文件。
 - “Hertz 管理代码”已解析为 IDL-first 生成标准 Hertz 根目录外壳，不是生成业务状态机或覆盖手写核心实现。
@@ -177,7 +177,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - “内部 scaffold 变成外部 HTTP 路由”已解析为暴露 **诊断控制面 API**，不是把这些接口承诺为稳定产品 API。
 - “scaffold Adapter”已解析为旧设计残留；当前长期链路使用 **Hertz 绑定层** 和 **手写服务实现**，不新增单实现 Adapter seam。
 - “所有核心函数都被 Hz 管理”已解析为 Hz 管理 HTTP 契约、路由注册、handler 骨架和生成模型；业务逻辑仍由 **手写服务实现** 拥有。
-- “统一 main.thrift 生成”已解析为 **主 IDL 入口** 拥有唯一 service 和所有 route annotations；只 include 子 IDL 不足以让 Hertz 注册子 service 路由。
+- “统一 main.proto 生成”已解析为 **主 IDL 入口** 拥有唯一 service 和所有 route annotations；只 include 子 IDL 不足以让 Hertz 注册子 service 路由。
 - “默认 POST”已解析为主 IDL 注册的业务 HTTP 接口全部使用 **业务 POST 接口**，以便统一本地调试和 agent/TUI 调用。
 - “路由命名”已解析为使用 **动作式路由**，按领域和 method kebab-case 映射，不采用 REST 资源式路径。
 - “issue 管理器”已解析为 **Issue Tracker 集成**；Linear 是具体实现，长期目录为 `internal/integration/linear`，不属于 **业务服务层**。

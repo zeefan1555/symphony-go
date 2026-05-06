@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package control;
+
+option go_package = "symphony-go/gen/hertz/model/control";
+
+import "api.proto";
+import "common.proto";
+
+message GetStateReq {}
+
+message GetStateResp {
+  common.RuntimeState state = 1;
+}
+
+message RefreshReq {}
+
+message RefreshResp {
+  bool accepted = 1;
+  string status = 2;
+}
+
+message GetIssueReq {
+  string issue_identifier = 1 [(api.body) = "issue_identifier"];
+}
+
+message GetIssueResp {
+  common.IssueDetail issue = 1;
+}

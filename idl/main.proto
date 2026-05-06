@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package symphonyapi;
+
+option go_package = "symphony-go/gen/hertz/model/api";
+
+import "api.proto";
+import "control.proto";
+import "orchestrator.proto";
+import "workspace.proto";
+import "workflow.proto";
+import "codex_session.proto";
+
+service SymphonyAPI {
+  rpc GetState(control.GetStateReq) returns (control.GetStateResp) {
+    option (api.post) = "/api/v1/control/get-state";
+  }
+  rpc Refresh(control.RefreshReq) returns (control.RefreshResp) {
+    option (api.post) = "/api/v1/control/refresh";
+  }
+  rpc GetIssue(control.GetIssueReq) returns (control.GetIssueResp) {
+    option (api.post) = "/api/v1/control/get-issue";
+  }
+  rpc ProjectIssueRun(orchestrator.ProjectIssueRunReq) returns (orchestrator.ProjectIssueRunResp) {
+    option (api.post) = "/api/v1/orchestrator/project-issue-run";
+  }
+  rpc ResolveWorkspacePath(workspace.ResolveWorkspacePathReq) returns (workspace.ResolveWorkspacePathResp) {
+    option (api.post) = "/api/v1/workspace/resolve";
+  }
+  rpc ValidateWorkspacePath(workspace.ValidateWorkspacePathReq) returns (workspace.ValidateWorkspacePathResp) {
+    option (api.post) = "/api/v1/workspace/validate";
+  }
+  rpc PrepareWorkspace(workspace.PrepareWorkspaceReq) returns (workspace.PrepareWorkspaceResp) {
+    option (api.post) = "/api/v1/workspace/prepare";
+  }
+  rpc CleanupWorkspace(workspace.CleanupWorkspaceReq) returns (workspace.CleanupWorkspaceResp) {
+    option (api.post) = "/api/v1/workspace/cleanup";
+  }
+  rpc LoadWorkflow(workflow.LoadWorkflowReq) returns (workflow.LoadWorkflowResp) {
+    option (api.post) = "/api/v1/workflow/load";
+  }
+  rpc RenderWorkflowPrompt(workflow.RenderWorkflowPromptReq) returns (workflow.RenderWorkflowPromptResp) {
+    option (api.post) = "/api/v1/workflow/render-prompt";
+  }
+  rpc RunTurn(codexsession.RunTurnReq) returns (codexsession.RunTurnResp) {
+    option (api.post) = "/api/v1/codex-session/run-turn";
+  }
+}

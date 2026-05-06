@@ -109,6 +109,7 @@
 - `internal/runtime/...` 承载本地 daemon 运行支撑，包括配置解析、日志事件、观测快照和进程级偏好。
 - `internal/integration/...` 承载第三方系统接入，包括 Linear issue tracker client、fake、状态推进和 blocker normalization。
 - `internal/transport/...` 承载入站协议层，包括 Hertz HTTP hook/server、HTTP error envelope 和协议模型转换。
+- `idl/main.proto` 是控制面唯一 Hertz service 入口；`buf.yaml` 和 `make idl-lint` 是 IDL 自动化检查入口。
 - `gen/hertz/...` 是标准 Hertz 生成外壳，是控制面生成模型、handler skeleton 和 router 的权威来源；不要把手写业务逻辑放入 `gen/hertz/model` 或 `gen/hertz/router`。
 - 旧顶层 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/generated`、`internal/types`、`internal/config`、`internal/logging`、`internal/observability`、`internal/issuetracker` 与 `internal/control/hertz*` 已删除，不得重新引入；新增业务逻辑必须落到上述长期边界。
 - 不使用 `adapter` 或 `platform` 作为长期目录名；如果能力无法归入现有语义根，先更新 PRD 或创建 follow-up，不临时新增顶层目录。

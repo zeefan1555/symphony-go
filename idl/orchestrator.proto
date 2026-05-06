@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package orchestrator;
+
+option go_package = "symphony-go/gen/hertz/model/orchestrator";
+
+import "api.proto";
+import "common.proto";
+
+message ProjectIssueRunReq {
+  string issue_identifier = 1 [(api.body) = "issue_identifier"];
+}
+
+message IssueRunProjection {
+  common.CapabilityBoundary boundary = 1;
+  string issue_identifier = 2;
+  string runtime_state = 3;
+}
+
+message ProjectIssueRunResp {
+  IssueRunProjection projection = 1;
+}

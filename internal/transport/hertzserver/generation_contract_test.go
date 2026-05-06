@@ -35,7 +35,8 @@ func TestRepositoryDocumentsHertzGenerationCommand(t *testing.T) {
 	scriptText := string(script)
 	for _, want := range []string{
 		"hz new",
-		"idl/main.thrift",
+		"idl/main.proto",
+		"buf lint",
 		"gen/hertz/handler",
 		"gen/hertz/model",
 		"gen/hertz/router",
@@ -57,13 +58,14 @@ func TestMaintainerWorkflowDocumentsIDLBoundariesAndGeneration(t *testing.T) {
 	text := string(doc)
 
 	for _, want := range []string{
-		"`idl/main.thrift`",
-		"`idl/common.thrift`",
-		"`idl/control.thrift`",
-		"`idl/orchestrator.thrift`",
-		"`idl/workspace.thrift`",
-		"`idl/workflow.thrift`",
-		"`idl/codex_session.thrift`",
+		"`idl/main.proto`",
+		"`idl/common.proto`",
+		"`idl/control.proto`",
+		"`idl/orchestrator.proto`",
+		"`idl/workspace.proto`",
+		"`idl/workflow.proto`",
+		"`idl/codex_session.proto`",
+		"`buf lint`",
 		"`gen/hertz/handler`",
 		"`gen/hertz/model`",
 		"`gen/hertz/router`",
@@ -100,24 +102,24 @@ func TestMaintainerWorkflowDocumentsReviewAndTransportBoundaries(t *testing.T) {
 }
 
 func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
-	commonIDL, err := os.ReadFile("../../../idl/common.thrift")
+	commonIDL, err := os.ReadFile("../../../idl/common.proto")
 	if err != nil {
 		t.Fatalf("read common IDL: %v", err)
 	}
-	if strings.Contains(string(commonIDL), "api.") {
+	if strings.Contains(string(commonIDL), "(api.") {
 		t.Fatalf("shared control model IDL must not contain Hertz api annotations")
 	}
 
-	mainIDL, err := os.ReadFile("../../../idl/main.thrift")
+	mainIDL, err := os.ReadFile("../../../idl/main.proto")
 	if err != nil {
 		t.Fatalf("read main IDL: %v", err)
 	}
 	mainText := string(mainIDL)
-	if strings.Contains(mainText, `api.post="/api/v1/control/get-scaffold"`) ||
+	if strings.Contains(mainText, `(api.post) = "/api/v1/control/get-scaffold"`) ||
 		strings.Contains(mainText, "GetScaffold") {
 		t.Fatalf("main IDL must not define the retired scaffold control route")
 	}
-	if strings.Contains(mainText, "api.get") {
+	if strings.Contains(mainText, "(api.get)") {
 		t.Fatalf("business routes in main IDL must use POST annotations")
 	}
 
@@ -127,7 +129,7 @@ func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
 			t.Fatalf("read child IDL %s: %v", path, err)
 		}
 		childText := string(childIDL)
-		for _, forbidden := range []string{"api.get", "api.post", "api.path"} {
+		for _, forbidden := range []string{"(api.get)", "(api.post)", "(api.path)"} {
 			if strings.Contains(childText, forbidden) {
 				t.Fatalf("%s must not own business route annotation %q", path, forbidden)
 			}
@@ -136,7 +138,7 @@ func TestIDLSeparatesSharedModelsFromHertzRoutes(t *testing.T) {
 }
 
 func TestUnifiedMainIDLControlsTopLevelContracts(t *testing.T) {
-	mainIDL, err := os.ReadFile("../../../idl/main.thrift")
+	mainIDL, err := os.ReadFile("../../../idl/main.proto")
 	if err != nil {
 		t.Fatalf("read main IDL: %v", err)
 	}
@@ -163,7 +165,7 @@ func TestUnifiedMainIDLControlsTopLevelContracts(t *testing.T) {
 		if method.Domain != contract.Domain || method.Route != contract.Route {
 			t.Fatalf("method %s = %#v, want %#v", method.Method, method, contract)
 		}
-		expectedSignature := method.Domain + "." + method.Method + "Resp " + method.Method + "(1: " + method.Domain + "." + method.Method + "Req req)"
+		expectedSignature := "rpc " + method.Method + "(" + method.Domain + "." + method.Method + "Req) returns (" + method.Domain + "." + method.Method + "Resp)"
 		if !strings.Contains(mainText, expectedSignature) {
 			t.Fatalf("main IDL method %s must use dedicated XxxReq/XxxResp signature %q", method.Method, expectedSignature)
 		}
@@ -173,7 +175,7 @@ func TestUnifiedMainIDLControlsTopLevelContracts(t *testing.T) {
 			t.Fatalf("main IDL missing method %s", method)
 		}
 	}
-	if strings.Contains(mainText, "common.Empty") {
+	if strings.Contains(mainText, "google.protobuf.Empty") {
 		t.Fatalf("main IDL must not use shared Empty top-level request/response")
 	}
 }
@@ -196,7 +198,7 @@ func TestChildIDLFilesOnlyDefineContracts(t *testing.T) {
 		}
 		for _, method := range methodsByDomain[domain] {
 			for _, suffix := range []string{"Req", "Resp"} {
-				want := "struct " + method + suffix
+				want := "message " + method + suffix
 				if !strings.Contains(text, want) {
 					t.Fatalf("%s child IDL missing %q", path, want)
 				}
@@ -206,12 +208,12 @@ func TestChildIDLFilesOnlyDefineContracts(t *testing.T) {
 }
 
 func TestAllBusinessRoutesArePostActionRoutes(t *testing.T) {
-	mainIDL, err := os.ReadFile("../../../idl/main.thrift")
+	mainIDL, err := os.ReadFile("../../../idl/main.proto")
 	if err != nil {
 		t.Fatalf("read main IDL: %v", err)
 	}
 	mainText := string(mainIDL)
-	for _, forbidden := range []string{"api.get", "api.put", "api.delete", "api.patch"} {
+	for _, forbidden := range []string{"(api.get)", "(api.put)", "(api.delete)", "(api.patch)"} {
 		if strings.Contains(mainText, forbidden) {
 			t.Fatalf("business routes in main IDL must not use %s", forbidden)
 		}
@@ -310,15 +312,15 @@ func TestHertzControlPlaneUsesSingleBindingModule(t *testing.T) {
 
 func parseHertzMethods(t *testing.T, mainText string) []hertzMethodContract {
 	t.Helper()
-	methodPattern := regexp.MustCompile(`(?m)^\s+([a-z_]+)\.([A-Za-z0-9]+)Resp\s+([A-Za-z0-9]+)\(1:\s+([a-z_]+)\.([A-Za-z0-9]+)Req req\)\s+\(api\.post="([^"]+)"\)`)
+	methodPattern := regexp.MustCompile(`(?ms)rpc\s+([A-Za-z0-9]+)\(([a-z]+)\.([A-Za-z0-9]+)Req\)\s+returns\s+\(([a-z]+)\.([A-Za-z0-9]+)Resp\)\s+\{\s*option\s+\(api\.post\)\s*=\s*"([^"]+)";\s*\}`)
 	matches := methodPattern.FindAllStringSubmatch(mainText, -1)
 	methods := make([]hertzMethodContract, 0, len(matches))
 	for _, match := range matches {
-		respDomain := match[1]
-		respMethod := match[2]
-		method := match[3]
-		reqDomain := match[4]
-		reqMethod := match[5]
+		method := match[1]
+		reqDomain := match[2]
+		reqMethod := match[3]
+		respDomain := match[4]
+		respMethod := match[5]
 		if respDomain != reqDomain {
 			t.Fatalf("method %s uses mismatched domains: resp=%s req=%s", method, respDomain, reqDomain)
 		}
@@ -342,7 +344,7 @@ func expectedHertzMethodContracts() []hertzMethodContract {
 		{Domain: "workspace", Method: "CleanupWorkspace", Route: "/api/v1/workspace/cleanup"},
 		{Domain: "workflow", Method: "LoadWorkflow", Route: "/api/v1/workflow/load"},
 		{Domain: "workflow", Method: "RenderWorkflowPrompt", Route: "/api/v1/workflow/render-prompt"},
-		{Domain: "codex_session", Method: "RunTurn", Route: "/api/v1/codex-session/run-turn"},
+		{Domain: "codexsession", Method: "RunTurn", Route: "/api/v1/codex-session/run-turn"},
 	}
 }
 
@@ -356,11 +358,11 @@ func childContractIDLPaths() []string {
 
 func childContractIDLPathByDomain() map[string]string {
 	return map[string]string{
-		"control":       "control.thrift",
-		"orchestrator":  "orchestrator.thrift",
-		"workspace":     "workspace.thrift",
-		"workflow":      "workflow.thrift",
-		"codex_session": "codex_session.thrift",
+		"control":      "control.proto",
+		"orchestrator": "orchestrator.proto",
+		"workspace":    "workspace.proto",
+		"workflow":     "workflow.proto",
+		"codexsession": "codex_session.proto",
 	}
 }
 

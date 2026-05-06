@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package workflow;
+
+option go_package = "symphony-go/gen/hertz/model/workflow";
+
+import "api.proto";
+import "common.proto";
+
+message LoadWorkflowReq {
+  string workflow_path = 1 [(api.body) = "workflow_path"];
+}
+
+message LoadWorkflowResp {
+  WorkflowSummary summary = 1;
+}
+
+message RenderWorkflowPromptReq {
+  string workflow_path = 1 [(api.body) = "workflow_path"];
+  string issue_identifier = 2 [(api.body) = "issue_identifier"];
+  string issue_title = 3 [(api.body) = "issue_title"];
+  string issue_description = 4 [(api.body) = "issue_description"];
+  bool has_attempt = 5 [(api.body) = "has_attempt"];
+  int32 attempt = 6 [(api.body) = "attempt"];
+}
+
+message RenderWorkflowPromptResp {
+  WorkflowRenderResult result = 1;
+}
+
+message WorkflowSummary {
+  common.CapabilityBoundary boundary = 1;
+  string workflow_path = 2;
+  repeated string state_names = 3;
+}
+
+message WorkflowRenderResult {
+  common.CapabilityBoundary boundary = 1;
+  string prompt = 2;
+}
