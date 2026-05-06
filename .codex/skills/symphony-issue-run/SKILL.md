@@ -24,9 +24,10 @@ Do not use it for other repositories.
   for a manual gate.
 - `Human Review` is only an exceptional hold for real external blockers such as
   missing auth, unavailable tools, or permissions that cannot be fixed in-session.
-- Linear writes from unattended runs must use `linear_graphql` inside the child
-  workflow or the local `linear` CLI from the supervising session. Do not use
-  Linear MCP/app tools in child agents.
+- Linear reads and writes in child agents must follow `WORKFLOW.md`. The current
+  smoke workflow intentionally requires Linear MCP/app tools and must not fall
+  back to `linear` CLI or `linear_graphql` when testing child-session tool
+  availability.
 - Issue work happens in `.worktrees/<ISSUE>`. Post-run optimization of the repo
   happens in the repo root after the target issue is terminal.
 - Every observed improvement must be recorded in
@@ -36,16 +37,19 @@ Do not use it for other repositories.
 
 ## Preflight
 
-Run from the repository root and confirm auth, branch, and workflow policy:
+Run from the repository root and confirm branch, workflow policy, and Linear
+access through the active MCP/app surface:
 
 ```sh
 git rev-parse --show-toplevel
 pwd
-linear --version
-linear auth whoami
 git status --short --branch
 rg -n "review_policy:|mode:|on_ai_fail|active_states|terminal_states" WORKFLOW.md
 ```
+
+Use the active Linear MCP/app tools to confirm the target project/team and any
+created smoke issue. Do not treat `linear --version` or `linear auth whoami` as
+the health gate for this MCP smoke.
 
 Read `WORKFLOW.md` before creating the issue. The workflow is the source of
 truth for active states, AI review policy, worktree root, merge behavior, and
@@ -58,12 +62,10 @@ conflict.
 
 ## Create The Issue
 
-Create the issue with the `linear` CLI. Use a temporary Markdown file for the
-body:
+Create the issue with Linear MCP/app tools. The issue body should follow this
+shape:
 
-```sh
-tmp_issue=$(mktemp)
-cat > "$tmp_issue" <<'EOF'
+```md
 ## 背景
 <写清楚为什么要做>
 
@@ -79,26 +81,17 @@ cat > "$tmp_issue" <<'EOF'
 - 使用当前仓库的 `.worktrees/<ISSUE>` worktree。
 - 让 Symphony Go listener 按 `WORKFLOW.md` 全自动跑完：
   `Todo -> In Progress -> AI Review -> Merging -> Done`。
+- Linear 读写必须使用派生会话可用的 Linear MCP/app 工具；不要调用
+  `linear` CLI 或 `linear_graphql` 兜底。
 - Linear workpad、状态说明、commit message 和可见说明默认使用中文。
 - `Merging` 阶段使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow；
   不在当前 sandbox 内直接把 issue worktree 分支合入本地 `main`。
-EOF
-
-linear issue create \
-  --team "ZEE" \
-  --project "symphony-test-c2a66ab0f2e7" \
-  --state "Todo" \
-  --title "<中文 issue 标题>" \
-  --description-file "$tmp_issue" \
-  --no-interactive
 ```
 
 Capture the identifier and URL:
 
-```sh
-linear issue mine --team "ZEE" --project "symphony-test-c2a66ab0f2e7" --all-states --limit 10
-linear issue view <ISSUE> --json
-```
+Use Linear MCP/app issue read tools to verify identifier, URL, state, team, and
+project.
 
 Use `Backlog` only when the user explicitly wants a manual start. For the normal
 automation loop, create the issue directly in `Todo`.
@@ -170,11 +163,13 @@ Watch the issue, human log, and daemon log until terminal. Do not stop at
 
 ```sh
 ISSUE=<ISSUE>
-linear issue view "$ISSUE" --json
 latest_human=$(ls -t .symphony/logs/run-*.human.log | head -1)
 tail -n 160 "$latest_human"
 tail -n 120 "$log"
 ```
+
+Use Linear MCP/app issue read tools in the supervising session to verify the
+current issue state while monitoring.
 
 Expected healthy evidence:
 
@@ -190,12 +185,13 @@ Expected healthy evidence:
 If the issue stalls, diagnose before restarting:
 
 ```sh
-linear issue view "$ISSUE" --json
 git worktree list --porcelain | rg -n "$ISSUE|\\.worktrees/$ISSUE" || true
 rg -n "$ISSUE|state_changed|ai_review|rework|merge|blocked|error" "$latest_human"
 rg -n "$ISSUE|state_changed|ai_review|rework|merge|blocked|error" .symphony/logs/run-*.jsonl
 ps -ef | rg 'symphony-go|codex app-server' | rg -v rg
 ```
+
+Also re-read the issue with Linear MCP/app tools before restarting.
 
 Treat repeated stalls as framework signal. Do not keep restarting blindly.
 
@@ -216,8 +212,10 @@ git status --short --branch
 git rev-parse --short HEAD
 git rev-parse --short origin/main
 git worktree list --porcelain | rg -n "<ISSUE>|\\.worktrees/<ISSUE>" || true
-linear issue view <ISSUE> --json
 ```
+
+Use Linear MCP/app issue read tools to verify final issue state, workpad
+evidence, and links.
 
 ## Stop The Issue Listener
 
@@ -308,7 +306,8 @@ the exact files.
 - Do not stop at `AI Review` or `Merging`; wait for terminal or a real blocker.
 - Do not run only `make run-once` when the user asked for a full framework run.
 - Do not start a second listener when one is already polling the same issue.
-- Do not use Linear MCP/app tools from unattended child agents.
+- Do not let child agents fall back to Linear CLI or `linear_graphql` during an
+  MCP smoke.
 - Do not hardcode another repository path, remote, branch, project, or model.
 - Do not declare health from a PID file alone; confirm with `ps` and logs.
 - Do not delete `.worktrees/<ISSUE>` manually while the issue is active.

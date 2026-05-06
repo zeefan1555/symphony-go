@@ -143,6 +143,9 @@ func TestRepoWorkflowUsesPRMergeFlow(t *testing.T) {
 		"脚本前不要再执行 `linear auth whoami`",
 		"脚本前不要读取完整历史 workpad",
 		"如果 PR script 成功但 root `main` 没有同步到 `origin/main`",
+		"使用 Linear MCP/app 工具，不要使用 Linear CLI",
+		"不要使用 `linear` CLI 或 `linear_graphql` 作为兜底",
+		"通过 Linear MCP/app issue 更新工具将状态更新为 `In Progress`",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("repo workflow missing %q", want)
@@ -153,6 +156,8 @@ func TestRepoWorkflowUsesPRMergeFlow(t *testing.T) {
 		"验证后 `git push origin main`",
 		"`Merging` 阶段不走 PR land",
 		"在 `Merging` 中不要创建 PR",
+		"不要使用 Linear MCP/app 工具",
+		"所有 Linear 读写默认优先使用注入的 `linear_graphql` 工具",
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("repo workflow still contains local merge wording %q", forbidden)

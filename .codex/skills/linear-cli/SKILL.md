@@ -1,6 +1,6 @@
 ---
 name: linear-cli
-description: Use when unattended Symphony/Codex runs need to read or write Linear through the `linear` CLI, especially when Linear MCP/app tools would trigger interactive approval.
+description: Legacy fallback for reading or writing Linear through the `linear` CLI. Do not use for the current MCP smoke workflow unless the user explicitly asks to test CLI fallback.
 ---
 
 # Linear CLI
@@ -10,10 +10,10 @@ description: Use when unattended Symphony/Codex runs need to read or write Linea
 This skill is scoped to `/Users/bytedance/symphony-go` and the `linear` CLI
 from `schpet/linear-cli`.
 
-Use this skill for unattended Linear operations when `linear_graphql` is not
-available or when a shell command is simpler. Do not call Linear MCP/app tools
-from a child Codex session; they can trigger interactive approval and fail the
-run.
+Use this skill only for legacy CLI fallback checks. The current Symphony Go MCP
+smoke workflow intentionally tests Linear MCP/app availability in child Codex
+sessions, so child agents must not read this skill or fall back to the CLI unless
+the user explicitly changes the smoke goal.
 
 ## Preconditions
 

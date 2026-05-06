@@ -3,6 +3,32 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 14:51 +08 - repo-only
+
+- Trigger: 用户希望把 Linear 读写从 CLI/`linear_graphql` 切到 MCP，启动服务后通过真实 Linear issue smoke 验证派生 Codex 会话是否会使用 Linear MCP/app 工具。
+- Evidence:
+  - `WORKFLOW.md` 原文要求优先 `linear_graphql`，再 fallback 到 `.codex/skills/linear-cli/SKILL.md`，并明确不调用 Linear MCP/app 工具。
+  - `.codex/skills/symphony-issue-run/SKILL.md` 和相关 Linear skill 仍把 child agent 约束到 CLI/GraphQL 路径，和本轮 MCP smoke 目标冲突。
+- Optimization:
+  - Workflow 层：把 Linear 前置条件改成“使用 Linear MCP/app 工具，不要使用 Linear CLI”，并禁止 child agent fallback 到 `linear` CLI 或 `linear_graphql`。
+  - Skill/文档层：同步 `symphony-issue-run`、`linear-cli`、`linear`、`tdd-acceptance-pr`、`prd-issue-run` 和 `docs/agents/issue-tracker.md`，避免 agent 读到旧规则后绕回 CLI/GraphQL。
+  - 测试层：扩展 repo workflow contract，锁住 MCP smoke 约束并防止旧的“不要使用 Linear MCP/app 工具”文案回归。
+- Files:
+  - `WORKFLOW.md`
+  - `.codex/skills/symphony-issue-run/SKILL.md`
+  - `.codex/skills/linear-cli/SKILL.md`
+  - `.codex/skills/linear/SKILL.md`
+  - `.codex/skills/tdd-acceptance-pr/SKILL.md`
+  - `.codex/skills/prd-issue-run/SKILL.md`
+  - `docs/agents/issue-tracker.md`
+  - `internal/service/workflow/workflow_test.go`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`git diff --check`
+  - 通过：`./test.sh ./internal/service/workflow`
+  - 通过：`make build`
+- Follow-up: 创建一个 Todo smoke issue，启动 issue-scoped listener，检查 child session 日志中是否出现 Linear MCP/app 调用、MCP approval blocker，或错误 fallback 到 CLI/GraphQL。
+
 ## 2026-05-04 20:33 +08 - ZEE-75
 
 - Trigger: 跑优化后的 todo 冒烟时，用户希望确认下次执行是否还有卡点。

@@ -7,7 +7,9 @@ description: |
 
 # Linear GraphQL
 
-Use this skill for raw Linear GraphQL work during Symphony app-server sessions.
+Use this skill for raw Linear GraphQL work during legacy Symphony app-server
+sessions. Do not use it for the current MCP smoke workflow; that workflow
+intentionally tests Linear MCP/app tools in child Codex sessions.
 
 ## Primary tool
 

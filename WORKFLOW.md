@@ -87,17 +87,17 @@ No description provided.
 
 只在当前 repo root 和该 issue 的 repository worktree 内工作，不要触碰其他路径。
 
-## 前置条件：使用 `linear_graphql`，不要使用 Linear MCP/app 工具
+## 前置条件：使用 Linear MCP/app 工具，不要使用 Linear CLI
 
-Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交互审批的 Linear MCP/app 工具。所有 Linear 读写默认优先使用注入的 `linear_graphql` 工具；如果 `linear_graphql` 不可用，可以使用 `.codex/skills/linear-cli/SKILL.md` 中的 `linear` CLI。两者都不可用时，停止并记录 blocker，不要 fallback 到 MCP/app 工具。
+Agent 必须能和 Linear 通信。本 workflow 的冒烟目标是验证派生 Codex 会话能否使用 Linear MCP/app 工具，所以所有 Linear 读写默认使用当前会话可用的 Linear MCP/app 工具。不要使用 `linear` CLI 或 `linear_graphql` 作为兜底；如果 Linear MCP/app 工具在派生会话中不可用、需要交互式审批或调用失败，停止并记录 blocker，让外层 listener 日志暴露真实工具能力。
 
 具体规则：
 
-- 读取 issue、team states、comments：使用 `linear_graphql` query。
-- 更新 issue 状态：使用 `linear_graphql` 的 `issueUpdate` mutation。
-- 创建或更新 `## Codex Workpad`：使用 `linear_graphql` 的 `commentCreate` / `commentUpdate` mutation。
-- 如果改用 `linear` CLI，先读取 `.codex/skills/linear-cli/SKILL.md`，并使用 `linear issue view/update/comment/link` 命令完成同等操作。
-- 不调用 Linear MCP/app 工具，例如 `linear_save_comment`、`linear_save_issue`、`linear_get_issue` 等；这些工具会触发交互式审批，导致无人值守 run 失败。
+- 读取 issue、team states、comments：使用 Linear MCP/app 读取工具，例如 `linear_get_issue` / `linear_list_comments` 或等价工具。
+- 更新 issue 状态：使用 Linear MCP/app issue 更新工具，例如 `linear_save_issue` 或等价工具。
+- 创建或更新 `## Codex Workpad`：使用 Linear MCP/app comment 工具，例如 `linear_save_comment` 或等价工具。
+- 不读取 `.codex/skills/linear-cli/SKILL.md`，不执行 `linear auth whoami`、`linear issue view`、`linear issue update`、`linear issue comment ...` 等 CLI 命令。
+- 不调用 `linear_graphql`。本轮如果 MCP/app 工具缺失，正确结果是暴露 blocker，而不是绕回 GraphQL 或 CLI。
 
 ## 默认姿态
 
@@ -116,8 +116,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 ## 相关技能
 
-- `linear`：操作 Linear。
-- `linear-cli`：当 `linear_graphql` 不可用或 CLI 更适合时，用 `linear` CLI 操作 Linear；不要调用 Linear MCP/app 工具。
+- Linear MCP/app：操作 Linear；本轮 smoke 要求派生会话优先使用 MCP/app 工具。
 - `pr`：当 issue 进入 `Merging` 时，使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow 创建/更新 PR、等待检查、squash merge，并同步 root `main`。
 
 ## Review 路由原则
@@ -164,7 +163,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
    - 如果 worktree 有未解释的脏改动，先在 workpad 记录并判断是否属于当前 issue；不要覆盖不理解的改动。
    - 如果当前分支不是 issue 分支，停止并记录 blocker，不要在错误分支上继续。
 5. 对 `Todo` ticket，启动顺序必须严格如下：
-   - 通过 `linear_graphql` 的 `issueUpdate` mutation 将状态更新为 `In Progress`
+   - 通过 Linear MCP/app issue 更新工具将状态更新为 `In Progress`
    - 查找或创建 `## Codex Workpad` bootstrap comment
    - 然后才开始分析、计划和实现
 6. 如果状态和 issue 内容不一致，添加一条短 comment 说明，然后走最稳妥的流程。
@@ -227,7 +226,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 
 为了避免 `Merging` 阶段在 PR script 前消耗过多时间，还必须遵守：
 
-- listener 已经按状态路由到 `Merging`，脚本前不要再执行 `linear auth whoami` 或额外读取 `.codex/skills/linear*.md`。
+- listener 已经按状态路由到 `Merging`，脚本前不要再执行 `linear auth whoami` 或读取 `.codex/skills/linear-cli/SKILL.md`。
 - 脚本前不要读取完整历史 workpad；只需要拿到当前 issue branch、`HEAD` 和干净工作区证据。
 - Linear comment / state 更新放在 PR script 成功或失败之后集中处理。
 - 如果 PR script 成功但 root `main` 没有同步到 `origin/main`，立即执行 `git pull --ff-only origin main` 作为 Merging 收尾步骤，并把结果写入 workpad。
@@ -315,7 +314,7 @@ Agent 必须能和 Linear 通信，但无人值守运行中不得调用需要交
 - 如果 issue 状态是 `Backlog`，不要修改它；等待人类移动到 `Todo`。
 - 不要编辑 issue body/description 来记录计划或进度。
 - 每个 issue 只使用一个持久 workpad comment：`## Codex Workpad`。
-- 如果 session 内无法通过 `linear_graphql` 编辑 comment，先记录 blocker；不要调用 Linear MCP/app 工具兜底。
+- 如果 session 内无法通过 Linear MCP/app 工具编辑 comment，先记录 blocker；不要调用 Linear CLI 或 `linear_graphql` 兜底。
 - 临时 proof edit 只允许用于本地验证，commit 前必须恢复。
 - 如果发现超出范围的改进，创建单独 Backlog issue，不要扩大当前 scope；该 issue 要有清晰标题、描述、验收标准、同 project 归属、与当前 issue 的 `related` 链接，并在依赖当前 issue 时设置 `blockedBy`。
 - 未达到 `AI Review` 完成门槛前，不要移动到 `AI Review`；达到门槛后由 implementer agent 移动到 `AI Review`。
