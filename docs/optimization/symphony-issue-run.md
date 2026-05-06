@@ -3,6 +3,58 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 15:56 +08 - ZEE-96
+
+- Trigger: 用户要求跑一轮真实 smoke，验证 child session 现在能否使用 `linear_graphql` dynamic tool。
+- Evidence:
+  - Linear issue: `ZEE-96`，创建于 `Todo`，listener 记录 `Todo -> In Progress`，并创建 `.worktrees/ZEE-96` / branch `symphony-go/ZEE-96`。
+  - daemon log: `.symphony/logs/ZEE-96-20260506-155356.out`。
+  - human log: `.symphony/logs/run-20260506-155357.human.log`。
+  - JSONL log: `.symphony/logs/run-20260506-155357.jsonl`。
+  - child 通过 `linear_graphql` query 读取当前 issue、comments 和 team states，并拿到 `Done` stateId。
+  - JSONL 记录 `item/tool/call`，`tool` 为 `linear_graphql`，其中 `commentCreate` 成功创建 Workpad comment `92ed404b-10c5-45e8-8b8b-335a1a802e85`，正文包含 `linear_graphql probe success`。
+  - JSONL 记录第二次 `item/tool/call`，`tool` 为 `linear_graphql`，其中 `issueUpdate` 成功把 `ZEE-96` 移到 `Done`。
+  - Linear 复读确认 `ZEE-96` 当前状态为 `Done`；worktree cleanup 已完成，`.worktrees/ZEE-96` 不再存在。
+- Optimization:
+  - 本轮证明 Go runner 的 child dynamic tool 注入已生效：child 不再卡在缺少 `linear_graphql`，并能用同一工具完成 Linear query、comment mutation 和 issue state mutation。
+  - 本轮是诊断型 smoke，刻意不修改仓库文件、不创建 commit/PR、不进入 AI Review/Merging；目的只验证 child `linear_graphql` 能力。
+- Files:
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`make build`
+  - 通过：ZEE-96 listener smoke 到 `Done`
+- Follow-up: 后续完整 workflow smoke 应再验证常规实现任务能在 `linear_graphql` 可用的前提下完成 PR handoff、`AI Review` 和 `Merging` land。
+
+## 2026-05-06 15:48 +08 - ZEE-95
+
+- Trigger: 用户要求参考 `ref/elixir-symphony-example` 的代码，确认它如何让 child session 使用 GraphQL，并把 Go runner 改到同样可用。
+- Evidence:
+  - Elixir 示例在 `ref/elixir-symphony-example/elixir/lib/symphony_elixir/codex/dynamic_tool.ex` 中定义 `linear_graphql` tool spec、参数归一化和 GraphQL 执行。
+  - Elixir 示例在 `ref/elixir-symphony-example/elixir/lib/symphony_elixir/codex/app_server.ex` 的 `thread/start` 里传入 `DynamicTool.tool_specs()`，并处理 `item/tool/call` 后返回 tool result。
+  - Go runner 原先在 `internal/service/codex/runner.go` 的 `thread/start` 中固定发送空 `dynamicTools`，所以 ZEE-94 child 只能看到缺失的 `linear_graphql`。
+- Optimization:
+  - 代码层：新增 Go 版 dynamic tool executor，广告 `linear_graphql`，支持 raw query string 或 `{query, variables}` 输入，并把 GraphQL top-level `errors` 作为 `success=false` 的 tool output 保留给模型。
+  - Runner 层：`thread/start` 使用 executor 的 tool specs；`awaitTurn` 处理 `item/tool/call` 并把结果回写 app-server，避免 tool call 悬挂。
+  - App/reload 层：从 workflow tracker config 创建 Linear GraphQL client，并注入到 Codex runner；workflow reload 时同步重建带新 tracker config 的 runner。
+  - Linear client 层：拆出 `GraphQLRaw`，让动态工具可以保留 GraphQL `errors` response，同时保持原有 typed `GraphQL` 调用对 errors 返回 error。
+- Files:
+  - `internal/service/codex/dynamic_tool.go`
+  - `internal/service/codex/runner.go`
+  - `internal/service/codex/dynamic_tool_test.go`
+  - `internal/service/codex/runner_test.go`
+  - `internal/integration/linear/client.go`
+  - `internal/app/run.go`
+  - `internal/service/orchestrator/orchestrator.go`
+  - `docs/plan/go-symphony-v3-core.md`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`./test.sh ./internal/service/codex`
+  - 通过：`./test.sh ./internal/service/codex ./internal/integration/linear ./internal/service/orchestrator ./internal/app`
+  - 通过：`./test.sh ./internal/service/workflow`
+  - 通过：`git diff --check`
+  - 通过：`make build`
+- Follow-up: 重建 binary 后重跑 ZEE-94/ZEE-95 同类 smoke，确认 child 日志出现 `item/tool/call` 的 `linear_graphql` 成功返回，并继续推进到 PR handoff / `AI Review`。
+
 ## 2026-05-06 15:29 +08 - ZEE-94
 
 - Trigger: 用户要求使用 `symphony-issue-run` 跑一轮真实 Linear 冒烟，验证 Elixir-style `AI Review` + `land` workflow 在当前 Go runner 下能否全自动跑通。

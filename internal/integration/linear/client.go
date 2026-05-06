@@ -285,40 +285,52 @@ func (c *Client) findWorkpadComment(ctx context.Context, issueID string) (string
 }
 
 func (c *Client) GraphQL(ctx context.Context, query string, variables map[string]any, out any) error {
-	payload := map[string]any{"query": query, "variables": variables}
+	payload, err := c.GraphQLRaw(ctx, query, variables)
+	if err != nil {
+		return err
+	}
+	if errorsValue, ok := payload["errors"]; ok {
+		if errorsList, ok := errorsValue.([]any); ok && len(errorsList) > 0 {
+			return fmt.Errorf("Linear GraphQL errors: %v", errorsList)
+		}
+	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
+	return json.Unmarshal(raw, out)
+}
+
+func (c *Client) GraphQLRaw(ctx context.Context, query string, variables map[string]any) (map[string]any, error) {
+	payload := map[string]any{"query": query, "variables": variables}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint, bytes.NewReader(raw))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", c.APIKey)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Linear GraphQL status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("Linear GraphQL status %d: %s", resp.StatusCode, string(respBody))
 	}
-	var envelope struct {
-		Errors []any `json:"errors"`
+	var body map[string]any
+	if err := json.Unmarshal(respBody, &body); err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(respBody, &envelope); err != nil {
-		return err
-	}
-	if len(envelope.Errors) > 0 {
-		return fmt.Errorf("Linear GraphQL errors: %v", envelope.Errors)
-	}
-	return json.Unmarshal(respBody, out)
+	return body, nil
 }
 
 func (c *Client) resolveStateID(ctx context.Context, issueID, stateName string) (string, error) {

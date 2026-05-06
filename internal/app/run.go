@@ -131,7 +131,7 @@ func NewRuntime(opts Options) (*Runtime, error) {
 	}
 
 	manager := workspace.New(loaded.Config.Workspace.Root, loaded.Config.Hooks)
-	runner := codex.New(loaded.Config.Codex)
+	runner := codex.New(loaded.Config.Codex, codex.WithDynamicToolExecutor(codex.NewDynamicToolExecutor(tracker)))
 	service := orchestrator.New(orchestrator.Options{
 		Workflow:  loaded,
 		Tracker:   tracker,
@@ -143,8 +143,12 @@ func NewRuntime(opts Options) (*Runtime, error) {
 		WorkspaceFactory: func(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *workspace.Manager {
 			return workspace.New(cfg.Root, hooks)
 		},
-		RunnerFactory: func(cfg runtimeconfig.CodexConfig) orchestrator.AgentRunner {
-			return codex.New(cfg)
+		WorkflowRunnerFactory: func(cfg runtimeconfig.Config) (orchestrator.AgentRunner, error) {
+			linearClient, err := linear.New(cfg.Tracker)
+			if err != nil {
+				return nil, err
+			}
+			return codex.New(cfg.Codex, codex.WithDynamicToolExecutor(codex.NewDynamicToolExecutor(linearClient))), nil
 		},
 		Logger:      log,
 		Reloader:    reloader,

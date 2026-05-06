@@ -15,7 +15,7 @@
 This v3 plan implements `SPEC.md` core conformance. It intentionally excludes optional extension work that can be shipped after the core loop is stable:
 
 - No HTTP `/api/v1/*` server in v3. The existing TUI/snapshot remain observability surfaces.
-- No `linear_graphql` client-side tool extension in v3.
+- `linear_graphql` client-side tool extension is included so unattended child sessions can use the same Linear GraphQL auth path as the listener.
 - No SSH worker extension in v3.
 - No persistent retry database in v3, because the spec explicitly allows tracker/filesystem restart recovery without durable scheduler state.
 - No broad rewrite of the existing local merge behavior. The current local merge path can remain a workflow-specific extension while the scheduler becomes spec-shaped.
@@ -2210,7 +2210,6 @@ Append a short section to this plan after implementation:
   - Structured logs
 - Deferred extensions:
   - HTTP `/api/v1/*`
-  - `linear_graphql` client-side tool
   - SSH workers
 ```
 
@@ -2237,7 +2236,6 @@ Spec coverage:
 Deferred spec extensions:
 
 - Section 13.7 HTTP server extension.
-- Section 10.5 `linear_graphql` client-side tool extension.
 - Appendix A SSH worker extension.
 - Durable retry/session persistence, which is explicitly not required for core conformance.
 
@@ -2270,5 +2268,4 @@ Type consistency:
   - Structured logs
 - Deferred extensions:
   - HTTP `/api/v1/*`
-  - `linear_graphql` client-side tool
   - SSH workers

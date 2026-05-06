@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -234,6 +235,89 @@ printf '%s\n' '{"method":"turn/completed"}'
 		if !strings.Contains(text, want) {
 			t.Fatalf("trace missing %q:\n%s", want, text)
 		}
+	}
+}
+
+func TestRunnerAdvertisesAndHandlesLinearGraphQLDynamicTool(t *testing.T) {
+	workspacePath := t.TempDir()
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	trace := filepath.Join(t.TempDir(), "trace.jsonl")
+	script := `#!/bin/sh
+trace="$TRACE_FILE"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-tools"}}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-tools"}}}'
+printf '%s\n' '{"id":101,"method":"item/tool/call","params":{"tool":"linear_graphql","callId":"call-tools","threadId":"thread-tools","turnId":"turn-tools","arguments":{"query":"query Viewer { viewer { id } }","variables":{"includeTeams":false}}}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TRACE_FILE", trace)
+	client := &fakeGraphQLRawClient{
+		response: map[string]any{"data": map[string]any{"viewer": map[string]any{"id": "usr_tools"}}},
+	}
+	runner := New(runtimeconfig.CodexConfig{
+		Command:        fake,
+		ApprovalPolicy: "never",
+		ThreadSandbox:  "workspace-write",
+		TurnTimeoutMS:  5000,
+		ReadTimeoutMS:  5000,
+	}, WithDynamicToolExecutor(NewDynamicToolExecutor(client)))
+
+	_, err := runner.Run(context.Background(), workspacePath, "use the tool", issuemodel.Issue{Identifier: "ZEE-TOOLS", Title: "tools"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.query != "query Viewer { viewer { id } }" {
+		t.Fatalf("query = %q", client.query)
+	}
+	if client.variables["includeTeams"] != false {
+		t.Fatalf("variables = %#v", client.variables)
+	}
+
+	raw, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	var sawToolSpec bool
+	var sawToolResponse bool
+	for _, line := range lines {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(line), &payload); err != nil {
+			t.Fatalf("invalid trace line %q: %v", line, err)
+		}
+		if payload["method"] == "thread/start" {
+			params, _ := payload["params"].(map[string]any)
+			tools, _ := params["dynamicTools"].([]any)
+			if len(tools) == 1 {
+				tool, _ := tools[0].(map[string]any)
+				sawToolSpec = tool["name"] == "linear_graphql"
+			}
+		}
+		if id, ok := numericID(payload["id"]); ok && id == 101 {
+			result, _ := payload["result"].(map[string]any)
+			if result["success"] == true && strings.Contains(fmt.Sprint(result["output"]), "usr_tools") {
+				sawToolResponse = true
+			}
+		}
+	}
+	if !sawToolSpec {
+		t.Fatalf("thread/start did not advertise linear_graphql:\n%s", raw)
+	}
+	if !sawToolResponse {
+		t.Fatalf("tool response missing successful Linear payload:\n%s", raw)
 	}
 }
 

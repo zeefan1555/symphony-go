@@ -25,7 +25,8 @@ const (
 )
 
 type Runner struct {
-	Config runtimeconfig.CodexConfig
+	Config       runtimeconfig.CodexConfig
+	dynamicTools *DynamicToolExecutor
 }
 
 type Event struct {
@@ -62,8 +63,20 @@ type SessionResult struct {
 	PID       int
 }
 
-func New(cfg runtimeconfig.CodexConfig) *Runner {
-	return &Runner{Config: cfg}
+type Option func(*Runner)
+
+func WithDynamicToolExecutor(executor *DynamicToolExecutor) Option {
+	return func(r *Runner) {
+		r.dynamicTools = executor
+	}
+}
+
+func New(cfg runtimeconfig.CodexConfig, opts ...Option) *Runner {
+	r := &Runner{Config: cfg}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 func (r *Runner) Run(ctx context.Context, workspacePath string, prompt string, issue issuemodel.Issue, onEvent func(Event)) (Result, error) {
@@ -181,11 +194,12 @@ func (r *Runner) startSession(ctx context.Context, workspacePath string) (*sessi
 	go io.Copy(io.Discard, stderr)
 
 	s := &session{
-		cmd:         cmd,
-		stdin:       stdin,
-		scanner:     bufio.NewScanner(stdout),
-		readTimeout: time.Duration(r.Config.ReadTimeoutMS) * time.Millisecond,
-		lines:       make(chan lineResult),
+		cmd:          cmd,
+		stdin:        stdin,
+		scanner:      bufio.NewScanner(stdout),
+		readTimeout:  time.Duration(r.Config.ReadTimeoutMS) * time.Millisecond,
+		lines:        make(chan lineResult),
+		dynamicTools: r.dynamicTools,
 	}
 	s.scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	go s.readLines()
@@ -233,13 +247,14 @@ func (r *Runner) turnSandboxPolicy(workspacePath string, issue issuemodel.Issue)
 }
 
 type session struct {
-	cmd         *exec.Cmd
-	stdin       io.WriteCloser
-	scanner     *bufio.Scanner
-	readTimeout time.Duration
-	threadID    string
-	lines       chan lineResult
-	mu          sync.Mutex
+	cmd          *exec.Cmd
+	stdin        io.WriteCloser
+	scanner      *bufio.Scanner
+	readTimeout  time.Duration
+	threadID     string
+	lines        chan lineResult
+	dynamicTools *DynamicToolExecutor
+	mu           sync.Mutex
 }
 
 type lineResult struct {
@@ -293,7 +308,7 @@ func (s *session) startThread(cwd string, approvalPolicy any, sandbox string) (s
 			"approvalPolicy": approvalPolicy,
 			"sandbox":        sandbox,
 			"cwd":            cwd,
-			"dynamicTools":   []any{},
+			"dynamicTools":   s.dynamicToolSpecs(),
 		},
 	}); err != nil {
 		return "", err
@@ -308,6 +323,13 @@ func (s *session) startThread(cwd string, approvalPolicy any, sandbox string) (s
 		return "", fmt.Errorf("invalid thread/start response: %v", result)
 	}
 	return threadID, nil
+}
+
+func (s *session) dynamicToolSpecs() []any {
+	if s.dynamicTools == nil {
+		return []any{}
+	}
+	return s.dynamicTools.ToolSpecs()
 }
 
 func (s *session) startTurn(id int, cwd string, prompt string, issue issuemodel.Issue, approvalPolicy any, sandboxPolicy map[string]any) (string, error) {
@@ -367,11 +389,53 @@ func (s *session) awaitTurn(ctx context.Context, timeout time.Duration, onEvent 
 				return nil
 			case "turn/failed", "turn/cancelled":
 				return fmt.Errorf("%s: %v", method, payload["params"])
+			case "item/tool/call":
+				if err := s.handleDynamicToolCall(ctx, payload); err != nil {
+					return err
+				}
 			case "mcpServer/elicitation/request":
 				return fmt.Errorf("codex requested interactive MCP approval; unattended runs must not use MCP write tools: %v", payload["params"])
 			}
 		}
 	}
+}
+
+func (s *session) handleDynamicToolCall(ctx context.Context, payload map[string]any) error {
+	requestID, ok := payload["id"]
+	if !ok {
+		return fmt.Errorf("dynamic tool call missing id: %v", payload)
+	}
+	params, _ := payload["params"].(map[string]any)
+	executor := s.dynamicTools
+	if executor == nil {
+		executor = NewDynamicToolExecutor(nil)
+	}
+	result := executor.Execute(ctx, toolCallName(params), toolCallArguments(params))
+	return s.send(map[string]any{
+		"id":     requestID,
+		"result": result,
+	})
+}
+
+func toolCallName(params map[string]any) string {
+	for _, key := range []string{"tool", "name"} {
+		if raw, ok := params[key].(string); ok {
+			if name := strings.TrimSpace(raw); name != "" {
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+func toolCallArguments(params map[string]any) any {
+	if params == nil {
+		return map[string]any{}
+	}
+	if arguments, ok := params["arguments"]; ok {
+		return arguments
+	}
+	return map[string]any{}
 }
 
 func (s *session) awaitResponse(id int) (map[string]any, error) {
