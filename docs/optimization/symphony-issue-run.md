@@ -3,6 +3,28 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 16:53 +08 - ZEE-97
+
+- Trigger: 用户要求跑一个简单中文冒烟任务，观察从创建 issue 到全自动处理完成的大致耗时和瓶颈。
+- Evidence:
+  - Linear issue: `ZEE-97`，创建于 `2026-05-06 16:50:35 +0800`，初始状态 `Todo`，后因外部 auth blocker 被外层移动到 `Human Review`。
+  - listener: PID `46701`，启动于 `2026-05-06 16:51:09 +0800`，daemon log `.symphony/logs/ZEE-97-20260506-165109.out`。
+  - human log: `.symphony/logs/run-20260506-165110.human.log`，首行在 `16:51:11` 记录 `startup_cleanup_fetch_failed`，随后每 5 秒记录一次 `poll_error`。
+  - 错误原文为 `Linear GraphQL status 401` / `Authentication required, not authenticated`。
+  - 外层用同一个 `LINEAR_API_KEY` 调 `query { viewer { id name } }` 复现 `http=401`。
+  - `.worktrees/ZEE-97` 未创建，说明瓶颈发生在 listener 读取 active issue 之前，尚未进入 child agent、实现、AI Review 或 Merging。
+- Optimization:
+  - 本轮不修改代码；将环境 blocker 记录为 follow-up issue `ZEE-98`。
+  - 决策：框架应在 startup cleanup / poll loop 前做一次 Linear auth health check。无效 token 应输出单次清晰 blocker，而不是进入重复 `poll_error` 循环。
+- Files:
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`make build`
+  - 通过：`curl` 使用当前 `LINEAR_API_KEY` 复现 `http=401`
+  - 通过：`git worktree list --porcelain | rg 'ZEE-97|\.worktrees/ZEE-97'` 无输出
+  - 通过：`git diff --check`
+- Follow-up: `ZEE-98` 优化 listener 启动前 Linear auth 预检与 401 blocker 输出。
+
 ## 2026-05-06 15:56 +08 - ZEE-96
 
 - Trigger: 用户要求跑一轮真实 smoke，验证 child session 现在能否使用 `linear_graphql` dynamic tool。
