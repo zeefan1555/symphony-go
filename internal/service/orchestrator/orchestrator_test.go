@@ -19,6 +19,7 @@ import (
 	"symphony-go/internal/runtime/observability"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
+	"symphony-go/internal/service/issueflow"
 	"symphony-go/internal/service/workflow"
 	"symphony-go/internal/service/workspace"
 )
@@ -194,7 +195,7 @@ func TestRunningStageShowsPhaseAndCurrentStep(t *testing.T) {
 		t.Fatalf("running entries = %#v, want one active issue", snapshot.Running)
 	}
 	entry := snapshot.Running[0]
-	if entry.AgentPhase != string(phaseImplementer) || entry.Stage != string(stageRunningAgent) {
+	if entry.AgentPhase != string(issueflow.PhaseImplementer) || entry.Stage != string(issueflow.StageRunningAgent) {
 		t.Fatalf("phase/stage = %q/%q, want implementer/running_agent", entry.AgentPhase, entry.Stage)
 	}
 	if entry.LastMessage != "running Codex turn" || entry.WorkspacePath == "" {
@@ -1304,7 +1305,7 @@ func TestRunAgentRendersRetryAttemptOnlyForRetryFirstPrompt(t *testing.T) {
 	}
 }
 
-func TestRunAgentContinuesInSameSessionWithoutResendingOriginalPrompt(t *testing.T) {
+func TestRunAgentContinuesWithFixedContinuationPrompt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1336,8 +1337,8 @@ func TestRunAgentContinuesInSameSessionWithoutResendingOriginalPrompt(t *testing
 	if err := o.runAgent(ctx, issue, 0); err != nil {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
-	if runner.calls != 1 {
-		t.Fatalf("RunSession calls = %d, want 1", runner.calls)
+	if runner.calls != 2 {
+		t.Fatalf("RunSession calls = %d, want 2 issue-flow turns", runner.calls)
 	}
 	if len(runner.prompts) != 2 {
 		t.Fatalf("prompts = %#v, want two turns", runner.prompts)
@@ -1345,7 +1346,7 @@ func TestRunAgentContinuesInSameSessionWithoutResendingOriginalPrompt(t *testing
 	if !strings.Contains(runner.prompts[0], "original workflow prompt for ZEE-CONT") {
 		t.Fatalf("first prompt = %q, want rendered workflow prompt", runner.prompts[0])
 	}
-	if runner.prompts[1] != continuationPromptText {
+	if runner.prompts[1] != issueflow.ContinuationPromptText {
 		t.Fatalf("continuation prompt = %q, want fixed continuation guidance", runner.prompts[1])
 	}
 	if strings.Contains(runner.prompts[1], "original workflow prompt") {
@@ -1548,7 +1549,7 @@ func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
 	}
 }
 
-func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
+func TestReviewerAgentContinuesIntoMerging(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1586,8 +1587,8 @@ func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if runner.calls != 1 {
-		t.Fatalf("reviewer runner calls = %d, want 1", runner.calls)
+	if runner.calls != 2 {
+		t.Fatalf("reviewer runner calls = %d, want 2 issue-flow turns", runner.calls)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
@@ -1595,7 +1596,7 @@ func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 	if got, want := runner.prompts[0].Text, "work on ZEE-REVIEWER-MERGE in AI Review"; got != want {
 		t.Fatalf("first prompt = %q, want %q", got, want)
 	}
-	if got := runner.prompts[1]; got.Text != mergingContinuationPromptText || !got.Continuation {
+	if got := runner.prompts[1]; got.Text != issueflow.MergingContinuationPromptText || !got.Continuation {
 		t.Fatalf("merge continuation prompt = %#v, want continuation merge prompt", got)
 	}
 	if got := runner.prompts[1].Issue; got == nil || got.State != "Merging" {
@@ -1606,7 +1607,7 @@ func TestReviewerAgentContinuesIntoMergingInSameSession(t *testing.T) {
 	}
 }
 
-func TestReviewerPassFinalAutoPromotesToMergingContinuation(t *testing.T) {
+func TestReviewerPassFinalPromotesToMergingContinuation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1643,13 +1644,13 @@ func TestReviewerPassFinalAutoPromotesToMergingContinuation(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if runner.calls != 1 {
-		t.Fatalf("reviewer runner calls = %d, want 1", runner.calls)
+	if runner.calls != 2 {
+		t.Fatalf("reviewer runner calls = %d, want 2 issue-flow turns", runner.calls)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
 	}
-	if got := runner.prompts[1]; got.Text != mergingContinuationPromptText || !got.Continuation {
+	if got := runner.prompts[1]; got.Text != issueflow.MergingContinuationPromptText || !got.Continuation {
 		t.Fatalf("merge continuation prompt = %#v, want continuation merge prompt", got)
 	}
 	if got := runner.prompts[1].Issue; got == nil || got.State != "Merging" {
@@ -1689,9 +1690,8 @@ func TestReviewerMergingContinuationRespectsMaxTurns(t *testing.T) {
 		Runner:    runner,
 	})
 
-	err := o.runAgent(ctx, issue, 0)
-	if err == nil || !strings.Contains(err.Error(), "reached max turns") {
-		t.Fatalf("runAgent error = %v, want reached max turns", err)
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
@@ -1745,16 +1745,16 @@ func TestMergingContinuationPromptKeepsDoneWithOrchestrator(t *testing.T) {
 		"final reply must start with Merge: PASS",
 		"orchestrator can mark Done",
 	} {
-		if !strings.Contains(mergingContinuationPromptText, want) {
-			t.Fatalf("merging continuation prompt missing %q:\n%s", want, mergingContinuationPromptText)
+		if !strings.Contains(issueflow.MergingContinuationPromptText, want) {
+			t.Fatalf("merging continuation prompt missing %q:\n%s", want, issueflow.MergingContinuationPromptText)
 		}
 	}
 	for _, forbidden := range []string{
 		"move the issue to Done",
 		"move Linear to Done only after",
 	} {
-		if strings.Contains(mergingContinuationPromptText, forbidden) {
-			t.Fatalf("merging continuation prompt still contains forbidden wording %q:\n%s", forbidden, mergingContinuationPromptText)
+		if strings.Contains(issueflow.MergingContinuationPromptText, forbidden) {
+			t.Fatalf("merging continuation prompt still contains forbidden wording %q:\n%s", forbidden, issueflow.MergingContinuationPromptText)
 		}
 	}
 }
@@ -1787,9 +1787,8 @@ func TestMergingWithoutPassDoesNotAutoPromoteToDone(t *testing.T) {
 		Runner:    runner,
 	})
 
-	err := o.runAgent(ctx, issue, 0)
-	if err == nil || !strings.Contains(err.Error(), "reached max turns") {
-		t.Fatalf("runAgent error = %v, want reached max turns", err)
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
 	}
 	if containsStateUpdate(tracker.states, "Done") {
 		t.Fatalf("state updates = %#v, want no Done without Merge: PASS", tracker.states)
@@ -1875,7 +1874,7 @@ func TestRunAgentDoesNotAutoPromoteAfterCommitWhenAgentMovesToAIReview(t *testin
 	}
 }
 
-func TestRunAgentContinuesIntoAIReviewInSameIssueSession(t *testing.T) {
+func TestRunAgentContinuesIntoAIReviewWithReviewPrompt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1913,13 +1912,13 @@ func TestRunAgentContinuesIntoAIReviewInSameIssueSession(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if runner.calls != 1 {
-		t.Fatalf("runner calls = %d, want one session for the issue", runner.calls)
+	if runner.calls != 2 {
+		t.Fatalf("runner calls = %d, want 2 issue-flow turns", runner.calls)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
 	}
-	if got := runner.prompts[1]; got.Text != aiReviewContinuationPromptText || !got.Continuation {
+	if got := runner.prompts[1]; got.Text != issueflow.AIReviewContinuationPromptText || !got.Continuation {
 		t.Fatalf("AI Review continuation prompt = %#v, want same-session continuation", got)
 	}
 	if got := runner.prompts[1].Issue; got == nil || got.State != "AI Review" {
@@ -2953,12 +2952,12 @@ func (r *reviewThenMergeRunner) RunSession(ctx context.Context, request codex.Se
 	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
 	for turn := 0; turn < len(request.Prompts); turn++ {
 		r.prompts = append(r.prompts, request.Prompts[turn])
-		switch turn {
-		case 0:
+		switch len(r.prompts) {
+		case 1:
 			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Merging"); err != nil {
 				return result, err
 			}
-		case 1:
+		case 2:
 			emitAgentMessage(onEvent, "Merge: PASS\n\nPR: https://github.com/zeefan1555/symphony-go/pull/1\nmerge_commit: abc123\nroot_status: ## main...origin/main")
 		}
 		turnResult := codex.Result{
@@ -3033,10 +3032,10 @@ func (r *reviewPassThenMergeRunner) RunSession(ctx context.Context, request code
 	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
 	for turn := 0; turn < len(request.Prompts); turn++ {
 		r.prompts = append(r.prompts, request.Prompts[turn])
-		if turn == 0 {
+		if len(r.prompts) == 1 {
 			emitAgentMessage(onEvent, "结论: PASS\n\nFindings:\n- 无阻塞发现。")
 		}
-		if turn == 1 {
+		if len(r.prompts) == 2 {
 			emitAgentMessage(onEvent, "Merge: PASS\n\nPR: https://github.com/zeefan1555/symphony-go/pull/1\nmerge_commit: abc123\nroot_status: ## main...origin/main")
 		}
 		turnResult := codex.Result{
@@ -3088,6 +3087,9 @@ func (r *stuckMergingRunner) RunSession(ctx context.Context, request codex.Sessi
 		result.Turns = append(result.Turns, turnResult)
 		result.SessionID = turnResult.SessionID
 		result.PID = turnResult.PID
+		if request.AfterTurn == nil {
+			continue
+		}
 		next, ok, err := request.AfterTurn(ctx, turnResult, turn+1)
 		if err != nil {
 			return result, err

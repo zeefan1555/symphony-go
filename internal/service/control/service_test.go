@@ -248,6 +248,9 @@ func TestServiceExposesIssueFlowTrunk(t *testing.T) {
 	if flow.Boundary.Name != "orchestrator.issue_flow" {
 		t.Fatalf("boundary = %#v, want orchestrator issue flow", flow.Boundary)
 	}
+	if flow.EntryPoint != "issueflow.RunIssueTrunk" {
+		t.Fatalf("entry point = %q, want issueflow.RunIssueTrunk", flow.EntryPoint)
+	}
 	wantSteps := []string{"Blocked", "Todo", "In Progress", "AI Review", "Merging", "Done"}
 	if len(flow.Steps) != len(wantSteps) {
 		t.Fatalf("steps = %#v, want trunk steps", flow.Steps)

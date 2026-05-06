@@ -5,28 +5,20 @@ import (
 
 	"symphony-go/internal/runtime/observability"
 	issuemodel "symphony-go/internal/service/issue"
+	"symphony-go/internal/service/issueflow"
 )
 
-type issueRunStage string
+func (o *Orchestrator) SetRunningStage(issue issuemodel.Issue, attempt int, phase issueflow.AgentPhase, stage issueflow.RunStage, message, workspacePath string, turnCount int) {
+	o.setRunningStage(issue, attempt, phase, stage, message, workspacePath, turnCount)
+}
 
-const (
-	stageQueued                   issueRunStage = "queued"
-	stagePreparingWorkspace       issueRunStage = "preparing_workspace"
-	stageRunningWorkspaceHooks    issueRunStage = "running_workspace_hooks"
-	stageRenderingPrompt          issueRunStage = "rendering_prompt"
-	stageRunningAgent             issueRunStage = "running_agent"
-	stageContinuingAIReview       issueRunStage = "continuing_ai_review"
-	stageContinuingMerging        issueRunStage = "continuing_merging"
-	stageContinuingImplementation issueRunStage = "continuing_implementation"
-)
-
-func (o *Orchestrator) setRunningStage(issue issuemodel.Issue, attempt int, phase agentPhase, stage issueRunStage, message, workspacePath string, turnCount int) {
+func (o *Orchestrator) setRunningStage(issue issuemodel.Issue, attempt int, phase issueflow.AgentPhase, stage issueflow.RunStage, message, workspacePath string, turnCount int) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.setRunningStageLocked(issue, attempt, phase, stage, message, workspacePath, turnCount)
 }
 
-func (o *Orchestrator) setRunningStageLocked(issue issuemodel.Issue, attempt int, phase agentPhase, stage issueRunStage, message, workspacePath string, turnCount int) {
+func (o *Orchestrator) setRunningStageLocked(issue issuemodel.Issue, attempt int, phase issueflow.AgentPhase, stage issueflow.RunStage, message, workspacePath string, turnCount int) {
 	now := time.Now()
 	if turnCount <= 0 {
 		turnCount = 1

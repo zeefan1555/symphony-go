@@ -418,6 +418,7 @@ func issueFlowModel(flow controlplane.IssueFlowResult) *orchestratormodel.GetIss
 			Boundary:      capabilityBoundaryModel(flow.Boundary),
 			Name:          flow.Name,
 			Purpose:       flow.Purpose,
+			EntryPoint:    flow.EntryPoint,
 			Steps:         steps,
 			Transitions:   transitions,
 			FailurePolicy: append([]string(nil), flow.FailurePolicy...),

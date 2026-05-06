@@ -588,6 +588,7 @@ func projectIssueFlow(def issueflow.Definition) IssueFlowResult {
 		Boundary:      OrchestratorBoundary("issue_flow", "Expose the human-readable trunk issue lifecycle and its core interfaces."),
 		Name:          def.Name,
 		Purpose:       def.Purpose,
+		EntryPoint:    def.EntryPoint,
 		Steps:         steps,
 		Transitions:   transitions,
 		FailurePolicy: append([]string(nil), def.FailurePolicy...),
@@ -699,6 +700,7 @@ type IssueFlowResult struct {
 	Boundary      CapabilityBoundary    `json:"boundary"`
 	Name          string                `json:"name"`
 	Purpose       string                `json:"purpose"`
+	EntryPoint    string                `json:"entry_point"`
 	Steps         []IssueFlowStep       `json:"steps"`
 	Transitions   []IssueFlowTransition `json:"transitions"`
 	FailurePolicy []string              `json:"failure_policy"`

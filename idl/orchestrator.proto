@@ -32,6 +32,7 @@ message IssueFlow {
   repeated IssueFlowStep steps = 4;
   repeated IssueFlowTransition transitions = 5;
   repeated string failure_policy = 6;
+  string entry_point = 7;
 }
 
 message GetIssueFlowResp {

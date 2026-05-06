@@ -14,6 +14,7 @@ import (
 	"symphony-go/internal/runtime/observability"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
+	"symphony-go/internal/service/issueflow"
 	"symphony-go/internal/service/workspace"
 )
 
@@ -28,12 +29,6 @@ type Tracker interface {
 type AgentRunner interface {
 	RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
 }
-
-const (
-	continuationPromptText = "Continue working on the same issue. Re-check the current workspace state, finish any remaining acceptance criteria from the issue, run the smallest relevant verification, and report concrete progress or blockers. Do not repeat completed work."
-)
-
-var errNoRetryNeeded = errors.New("no retry needed")
 
 type WorkflowReloader interface {
 	Current() *runtimeconfig.Workflow
@@ -80,6 +75,16 @@ type runtimeSnapshot struct {
 	runner      AgentRunner
 	repoRoot    string
 	mergeTarget string
+}
+
+func (rt runtimeSnapshot) issueFlowRuntime(observer issueflow.Observer) issueflow.Runtime {
+	return issueflow.Runtime{
+		Workflow:  rt.workflow,
+		Tracker:   rt.tracker,
+		Workspace: rt.workspace,
+		Runner:    rt.runner,
+		Observer:  observer,
+	}
 }
 
 type terminalCleanup struct {
@@ -616,18 +621,18 @@ func (o *Orchestrator) dispatchIssueDone(ctx context.Context, issue issuemodel.I
 	delete(o.retryTimers, issue.ID)
 	delete(o.retryAttempts, issue.ID)
 	o.removeRetryLocked(issue.ID)
-	o.setRunningStageLocked(issue, attempt, "", stageQueued, "queued for worker", "", 1)
+	o.setRunningStageLocked(issue, attempt, "", issueflow.StageQueued, "queued for worker", "", 1)
 	o.mu.Unlock()
 
 	go func() {
 		defer close(done)
-		err := o.runAgentWith(workerCtx, rt, issue, attempt)
-		o.workerExited(rt, issue, attempt, err)
+		result, err := issueflow.RunIssueTrunk(workerCtx, rt.issueFlowRuntime(o), issue, attempt)
+		o.workerExited(rt, issue, attempt, result, err)
 	}()
 	return done, true
 }
 
-func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue issuemodel.Issue, attempt int, err error) {
+func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue issuemodel.Issue, attempt int, result issueflow.Result, err error) {
 	o.removeRunning(issue.ID)
 	o.mu.Lock()
 	if cancel := o.runningCancel[issue.ID]; cancel != nil {
@@ -652,7 +657,7 @@ func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue issuemodel.Issue, 
 		}
 		return
 	}
-	if errors.Is(err, errNoRetryNeeded) {
+	if result.Outcome == issueflow.OutcomeWaitHuman || result.Outcome == issueflow.OutcomeDone || result.Outcome == issueflow.OutcomeStopped {
 		o.releaseIssue(issue.ID)
 		o.signalPollNow()
 		return
@@ -666,7 +671,16 @@ func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue issuemodel.Issue, 
 		o.scheduleRetry(issue, attempt+1, retryFailure, err)
 		return
 	}
-	o.scheduleRetry(issue, 1, retryContinuation, nil)
+	if result.Outcome == issueflow.OutcomeRetryContinuation {
+		o.scheduleRetry(issue, 1, retryContinuation, nil)
+		return
+	}
+	if result.Outcome == issueflow.OutcomeRetryFailure {
+		o.scheduleRetry(issue, attempt+1, retryFailure, errors.New("issue flow requested failure retry"))
+		return
+	}
+	o.releaseIssue(issue.ID)
+	o.signalPollNow()
 }
 
 func (o *Orchestrator) cleanupTerminalIssueAfterExit(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue) bool {
@@ -800,10 +814,7 @@ func (o *Orchestrator) handleIssue(ctx context.Context, issue issuemodel.Issue) 
 }
 
 func (o *Orchestrator) runAgent(ctx context.Context, issue issuemodel.Issue, attempt int) error {
-	err := o.runAgentWith(ctx, o.currentRuntime(), issue, attempt)
-	if errors.Is(err, errNoRetryNeeded) {
-		return nil
-	}
+	_, err := issueflow.RunIssueTrunk(ctx, o.currentRuntime().issueFlowRuntime(o), issue, attempt)
 	return err
 }
 
@@ -888,6 +899,10 @@ func (o *Orchestrator) logIssue(issue issuemodel.Issue, event, message string, f
 		logEvent.SessionID = sessionID
 	}
 	_ = o.opts.Logger.Write(logEvent)
+}
+
+func (o *Orchestrator) LogIssue(issue issuemodel.Issue, event, message string, fields map[string]any) {
+	o.logIssue(issue, event, message, fields)
 }
 
 func withLogField(fields map[string]any, key string, value any) map[string]any {
@@ -984,6 +999,10 @@ func (o *Orchestrator) updateRunningFromEvent(issueID string, event codex.Event)
 	}
 }
 
+func (o *Orchestrator) UpdateRunningFromEvent(issueID string, event codex.Event) {
+	o.updateRunningFromEvent(issueID, event)
+}
+
 func (o *Orchestrator) addRetry(entry observability.RetryEntry) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -1044,6 +1063,10 @@ func (o *Orchestrator) removeRunning(issueID string) {
 		running = append(running, entry)
 	}
 	o.snapshot.Running = running
+}
+
+func (o *Orchestrator) RemoveRunning(issueID string) {
+	o.removeRunning(issueID)
 }
 
 func codexEventName(event codex.Event) string {
