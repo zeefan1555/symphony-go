@@ -3,6 +3,26 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 15:29 +08 - ZEE-94
+
+- Trigger: 用户要求使用 `symphony-issue-run` 跑一轮真实 Linear 冒烟，验证 Elixir-style `AI Review` + `land` workflow 在当前 Go runner 下能否全自动跑通。
+- Evidence:
+  - Linear issue: `ZEE-94`，创建于 `Todo`，listener 使用有效 Linear GraphQL key 后记录 `Todo -> In Progress`，并创建 `.worktrees/ZEE-94` / branch `symphony-go/ZEE-94`。
+  - 首次 listener 日志 `.symphony/logs/ZEE-94-20260506-152337.out` 证明当前 shell 的 `LINEAR_API_KEY` 无效，GraphQL 返回 `401 Authentication required`。
+  - 有效 key 重跑日志 `.symphony/logs/ZEE-94-20260506-152435.out`、human log `.symphony/logs/run-20260506-152435.human.log` 和 JSONL `.symphony/logs/run-20260506-152435.jsonl` 证明 listener/tracker 路径可用，child Codex session 已启动。
+  - child 两轮都执行 `command -v linear_graphql || true` 且无输出，随后按 workflow 记录 blocker；它没有使用 Linear MCP/app 写入，也没有 fallback 到 `linear` CLI。
+  - `.worktrees/ZEE-94` 保持 clean，`SMOKE.md` 未被修改，PR / `AI Review` / `Merging` 未开始；监督会话已把 blocker 写入 ZEE-94 Workpad，并将 issue 移到 `Human Review`。
+  - 代码/文档契约存在冲突：`SPEC.md` 把 `linear_graphql` 定义为可选 client-side tool extension，`docs/plan/go-symphony-v3-core.md` 明确 v3 不包含该扩展，而当前 `WORKFLOW.md` / `.codex/skills/linear/SKILL.md` 要求 child 使用 `linear_graphql`。
+- Optimization:
+  - 本轮不在 smoke 中临时改 runner。根因不是 Linear tracker auth，也不是 child 违规 fallback，而是 workflow/skill 依赖的 `linear_graphql` 工具没有被 app-server session 注入。
+  - 后续需要二选一：实现并广告受限的 `linear_graphql` client-side tool，或把 Workpad / issue state 写入下沉为 orchestrator-owned GraphQL 动作，并同步收紧 workflow/skills。
+  - 已创建 follow-up issue `ZEE-95` 跟踪该框架缺口，避免后续 smoke 再次卡在同一位置。
+- Files:
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`git diff --check`
+- Follow-up: 先解决 child Linear 写入所有权，再重跑 ZEE-94 同类 Todo issue，验收标准是无人值守完成 Workpad 更新、PR handoff、`AI Review` 和 `Merging` land，且不触发 MCP 审批、不使用 Linear CLI。
+
 ## 2026-05-06 15:19 +08 - repo-only
 
 - Trigger: 用户要求参考 `ref/elixir-symphony-example/elixir/WORKFLOW.md` 和示例 `.codex/skills`，把根目录 workflow 按示例规范调整；随后明确示例里的 `Human Review` 位置改成 `AI Review` 即可。
