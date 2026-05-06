@@ -33,14 +33,14 @@ func TestOldInternalGeneratedScaffoldChainIsRetired(t *testing.T) {
 }
 
 func TestStandardHertzIDLDefinesOrchestratorDiagnosticEntry(t *testing.T) {
-	mainIDL := readFile(t, "../../idl/main.thrift")
-	orchestratorIDL := readFile(t, "../../idl/orchestrator.thrift")
+	mainIDL := readFile(t, "../../idl/main.proto")
+	orchestratorIDL := readFile(t, "../../idl/orchestrator.proto")
 
 	for _, want := range []string{
 		"service SymphonyAPI",
 		"ProjectIssueRun",
 		"ProjectIssueRunReq",
-		`api.post="/api/v1/orchestrator/project-issue-run"`,
+		`(api.post) = "/api/v1/orchestrator/project-issue-run"`,
 	} {
 		if !strings.Contains(mainIDL, want) {
 			t.Fatalf("standard Hertz main IDL missing orchestrator entry %q", want)
@@ -75,18 +75,18 @@ func TestOrchestratorScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 }
 
 func TestStandardHertzIDLDefinesWorkspaceDiagnosticEntries(t *testing.T) {
-	mainIDL := readFile(t, "../../idl/main.thrift")
-	workspaceIDL := readFile(t, "../../idl/workspace.thrift")
+	mainIDL := readFile(t, "../../idl/main.proto")
+	workspaceIDL := readFile(t, "../../idl/workspace.proto")
 
 	for _, want := range []string{
 		"ResolveWorkspacePath",
 		"ValidateWorkspacePath",
 		"PrepareWorkspace",
 		"CleanupWorkspace",
-		`api.post="/api/v1/workspace/resolve"`,
-		`api.post="/api/v1/workspace/validate"`,
-		`api.post="/api/v1/workspace/prepare"`,
-		`api.post="/api/v1/workspace/cleanup"`,
+		`(api.post) = "/api/v1/workspace/resolve"`,
+		`(api.post) = "/api/v1/workspace/validate"`,
+		`(api.post) = "/api/v1/workspace/prepare"`,
+		`(api.post) = "/api/v1/workspace/cleanup"`,
 	} {
 		if !strings.Contains(mainIDL, want) {
 			t.Fatalf("standard Hertz main IDL missing workspace entry %q", want)
@@ -129,12 +129,12 @@ func TestWorkspaceScaffoldIsExposedAsDiagnosticRoutes(t *testing.T) {
 }
 
 func TestStandardHertzIDLDefinesCodexSessionDiagnosticEntry(t *testing.T) {
-	mainIDL := readFile(t, "../../idl/main.thrift")
-	codexIDL := readFile(t, "../../idl/codex_session.thrift")
+	mainIDL := readFile(t, "../../idl/main.proto")
+	codexIDL := readFile(t, "../../idl/codex_session.proto")
 
 	for _, want := range []string{
 		"RunTurn",
-		`api.post="/api/v1/codex-session/run-turn"`,
+		`(api.post) = "/api/v1/codex-session/run-turn"`,
 	} {
 		if !strings.Contains(mainIDL, want) {
 			t.Fatalf("standard Hertz main IDL missing codex session entry %q", want)
@@ -182,14 +182,14 @@ func TestCodexSessionScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 }
 
 func TestStandardHertzIDLDefinesWorkflowDiagnosticEntries(t *testing.T) {
-	mainIDL := readFile(t, "../../idl/main.thrift")
-	workflowIDL := readFile(t, "../../idl/workflow.thrift")
+	mainIDL := readFile(t, "../../idl/main.proto")
+	workflowIDL := readFile(t, "../../idl/workflow.proto")
 
 	for _, want := range []string{
 		"LoadWorkflow",
 		"RenderWorkflowPrompt",
-		`api.post="/api/v1/workflow/load"`,
-		`api.post="/api/v1/workflow/render-prompt"`,
+		`(api.post) = "/api/v1/workflow/load"`,
+		`(api.post) = "/api/v1/workflow/render-prompt"`,
 	} {
 		if !strings.Contains(mainIDL, want) {
 			t.Fatalf("standard Hertz main IDL missing workflow entry %q", want)

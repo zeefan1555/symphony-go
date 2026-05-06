@@ -11,10 +11,23 @@ if ! command -v hz >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v thriftgo >/dev/null 2>&1; then
-  echo "thriftgo not found. Install with: go install github.com/cloudwego/thriftgo@latest" >&2
+if ! command -v buf >/dev/null 2>&1; then
+  echo "buf not found. Install with: go install github.com/bufbuild/buf/cmd/buf@latest" >&2
   exit 1
 fi
+
+if ! command -v protoc >/dev/null 2>&1; then
+  echo "protoc not found. Install with: brew install protobuf" >&2
+  exit 1
+fi
+
+if ! command -v protoc-gen-go >/dev/null 2>&1; then
+  echo "protoc-gen-go not found. Install with: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest" >&2
+  exit 1
+fi
+
+cd "$repo_root"
+buf lint
 
 tmp_dir="$(mktemp -d)"
 cleanup() {
@@ -25,9 +38,10 @@ trap cleanup EXIT
 hz new \
   --module "$module_name" \
   --out_dir "$tmp_dir" \
+  -I "$repo_root/idl" \
   --handler_dir gen/hertz/handler \
   --model_dir gen/hertz/model \
-  --idl "$repo_root/idl/main.thrift"
+  --idl "$repo_root/idl/main.proto"
 
 find "$tmp_dir/biz/router" -type f -name '*.go' -exec perl -pi -e 's/^package Api$/package api/' {} +
 
@@ -45,6 +59,10 @@ old_local="${module_name}/biz/"
 new_import="${module_name}/gen/hertz/"
 export old_remote old_local new_import
 find "$repo_root/gen/hertz" -type f -name '*.go' -exec perl -pi -e 's#\Q$ENV{old_remote}\E#$ENV{new_import}#g; s#\Q$ENV{old_local}\E#$ENV{new_import}#g' {} +
+while IFS= read -r file; do
+  mv "$file" "${file%.pb.go}.go"
+done < <(find "$repo_root/gen/hertz/model" -type f -name '*.pb.go' | sort)
+find "$repo_root/gen/hertz/model" -type f -name '*.go' -exec perl -pi -e 's/\bIssueId\b/IssueID/g; s/\bGetIssueId\b/GetIssueID/g; s/\bSessionId\b/SessionID/g; s/\bGetSessionId\b/GetSessionID/g; s/json:"(running|retrying),omitempty"/json:"$1"/g' {} +
 
 if [ -f "$repo_root/gen/hertz/router/register.go" ]; then
   perl -0pi -e 's/\n\tcontrol_http "(?:github\.com\/zeefan1555\/symphony-go|symphony-go)\/gen\/hertz\/router\/control\/http"\n/\n/' "$repo_root/gen/hertz/router/register.go"

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package codexsession;
+
+option go_package = "symphony-go/gen/hertz/model/codexsession";
+
+import "api.proto";
+import "common.proto";
+
+message RunTurnReq {
+  string issue_identifier = 1 [(api.body) = "issue_identifier"];
+  string prompt_name = 2 [(api.body) = "prompt_name"];
+  string workspace_path = 3 [(api.body) = "workspace_path"];
+  string prompt_text = 4 [(api.body) = "prompt_text"];
+}
+
+message RunTurnResp {
+  CodexTurnSummary summary = 1;
+}
+
+message CodexTurnSummary {
+  common.CapabilityBoundary boundary = 1;
+  string session_id = 2;
+  int32 turn_count = 3;
+}

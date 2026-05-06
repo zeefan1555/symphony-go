@@ -16,7 +16,7 @@ ZH_SMOKE_PROCESS_PATTERN ?= symphony-go.*run.*WORKFLOW.zh-smoke.md
 # some `go run` temporary executables with a missing LC_UUID load command.
 LDFLAGS := -linkmode=external
 
-.PHONY: build test hertz-generate check-generated-hertz-boundary hertz-layout-smoke run run-once zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
+.PHONY: build test idl-lint hertz-generate check-generated-hertz-boundary hertz-layout-smoke run run-once zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
 
 build:
 	GO=$(GO) SYMPHONY_GO_BUILD_LDFLAGS="$(LDFLAGS)" SYMPHONY_GO_BINARY="$(BINARY)" ./build.sh
@@ -24,14 +24,17 @@ build:
 test:
 	GO=$(GO) SYMPHONY_GO_TEST_LDFLAGS="$(LDFLAGS)" ./test.sh ./...
 
-hertz-generate:
+idl-lint:
+	buf lint
+
+hertz-generate: idl-lint
 	scripts/hertz_generate.sh
 
 check-generated-hertz-boundary:
 	scripts/check_generated_hertz_boundary.sh
 
 hertz-layout-smoke: build check-generated-hertz-boundary
-	$(GO) test ./internal/config ./internal/app ./internal/issuetracker/linear ./internal/service/control ./internal/control/hertzserver ./internal/hertzcontract
+	GO=$(GO) SYMPHONY_GO_TEST_LDFLAGS="$(LDFLAGS)" ./test.sh ./internal/runtime/config ./internal/app ./internal/integration/linear ./internal/service/control ./internal/transport/hertzserver ./internal/hertzcontract
 
 run: build
 	$(BINARY) run --workflow $(WORKFLOW) --tui $(MERGE_TARGET_FLAG)

@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package workspace;
+
+option go_package = "symphony-go/gen/hertz/model/workspace";
+
+import "api.proto";
+import "common.proto";
+
+message ResolveWorkspacePathReq {
+  string issue_identifier = 1 [(api.body) = "issue_identifier"];
+}
+
+message ResolveWorkspacePathResp {
+  WorkspacePreparation preparation = 1;
+}
+
+message ValidateWorkspacePathReq {
+  string workspace_path = 1 [(api.body) = "workspace_path"];
+}
+
+message ValidateWorkspacePathResp {
+  WorkspacePathValidation validation = 1;
+}
+
+message PrepareWorkspaceReq {
+  string issue_identifier = 1 [(api.body) = "issue_identifier"];
+}
+
+message PrepareWorkspaceResp {
+  WorkspacePreparation preparation = 1;
+}
+
+message CleanupWorkspaceReq {
+  string workspace_path = 1 [(api.body) = "workspace_path"];
+}
+
+message CleanupWorkspaceResp {
+  WorkspaceCleanupResult result = 1;
+}
+
+message WorkspacePreparation {
+  common.CapabilityBoundary boundary = 1;
+  string workspace_path = 2;
+  bool contained_in_root = 3;
+}
+
+message WorkspacePathValidation {
+  common.CapabilityBoundary boundary = 1;
+  string workspace_path = 2;
+  bool contained_in_root = 3;
+}
+
+message WorkspaceCleanupResult {
+  common.CapabilityBoundary boundary = 1;
+  string workspace_path = 2;
+  bool removed = 3;
+  bool contained_in_root = 4;
+}

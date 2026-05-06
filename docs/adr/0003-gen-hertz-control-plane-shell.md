@@ -2,7 +2,7 @@
 
 Status: accepted
 
-Symphony Go will move Hertz-managed HTTP code to `gen/hertz/...` as the long-term generated control plane shell. `idl/main.thrift` remains the only Hertz service entry and the source of route annotations. Generated handler, model, and router code must be reproducible from the Hertz generation command and must not contain hand-written business behavior.
+Symphony Go will move Hertz-managed HTTP code to `gen/hertz/...` as the long-term generated control plane shell. `idl/main.proto` remains the only Hertz service entry and the source of route annotations, and `buf lint` is the required automated IDL check before generation. Generated handler, model, and router code must be reproducible from the Hertz generation command and must not contain hand-written business behavior.
 
 This supersedes earlier wording that treated a root-level generated tree as the Hertz shell. The current generated tree is `gen/hertz/...`.
 

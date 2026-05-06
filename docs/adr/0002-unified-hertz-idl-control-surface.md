@@ -1,6 +1,6 @@
 # Unified Hertz IDL Control Surface
 
-Symphony Go will use `idl/main.thrift` as the only Hertz generation entry for business HTTP interfaces. The main IDL owns the single service and all route annotations, while flat domain IDL files define only dedicated `XxxReq`/`XxxResp` contracts and nested models; generated handlers must delegate to handwritten service implementations.
+Symphony Go will use `idl/main.proto` as the only Hertz generation entry for business HTTP interfaces. Buf lint is the automated IDL check before generation. The main IDL owns the single service and all route annotations, while flat domain IDL files define only dedicated `XxxReq`/`XxxResp` contracts and nested models; generated handlers must delegate to handwritten service implementations.
 
 ## Considered Options
 

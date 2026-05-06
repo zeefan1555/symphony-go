@@ -221,3 +221,42 @@ rg -n "对外可见文本默认使用中文|Linear workpad|交接记录" WORKFLO
 ```
 
 - 若发现已发布的 issue comment 正文误用英文，立即用 `linear issue comment update <comment_id> --body ...` 原地改成中文。
+
+## 2026-05-06: IDL 迁移不得倒逼手写代码改名
+
+### 用户纠正
+
+- 用户指出：迁移 Thrift 到 Proto 的目标是让 Hertz 使用 Proto 生成模型，并让原有代码继续引用生成模型；不应该因为生成器产物变成 `main.pb.go` 或字段命名变化，就直接修改原始手写代码来适配。
+
+### 错误模式
+
+- 这是技术判断错误：我把 Protobuf 生成器的默认输出形态当成必须接受的边界，扩大了迁移影响面。
+- 这是流程错误：没有先确认现有 `gen/hertz/...` 文件名和 `IssueID` / `SessionID` 这类 Go API 是否属于下游兼容契约。
+
+### 防复犯规则
+
+- IDL 或代码生成迁移必须优先保护既有手写代码的导入路径、文件名和公开 Go 标识符。
+- 生成器默认产物和现有仓库契约冲突时，优先在生成脚本里做稳定化处理，避免让业务代码跟着生成器抖动。
+- 自动生成代码可以提交，但普通业务改动不应无理由重新生成；只有 IDL、生成脚本或生成器版本变化时才更新 `gen/hertz/...`。
+
+### 固定动作
+
+- IDL 迁移后检查是否误生成新文件名：
+
+```bash
+rg --files gen/hertz/model | rg '\.pb\.go$'
+```
+
+- 检查手写代码是否被迫改成生成器的新命名：
+
+```bash
+git diff -- internal/transport internal/service internal/app
+```
+
+- 重新生成后必须跑契约和边界检查：
+
+```bash
+make hertz-generate
+scripts/check_generated_hertz_boundary.sh
+./test.sh ./internal/hertzcontract ./internal/transport/hertzserver
+```
