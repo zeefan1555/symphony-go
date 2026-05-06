@@ -4,3 +4,4 @@
 PR skill root sync 边界冒烟 ZEE-103
 Merge PASS 收口性能冒烟 ZEE-104
 Merging 收口优化冒烟 ZEE-105
+正式 workflow 冒烟 ZEE_AUTO_20260506
