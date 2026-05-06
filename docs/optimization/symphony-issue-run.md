@@ -3,6 +3,35 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 18:57 +08 - ZEE-103 follow-up
+
+- Trigger: ZEE-103 真实 issue smoke 虽已从 ZEE-102 的约 11 分 34 秒降到约 5 分 39 秒，但简单任务仍明显慢；用户要求按卡点继续优化。
+- Evidence:
+  - `.symphony/logs/run-20260506-183535.human.log` 显示 `Merging` 到 PR script start 仍有约 38 秒，主要用于读取/展开 `pr` skill 和脚本、重复检查，而脚本本身约 25 秒。
+  - 同一轮中 `git pull --ff-only origin symphony-go/ZEE-103` 因远端 issue branch 尚不存在失败，浪费约 3.2 秒，并制造无效解释。
+  - ZEE-103 issue 已进入 `Done` 且 PR 已 merge，但唯一 workpad 没写入最终 merge evidence，说明 agent 直接 Done 与 worktree cleanup 存在收尾竞态。
+  - 这轮 `run` 未带 `--once`，issue terminal 后仍持续轮询，监督会话需要手动 kill 进程。
+- Optimization:
+  - Skill 层：`pull` 只在 `origin/<issue-branch>` 已存在时同步远端 feature branch，且只在 rerere 配置缺失时写 git config。
+  - Workflow/Skill 层：`Merging` 快路径只要求打开 `pr` skill、`test -x` 脚本、准备 PR title/body 并立即执行脚本；正常路径禁止展开完整脚本、重复 review 或重复读取 workflow 历史。
+  - 代码层：新增 `Merge: PASS` agent/orchestrator 文本契约。agent 在 `Merging` 脚本成功后先更新 workpad，再用 `Merge: PASS` 最终回复；orchestrator 识别后负责把 issue 移到 `Done` 并触发 terminal cleanup。
+  - Skill 层：`symphony-issue-run` 的单 issue smoke 默认命令改为 `./bin/symphony-go run --workflow ./WORKFLOW.md --once --no-tui --issue <ISSUE> --merge-target main`。
+- Files:
+  - `WORKFLOW.md`
+  - `.codex/skills/pr/SKILL.md`
+  - `.codex/skills/pull/SKILL.md`
+  - `.codex/skills/symphony-issue-run/SKILL.md`
+  - `internal/service/orchestrator/agent_session.go`
+  - `internal/service/orchestrator/orchestrator_test.go`
+  - `internal/service/workflow/workflow_test.go`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`./test.sh ./internal/service/orchestrator ./internal/service/workflow`
+  - 通过：`./build.sh`
+  - 通过：`bash -n .codex/skills/pr/scripts/pr_merge_flow.sh`
+  - 通过：`git diff --check`
+- Follow-up: 变更验证通过后再新建真实 smoke issue，观察总耗时是否低于 5 分钟、`Merging` 到 script start 是否低于 15 秒、workpad merge evidence 是否完整、`--once` 是否自动退出。
+
 ## 2026-05-06 18:25 +08 - ZEE-102 follow-up
 
 - Trigger: 用户指出简单 smoke 不应该跑到 10 分钟，并提醒此前已经写过 `pr` skill，`AI Review` 完成后应该直接使用该 skill。

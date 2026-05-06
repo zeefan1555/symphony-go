@@ -1648,6 +1648,82 @@ func TestReviewerMergingContinuationRespectsMaxTurns(t *testing.T) {
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
 	}
+	if containsStateUpdate(tracker.states, "Done") {
+		t.Fatalf("state updates = %#v, want no Done without Merge: PASS", tracker.states)
+	}
+}
+
+func TestMergingPassFinalAutoPromotesToDone(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := issuemodel.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-MERGE-PASS",
+		Title:      "merge pass smoke",
+		State:      "Merging",
+	}
+	tracker := &recordingTracker{issue: issue}
+	runner := &mergeMessageRunner{message: "Merge: PASS\n\nPR: https://github.com/zeefan1555/symphony-go/pull/1\nmerge_commit: abc123\nroot_status: ## main...origin/main"}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates:   []string{"Merging"},
+					TerminalStates: []string{"Done"},
+				},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
+			},
+			PromptTemplate: "merge {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	if err := o.runAgent(ctx, issue, 0); err != nil {
+		t.Fatalf("runAgent returned error: %v", err)
+	}
+	if got, want := tracker.states, []string{"Done"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("state updates = %#v, want %#v", got, want)
+	}
+}
+
+func TestMergingWithoutPassDoesNotAutoPromoteToDone(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := issuemodel.Issue{
+		ID:         "issue-id",
+		Identifier: "ZEE-MERGE-NO-PASS",
+		Title:      "merge no pass smoke",
+		State:      "Merging",
+	}
+	tracker := &recordingTracker{issue: issue}
+	runner := &mergeMessageRunner{message: "Merge still running"}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates:   []string{"Merging"},
+					TerminalStates: []string{"Done"},
+				},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
+			},
+			PromptTemplate: "merge {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	err := o.runAgent(ctx, issue, 0)
+	if err == nil || !strings.Contains(err.Error(), "reached max turns") {
+		t.Fatalf("runAgent error = %v, want reached max turns", err)
+	}
+	if containsStateUpdate(tracker.states, "Done") {
+		t.Fatalf("state updates = %#v, want no Done without Merge: PASS", tracker.states)
+	}
 }
 
 func TestRunAgentReviewPolicyAutoStopsWhenAgentMovesToAIReview(t *testing.T) {
@@ -2734,9 +2810,7 @@ func (r *reviewThenMergeRunner) RunSession(ctx context.Context, request codex.Se
 				return result, err
 			}
 		case 1:
-			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Done"); err != nil {
-				return result, err
-			}
+			emitAgentMessage(onEvent, "Merge: PASS\n\nPR: https://github.com/zeefan1555/symphony-go/pull/1\nmerge_commit: abc123\nroot_status: ## main...origin/main")
 		}
 		turnResult := codex.Result{
 			SessionID: fmt.Sprintf("thread-1-turn-%d", turn+1),
@@ -2762,6 +2836,43 @@ func (r *reviewThenMergeRunner) RunSession(ctx context.Context, request codex.Se
 	return result, nil
 }
 
+func emitAgentMessage(onEvent func(codex.Event), text string) {
+	if onEvent == nil {
+		return
+	}
+	onEvent(codex.Event{
+		Name: "item/completed",
+		Payload: map[string]any{
+			"method": "item/completed",
+			"params": map[string]any{
+				"item": map[string]any{
+					"type": "agentMessage",
+					"text": text,
+				},
+			},
+		},
+	})
+}
+
+func containsStateUpdate(states []string, want string) bool {
+	for _, state := range states {
+		if state == want {
+			return true
+		}
+	}
+	return false
+}
+
+type mergeMessageRunner struct {
+	message string
+}
+
+func (r *mergeMessageRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+	return completeFakeSession(ctx, request, func(codex.TurnPrompt) {
+		emitAgentMessage(onEvent, r.message)
+	})
+}
+
 type reviewPassThenMergeRunner struct {
 	tracker *recordingTracker
 	calls   int
@@ -2773,24 +2884,11 @@ func (r *reviewPassThenMergeRunner) RunSession(ctx context.Context, request code
 	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
 	for turn := 0; turn < len(request.Prompts); turn++ {
 		r.prompts = append(r.prompts, request.Prompts[turn])
-		if turn == 0 && onEvent != nil {
-			onEvent(codex.Event{
-				Name: "item/completed",
-				Payload: map[string]any{
-					"method": "item/completed",
-					"params": map[string]any{
-						"item": map[string]any{
-							"type": "agentMessage",
-							"text": "结论: PASS\n\nFindings:\n- 无阻塞发现。",
-						},
-					},
-				},
-			})
+		if turn == 0 {
+			emitAgentMessage(onEvent, "结论: PASS\n\nFindings:\n- 无阻塞发现。")
 		}
 		if turn == 1 {
-			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Done"); err != nil {
-				return result, err
-			}
+			emitAgentMessage(onEvent, "Merge: PASS\n\nPR: https://github.com/zeefan1555/symphony-go/pull/1\nmerge_commit: abc123\nroot_status: ## main...origin/main")
 		}
 		turnResult := codex.Result{
 			SessionID: fmt.Sprintf("thread-1-turn-%d", turn+1),

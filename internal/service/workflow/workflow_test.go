@@ -142,6 +142,10 @@ func TestRepoWorkflowUsesAIReviewPRSkillFastPath(t *testing.T) {
 		"Merging 快路径",
 		"不要在脚本前重新展开实现、review 或完整历史 workpad",
 		"PR script 和远端 checks 是 `Merging` 阶段的质量门槛",
+		"test -x .codex/skills/pr/scripts/pr_merge_flow.sh",
+		"正常路径不要 `sed`/展开读取完整脚本内容",
+		"Merge: PASS",
+		"agent 不直接移动 issue 到 `Done`",
 		"issue worktree agent 不负责写 repo-root `main` checkout",
 		"repo-root `main` checkout sync 由 orchestrator/operator 在 repo-root context 收尾",
 		"不要从 issue worktree agent 执行 `git -C /Users/bytedance/symphony-go pull --ff-only origin main`",
@@ -174,12 +178,74 @@ func TestRepoWorkflowUsesAIReviewPRSkillFastPath(t *testing.T) {
 		"PR checks 绿色，branch 已 push，PR 已链接到 issue",
 		"repo-root sync 完成",
 		"由 PR skill 统一负责 push、PR 创建/更新、feedback sweep、checks、squash merge 和 repo-root sync",
+		"merge 完成后，更新 workpad merge evidence，并移动 issue 到 `Done`",
+		"才移动 issue 到 `Done`",
 		"使用 Linear MCP/app 工具，不要使用 Linear CLI",
 		"不要使用 `linear` CLI 或 `linear_graphql` 作为兜底",
 		"通过 Linear MCP/app issue 更新工具将状态更新为 `In Progress`",
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("repo workflow still contains local merge wording %q", forbidden)
+		}
+	}
+}
+
+func TestRepoSkillsDocumentFastPullAndMergePassContract(t *testing.T) {
+	pullRaw, err := os.ReadFile(filepath.Join("..", "..", "..", ".codex", "skills", "pull", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pullText := string(pullRaw)
+	for _, want := range []string{
+		`test "$(git config --get rerere.enabled)" = true || git config rerere.enabled true`,
+		`git show-ref --verify --quiet "refs/remotes/origin/$branch"`,
+		`remote branch origin/$branch not found; skip feature-branch pull`,
+	} {
+		if !strings.Contains(pullText, want) {
+			t.Fatalf("pull skill missing %q", want)
+		}
+	}
+	if strings.Contains(pullText, "`git pull --ff-only origin $(git branch --show-current)`") {
+		t.Fatal("pull skill still documents unconditional feature branch pull")
+	}
+
+	prRaw, err := os.ReadFile(filepath.Join("..", "..", "..", ".codex", "skills", "pr", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prText := string(prRaw)
+	for _, want := range []string{
+		"`Merge: PASS`",
+		"Do not `sed` or otherwise expand the",
+		"finish with a `Merge: PASS` message instead of moving the",
+		"Final response must start with `Merge: PASS`",
+	} {
+		if !strings.Contains(prText, want) {
+			t.Fatalf("pr skill missing %q", want)
+		}
+	}
+
+	runRaw, err := os.ReadFile(filepath.Join("..", "..", "..", ".codex", "skills", "symphony-issue-run", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runText := string(runRaw)
+	for _, want := range []string{
+		"./bin/symphony-go run --workflow ./WORKFLOW.md --once --no-tui --issue \"$ISSUE\" --merge-target main",
+		"PR creation waits for `Merging`",
+		"Agent reports `Merge: PASS`; orchestrator then moves the issue to `Done`",
+	} {
+		if !strings.Contains(runText, want) {
+			t.Fatalf("symphony issue run skill missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		".codex/skills/land/SKILL.md",
+		"`AI Review` 前必须创建/更新 PR",
+		"Use `run-once` only for diagnosis",
+	} {
+		if strings.Contains(runText, forbidden) {
+			t.Fatalf("symphony issue run skill still contains %q", forbidden)
 		}
 	}
 }

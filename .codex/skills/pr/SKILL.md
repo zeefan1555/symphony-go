@@ -13,6 +13,9 @@ creation/update, checks, and squash merge. Repo-root `main` checkout sync is not
 owned by the issue worktree agent because the agent may not have stable write
 permission outside the issue worktree. The Go orchestrator/operator owns root
 checkout sync and issue worktree cleanup after this skill returns successfully.
+Linear `Done` is also owned by the orchestrator: after script success, update
+the workpad once and finish with a `Merge: PASS` message instead of moving the
+issue to `Done` from the agent.
 
 ## Goals
 
@@ -64,9 +67,16 @@ EOF
 The script prints the PR URL, merge commit, root checkout status, and root sync
 ownership note. Copy those facts into the persistent Linear workpad in Chinese.
 After the script finishes, do not remove the issue worktree manually and do not
-pull the repo-root checkout from the issue worktree agent; return success so the
-orchestrator/operator can run the configured root sync and workspace cleanup
-paths.
+pull the repo-root checkout from the issue worktree agent. Do not move the issue
+to `Done`; return a final message beginning with `Merge: PASS` and include the
+PR URL, merge commit, and root status so the orchestrator can mark `Done` and
+run cleanup.
+
+Normal Merging path should be short: confirm this `SKILL.md` has been opened,
+run `test -x "$repo_root/.codex/skills/pr/scripts/pr_merge_flow.sh"`, prepare
+the title/body, then run the command above. Do not `sed` or otherwise expand the
+entire script in the normal path, do not repeat implementation or AI Review, and
+do not reread the full workflow history before starting the script.
 
 ## Script Flow
 
@@ -107,8 +117,10 @@ paths.
    delete, or pull the repo-root checkout from the issue worktree agent.
 9. Report evidence in the workpad: PR URL, merge commit/result, root status, and
    the note that root checkout sync is owned by the orchestrator/operator. Do
-   not remove the issue worktree in this skill; cleanup is owned by the
-   orchestrator workspace manager.
+   not remove the issue worktree and do not move Linear to `Done` in this skill;
+   cleanup and terminal state are owned by the orchestrator workspace manager.
+10. Final response must start with `Merge: PASS` and include PR URL, merge
+    commit, and root status.
 
 ## Manual Fallback
 

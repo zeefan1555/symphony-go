@@ -86,8 +86,9 @@ shape:
 - Linear 读写必须使用派生会话可用的 `linear_graphql` 工具；不要调用
   Linear MCP/app issue/comment 写入或 `linear` CLI 兜底。
 - Linear workpad、状态说明、commit message 和可见说明默认使用中文。
-- `AI Review` 前必须创建/更新 PR、完成 PR feedback sweep，并确认 checks 绿色。
-- `Merging` 阶段打开并遵守 `.codex/skills/land/SKILL.md`，不要直接调用 `gh pr merge`。
+- `AI Review` 只审查本地 commit、workpad 和 validation evidence；不要提前创建 PR。
+- `Merging` 阶段打开并遵守 `.codex/skills/pr/SKILL.md`，用 `pr_merge_flow.sh` 完成 PR flow。
+- PR script 成功后，agent 必须更新 workpad merge evidence 并以 `Merge: PASS` 最终回复；`Done` 由 orchestrator 收口。
 ```
 
 Capture the identifier and URL, then verify identifier, URL, state, team, and
@@ -107,54 +108,20 @@ test -f .symphony/pids/symphony-go.pid && cat .symphony/pids/symphony-go.pid || 
 test -f ".symphony/pids/<ISSUE>.pid" && cat ".symphony/pids/<ISSUE>.pid" || true
 ```
 
-For the default lifecycle, start one issue-scoped listener from the repo root and
-let it run until the target issue reaches `Done` or another terminal state:
+For the default single-issue lifecycle, run one issue-scoped foreground pass from
+the repo root. `--once` waits for the dispatched worker to finish, so the command
+should exit after the target issue reaches `Done` or another terminal state:
 
 ```sh
 ISSUE=<ISSUE>
 make build
-mkdir -p .symphony/logs .symphony/pids
-ts=$(date +%Y%m%d-%H%M%S)
-log=".symphony/logs/${ISSUE}-$ts.out"
-python3 - "$ISSUE" "$log" <<'PY'
-import subprocess
-import sys
-
-issue, log = sys.argv[1], sys.argv[2]
-f = open(log, "ab", buffering=0)
-cmd = [
-    "./bin/symphony-go",
-    "run",
-    "--workflow",
-    "./WORKFLOW.md",
-    "--no-tui",
-    "--issue",
-    issue,
-    "--merge-target",
-    "main",
-]
-p = subprocess.Popen(
-    cmd,
-    stdin=subprocess.DEVNULL,
-    stdout=f,
-    stderr=subprocess.STDOUT,
-    start_new_session=True,
-)
-pid_file = f".symphony/pids/{issue}.pid"
-with open(pid_file, "w") as out:
-    out.write(str(p.pid))
-print(f"pid={p.pid} log={log} pid_file={pid_file}")
-PY
+date '+SMOKE_START %Y-%m-%dT%H:%M:%S%z'
+./bin/symphony-go run --workflow ./WORKFLOW.md --once --no-tui --issue "$ISSUE" --merge-target main
+date '+SMOKE_END %Y-%m-%dT%H:%M:%S%z'
 ```
 
-This detached Python launcher is preferred over plain `nohup ... &`; previous
-smoke runs showed `nohup` could exit immediately with an empty daemon log.
-
-Use `run-once` only for diagnosis, not for the normal full automation loop:
-
-```sh
-ISSUE=<ISSUE> WORKFLOW=./WORKFLOW.md MERGE_TARGET=main make run-once
-```
+Use a long-lived listener only when the user explicitly asks to process multiple
+issues continuously. Do not start a duplicate listener for a single smoke run.
 
 ## Monitor To Terminal
 
@@ -175,12 +142,14 @@ Expected healthy evidence:
 
 - Issue moves `Todo -> In Progress`.
 - `.worktrees/<ISSUE>` is created.
-- Workpad receives `initial`, `handoff`, `ai_review`, and merge/terminal evidence.
-- Implementation creates/updates a GitHub PR before `AI Review`.
+- Workpad receives initial, handoff, AI Review, and merge evidence.
+- Implementation creates a local commit before `AI Review`; PR creation waits for `Merging`.
 - AI Review passes to `Merging` or sends the issue to `Rework` with reasons.
 - Rework produces a new implementation commit, updates the PR, and returns to `AI Review`.
-- `Merging` uses `.codex/skills/land/SKILL.md` to wait for checks/review,
-  handle feedback, squash-merge, and sync root `main`.
+- `Merging` uses `.codex/skills/pr/SKILL.md` and `pr_merge_flow.sh` to push,
+  create/update the PR, wait for checks/review feedback, squash-merge, and
+  report root status.
+- Agent reports `Merge: PASS`; orchestrator then moves the issue to `Done`.
 - Issue reaches `Done`.
 
 If the issue stalls, diagnose before restarting:
@@ -198,13 +167,13 @@ Treat repeated stalls as framework signal. Do not keep restarting blindly.
 
 ## Merging Checks
 
-`Merging` must use the land flow documented in `.codex/skills/land/SKILL.md`.
-The issue worktree branch should already be pushed and linked to an open PR
-before `AI Review`; `Merging` waits for review/checks, handles feedback, and
-squash-merges before root `main` is synced.
+`Merging` must use the PR flow documented in `.codex/skills/pr/SKILL.md`. The
+issue worktree branch is pushed and linked to a PR during `Merging`, then the PR
+script waits for checks/review feedback, handles blockers, squash-merges, and
+reports root status.
 
 Do not call `gh pr merge` directly and do not run `git merge --no-ff
-<issue-branch>` in the root checkout for the normal path. If land fails,
+<issue-branch>` in the root checkout for the normal path. If the PR script fails,
 inspect the exact PR/GitHub/checks blocker and record it instead of falling
 back to local main merge.
 
@@ -222,7 +191,9 @@ issue state, workpad evidence, and links.
 
 ## Stop The Issue Listener
 
-Stop only the issue-scoped listener after the target issue is terminal. Keep a
+For the default `--once` smoke command there should be no listener to stop after
+the command exits. If a long-lived or detached listener was explicitly started,
+stop only that issue-scoped listener after the target issue is terminal. Keep a
 long-lived all-issue listener alive only if the user explicitly asked for it.
 
 ```sh
@@ -244,7 +215,7 @@ Classify findings:
 
 - Skill gaps: instructions caused manual waiting, duplicate listeners, wrong
   team/project/state, missing terminal checks, or unclear handoff.
-- Workflow gaps: prompt caused wrong PR creation timing, wrong land usage,
+- Workflow gaps: prompt caused wrong PR creation timing, wrong PR skill usage,
   wrong state routing, weak AI Review/Rework loop, or ambiguous
   repo-root/worktree behavior.
 - Code gaps: behavior should be first-class in the orchestrator, workspace
@@ -308,16 +279,17 @@ the exact files.
 
 - Do not stop at `Human Review`; default flow should only use it for true external blockers.
 - Do not stop at `AI Review` or `Merging`; wait for terminal or a real blocker.
-- Do not run only `make run-once` when the user asked for a full framework run.
+- Do not start a long-lived listener when the user asked for one issue smoke;
+  use `./bin/symphony-go run --workflow ./WORKFLOW.md --once --no-tui --issue <ISSUE> --merge-target main`.
 - Do not start a second listener when one is already polling the same issue.
 - Do not let child agents fall back to Linear CLI or Linear MCP/app writes when
   the workflow requires `linear_graphql`.
 - Do not hardcode another repository path, remote, branch, project, or model.
 - Do not declare health from a PID file alone; confirm with `ps` and logs.
 - Do not delete `.worktrees/<ISSUE>` manually while the issue is active.
-- Do not declare `Merging` complete until the land skill has merged the PR and
-  root checkout, `origin/main`, Linear state, workpad evidence, and worktree
-  cleanup have all been checked.
+- Do not declare `Merging` complete until the PR skill has merged the PR, the
+  workpad has merge evidence, `Merge: PASS` has been emitted, and orchestrator
+  terminal cleanup has been checked.
 - Do not leave optimization learnings only in chat; record them in the docs,
   then commit and push verified changes.
 

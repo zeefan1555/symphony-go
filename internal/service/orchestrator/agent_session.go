@@ -103,6 +103,15 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			nextIssue = &refreshed
 			return codex.TurnPrompt{}, false, nil
 		}
+		if refreshed.State == "Merging" && turnState == "Merging" && mergeFinalPasses(lastAgentMessage) {
+			if err := rt.tracker.UpdateIssueState(ctx, refreshed.ID, "Done"); err != nil {
+				return codex.TurnPrompt{}, false, err
+			}
+			refreshed.State = "Done"
+			o.logIssue(refreshed, "state_changed", "Merging -> Done", nil)
+			noRetryNeeded = true
+			return codex.TurnPrompt{}, false, nil
+		}
 		if turn >= maxTurns {
 			maxTurnsReached = true
 			return codex.TurnPrompt{}, false, nil
@@ -201,6 +210,11 @@ func reviewFinalPasses(text string) bool {
 		}
 	}
 	return false
+}
+
+func mergeFinalPasses(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	return strings.HasPrefix(normalized, "merge: pass")
 }
 
 func completedAgentMessageText(event codex.Event) string {

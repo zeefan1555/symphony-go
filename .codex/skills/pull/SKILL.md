@@ -12,18 +12,20 @@ description:
 ## Workflow
 
 1. Verify git status is clean or commit/stash changes before merging.
-2. Ensure rerere is enabled locally:
-   - `git config rerere.enabled true`
-   - `git config rerere.autoupdate true`
+2. Ensure rerere is enabled locally without unnecessary config writes:
+   - `test "$(git config --get rerere.enabled)" = true || git config rerere.enabled true`
+   - `test "$(git config --get rerere.autoupdate)" = true || git config rerere.autoupdate true`
 3. Confirm remotes and branches:
    - Ensure the `origin` remote exists.
    - Ensure the current branch is the one to receive the merge.
 4. Fetch latest refs:
    - `git fetch origin`
-5. Sync the remote feature branch first:
-   - `git pull --ff-only origin $(git branch --show-current)`
+5. Sync the remote feature branch only if it already exists on `origin`:
+   - `branch=$(git branch --show-current)`
+   - `if git show-ref --verify --quiet "refs/remotes/origin/$branch"; then git pull --ff-only origin "$branch"; else echo "remote branch origin/$branch not found; skip feature-branch pull"; fi`
    - This pulls branch updates made remotely (for example, a GitHub auto-commit)
-     before merging `origin/main`.
+     before merging `origin/main`, while avoiding the known first-push failure
+     for new local issue branches.
 6. Merge in order:
    - Prefer `git -c merge.conflictstyle=zdiff3 merge origin/main` for clearer
      conflict context.
