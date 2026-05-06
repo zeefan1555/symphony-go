@@ -165,14 +165,15 @@ func (o *Orchestrator) pollDispatched(ctx context.Context) ([]<-chan struct{}, e
 	if err := o.reconcileRunning(ctx); err != nil {
 		o.log("", "reconcile_error", err.Error(), nil)
 	}
+	if reloadFailed {
+		return nil, nil
+	}
 	issues, err := rt.tracker.FetchActiveIssues(ctx, rt.workflow.Config.Tracker.ActiveStates)
 	if err != nil {
 		o.setLastError(err.Error())
 		return nil, err
 	}
-	if !reloadFailed {
-		o.clearLastError()
-	}
+	o.clearLastError()
 	var dispatched []<-chan struct{}
 	sortCandidates(issues)
 	for _, issue := range issues {
@@ -964,8 +965,14 @@ func (o *Orchestrator) updateRunningFromEvent(issueID string, event codex.Event)
 		entry.LastEvent = codexEventName(event)
 		entry.LastMessage = observability.HumanizeCodexEvent(event.Payload)
 		entry.LastEventAt = time.Now()
-		if sessionID, _ := event.Payload["session_id"].(string); sessionID != "" {
+		if sessionID := codexPayloadString(event.Payload, "session_id", "sessionId"); sessionID != "" {
 			entry.SessionID = sessionID
+		}
+		if threadID := codexPayloadString(event.Payload, "thread_id", "threadId"); threadID != "" {
+			entry.ThreadID = threadID
+		}
+		if turnID := codexPayloadString(event.Payload, "turn_id", "turnId"); turnID != "" {
+			entry.TurnID = turnID
 		}
 		if pid, ok := numericPayloadInt(event.Payload["pid"]); ok {
 			entry.PID = pid
@@ -1080,6 +1087,21 @@ func numericPayloadInt(value any) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func codexPayloadString(payload map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, _ := payload[key].(string); value != "" {
+			return value
+		}
+	}
+	params, _ := payload["params"].(map[string]any)
+	for _, key := range keys {
+		if value, _ := params[key].(string); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func millisUntil(now time.Time, target time.Time) int64 {

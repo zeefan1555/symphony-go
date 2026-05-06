@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	runtimeconfig "symphony-go/internal/runtime/config"
 )
 
 func TestGraphQLSendsUTF8JSONHeadersAndBody(t *testing.T) {
@@ -14,6 +17,9 @@ func TestGraphQLSendsUTF8JSONHeadersAndBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
 			t.Fatalf("Content-Type = %q", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "lin_test" {
+			t.Fatalf("Authorization = %q", got)
 		}
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -101,6 +107,30 @@ func TestFetchActiveIssuesPaginatesAndNormalizes(t *testing.T) {
 	}
 	if issues[0].CreatedAt == nil || issues[1].UpdatedAt == nil {
 		t.Fatalf("timestamps were not parsed: %#v %#v", issues[0], issues[1])
+	}
+}
+
+func TestNewAppliesLinearDefaultsAndEnvAPIKey(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_env")
+
+	client, err := New(runtimeconfig.TrackerConfig{
+		Kind:        "linear",
+		ProjectSlug: "demo",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.Endpoint != "https://api.linear.app/graphql" {
+		t.Fatalf("endpoint = %q", client.Endpoint)
+	}
+	if client.APIKey != "lin_env" {
+		t.Fatalf("api key = %q", client.APIKey)
+	}
+	if client.ProjectSlug != "demo" {
+		t.Fatalf("project slug = %q", client.ProjectSlug)
+	}
+	if client.HTTPClient == nil || client.HTTPClient.Timeout != 30*time.Second {
+		t.Fatalf("timeout = %#v, want 30s", client.HTTPClient)
 	}
 }
 

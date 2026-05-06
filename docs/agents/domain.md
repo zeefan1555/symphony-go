@@ -10,7 +10,9 @@
 
 - 根目录 `CONTEXT.md`，如果存在。
 - `SPEC.md`，用于理解本仓产品与架构契约。
+- `docs/contract-scope.md`，用于确认本仓实现边界、非目标和可选 operator surface。
 - `WORKFLOW.md`，用于理解当前 Linear 驱动的执行工作流。
+- `docs/runtime-policy.md`，用于理解 approval、sandbox、user-input-required 和 dynamic tool 策略。
 - `docs/adr/`，用于读取架构决策，如果存在。
 - 排查重复工作流失败或用户纠正时，读取 `docs/optimization/` 和 `lesson.md`。
 - 不要把 `docs/architecture/symphony-go-architecture.md` 作为默认参考源；它是历史实验文档，不是当前权威架构说明。

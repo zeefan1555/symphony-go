@@ -85,17 +85,27 @@ func New(path string, options ...Option) (*Logger, error) {
 	}
 	if logger.humanPath != "" {
 		if err := os.MkdirAll(filepath.Dir(logger.humanPath), 0o755); err != nil {
-			_ = file.Close()
-			return nil, err
+			logger.warnSinkFailed("human_file", logger.humanPath, err)
+		} else if human, err := os.OpenFile(logger.humanPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err != nil {
+			logger.warnSinkFailed("human_file", logger.humanPath, err)
+		} else {
+			logger.human = human
 		}
-		human, err := os.OpenFile(logger.humanPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-		if err != nil {
-			_ = file.Close()
-			return nil, err
-		}
-		logger.human = human
 	}
 	return logger, nil
+}
+
+func (l *Logger) warnSinkFailed(sink, path string, failure error) {
+	_ = l.Write(Event{
+		Level:   "warn",
+		Event:   "log_sink_failed",
+		Message: "configured log sink disabled",
+		Fields: map[string]any{
+			"sink":  sink,
+			"path":  path,
+			"error": failure.Error(),
+		},
+	})
 }
 
 func (l *Logger) Close() error {

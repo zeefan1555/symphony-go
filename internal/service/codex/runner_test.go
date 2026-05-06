@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	runtimeconfig "symphony-go/internal/runtime/config"
 	issuemodel "symphony-go/internal/service/issue"
@@ -321,6 +322,58 @@ printf '%s\n' '{"method":"turn/completed"}'
 	}
 	if !sawToolResponse {
 		t.Fatalf("tool response missing successful Linear payload:\n%s", raw)
+	}
+}
+
+func TestRunnerFailsUserInputAndApprovalRequestsWithoutWaiting(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		params string
+	}{
+		{name: "turn input required", method: "turn/input_required", params: `"params":{"reason":"blocked"}`},
+		{name: "turn approval required", method: "turn/approval_required", params: `"params":{"reason":"approval"}`},
+		{name: "tool request user input", method: "item/tool/requestUserInput", params: `"params":{"questions":[{"id":"q1"}]}`},
+		{name: "command approval", method: "item/commandExecution/requestApproval", params: `"params":{"command":"gh pr view"}`},
+		{name: "file approval", method: "item/fileChange/requestApproval", params: `"params":{"fileChangeCount":2}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			workspacePath := t.TempDir()
+			fake := filepath.Join(t.TempDir(), "fake-codex")
+			script := fmt.Sprintf(`#!/bin/sh
+IFS= read -r line
+printf '%%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+IFS= read -r line
+printf '%%s\n' '{"id":2,"result":{"thread":{"id":"thread-input"}}}'
+IFS= read -r line
+printf '%%s\n' '{"id":3,"result":{"turn":{"id":"turn-input"}}}'
+printf '%%s\n' '{"id":99,"method":"%s",%s}'
+sleep 5
+`, tc.method, tc.params)
+			if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			runner := New(runtimeconfig.CodexConfig{
+				Command:        fake,
+				ApprovalPolicy: "never",
+				ThreadSandbox:  "workspace-write",
+				TurnTimeoutMS:  10000,
+				ReadTimeoutMS:  5000,
+			})
+			start := time.Now()
+			_, err := runner.Run(context.Background(), workspacePath, "requires input", issuemodel.Issue{Identifier: "ZEE-INPUT", Title: "input"}, nil)
+			if err == nil {
+				t.Fatal("expected input/approval request to fail")
+			}
+			if elapsed := time.Since(start); elapsed > 2*time.Second {
+				t.Fatalf("runner waited too long: %s", elapsed)
+			}
+			if !strings.Contains(err.Error(), tc.method) {
+				t.Fatalf("error = %v, want method %q", err, tc.method)
+			}
+		})
 	}
 }
 

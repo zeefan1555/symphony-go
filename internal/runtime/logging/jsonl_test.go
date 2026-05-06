@@ -128,6 +128,49 @@ func TestLoggerWritesPersistentHumanLog(t *testing.T) {
 	}
 }
 
+func TestLoggerContinuesWhenHumanLogSinkFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "logs", "run.jsonl")
+	blocker := filepath.Join(dir, "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("blocker"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	humanPath := filepath.Join(blocker, "run.human.log")
+	var console bytes.Buffer
+	logger, err := New(path, WithHumanFile(humanPath, false), WithConsole(&console, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := logger.Write(Event{
+		Time:            "2026-05-01T20:00:00Z",
+		IssueIdentifier: "ZEE-8",
+		Event:           "state_changed",
+		Message:         "Todo -> In Progress",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonl := string(raw)
+	for _, want := range []string{`"event":"log_sink_failed"`, `"level":"warn"`, `"sink":"human_file"`, `"event":"state_changed"`} {
+		if !strings.Contains(jsonl, want) {
+			t.Fatalf("json log %q missing %q", jsonl, want)
+		}
+	}
+	out := console.String()
+	if !strings.Contains(out, "event=log_sink_failed") || !strings.Contains(out, "event=state_changed") {
+		t.Fatalf("console output should include warning and later events, got %q", out)
+	}
+	if _, err := os.Stat(humanPath); err == nil {
+		t.Fatalf("human log %q exists despite sink failure", humanPath)
+	}
+}
+
 func TestHumanLogWritesIssueSectionHeaders(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "logs", "run.jsonl")

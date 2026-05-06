@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -64,6 +65,35 @@ func TestDynamicToolExecutorPreservesGraphQLErrorsAsFailureOutput(t *testing.T) 
 	}
 }
 
+func TestDynamicToolExecutorFailsWhenLinearAuthIsMissing(t *testing.T) {
+	result := NewDynamicToolExecutor(nil).Execute(context.Background(), "linear_graphql", map[string]any{
+		"query": "query Viewer { viewer { id } }",
+	})
+	if result.Success {
+		t.Fatalf("success = true, want false")
+	}
+	for _, want := range []string{"missing Linear auth", "LINEAR_API_KEY"} {
+		if !strings.Contains(result.Output, want) {
+			t.Fatalf("output missing %q: %s", want, result.Output)
+		}
+	}
+}
+
+func TestDynamicToolExecutorReturnsTransportFailurePayload(t *testing.T) {
+	client := &fakeGraphQLRawClient{err: errors.New("network timeout")}
+	result := NewDynamicToolExecutor(client).Execute(context.Background(), "linear_graphql", map[string]any{
+		"query": "query Viewer { viewer { id } }",
+	})
+	if result.Success {
+		t.Fatalf("success = true, want false")
+	}
+	for _, want := range []string{"Linear GraphQL tool execution failed", "network timeout"} {
+		if !strings.Contains(result.Output, want) {
+			t.Fatalf("output missing %q: %s", want, result.Output)
+		}
+	}
+}
+
 func TestDynamicToolExecutorRejectsInvalidLinearGraphQLArguments(t *testing.T) {
 	result := NewDynamicToolExecutor(&fakeGraphQLRawClient{}).Execute(context.Background(), "linear_graphql", map[string]any{
 		"query":     "query Viewer { viewer { id } }",
@@ -74,6 +104,64 @@ func TestDynamicToolExecutorRejectsInvalidLinearGraphQLArguments(t *testing.T) {
 	}
 	if !strings.Contains(result.Output, "`linear_graphql.variables` must be a JSON object") {
 		t.Fatalf("output = %s", result.Output)
+	}
+}
+
+func TestDynamicToolExecutorFailsUnsupportedToolNames(t *testing.T) {
+	result := NewDynamicToolExecutor(&fakeGraphQLRawClient{}).Execute(context.Background(), "unknown_tool", map[string]any{
+		"query": "query Viewer { viewer { id } }",
+	})
+	if result.Success {
+		t.Fatalf("success = true, want false")
+	}
+	for _, want := range []string{"Unsupported dynamic tool", "linear_graphql"} {
+		if !strings.Contains(result.Output, want) {
+			t.Fatalf("output missing %q: %s", want, result.Output)
+		}
+	}
+}
+
+func TestDynamicToolExecutorRequiresExactlyOneLinearGraphQLOperation(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{name: "empty document with only fragment", query: "fragment UserFields on User { id }"},
+		{name: "multiple named queries", query: "query One { viewer { id } } query Two { viewer { name } }"},
+		{name: "anonymous plus named query", query: "{ viewer { id } } query Two { viewer { name } }"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := NewDynamicToolExecutor(&fakeGraphQLRawClient{}).Execute(context.Background(), "linear_graphql", tc.query)
+			if result.Success {
+				t.Fatalf("success = true, want false")
+			}
+			if !strings.Contains(result.Output, "`linear_graphql.query` must contain exactly one GraphQL operation") {
+				t.Fatalf("output = %s", result.Output)
+			}
+		})
+	}
+}
+
+func TestDynamicToolExecutorAcceptsOneOperationWithFragmentsAndStrings(t *testing.T) {
+	client := &fakeGraphQLRawClient{}
+	result := NewDynamicToolExecutor(client).Execute(context.Background(), "linear_graphql", `
+query Viewer {
+  viewer {
+    ...UserFields
+    note(text: "query Two { ignored }")
+  }
+}
+fragment UserFields on User {
+  id
+  bio(text: """mutation Ignored { noop }""")
+}
+`)
+	if !result.Success {
+		t.Fatalf("success = false, output:\n%s", result.Output)
+	}
+	if !strings.Contains(client.query, "fragment UserFields") {
+		t.Fatalf("query was not passed through: %q", client.query)
 	}
 }
 

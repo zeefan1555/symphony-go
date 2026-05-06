@@ -11,6 +11,7 @@ import (
 
 type runOptions struct {
 	WorkflowPath       string
+	workflowExplicit   bool
 	Once               bool
 	Issue              string
 	MergeTarget        string
@@ -43,6 +44,9 @@ func parseRunOptions(args []string) (runOptions, error) {
 		return runOptions{}, err
 	}
 	runFlags.Visit(func(f *flag.Flag) {
+		if f.Name == "workflow" {
+			opts.workflowExplicit = true
+		}
 		if f.Name == "merge-target" {
 			opts.mergeExplicit = true
 		}
@@ -52,6 +56,13 @@ func parseRunOptions(args []string) (runOptions, error) {
 	})
 	if opts.serverPortExplicit && opts.ServerPort < 0 {
 		return runOptions{}, fmt.Errorf("port must be zero or positive")
+	}
+	positionals := runFlags.Args()
+	if len(positionals) > 1 {
+		return runOptions{}, fmt.Errorf("expected at most one workflow path argument")
+	}
+	if len(positionals) == 1 && !opts.workflowExplicit {
+		opts.WorkflowPath = positionals[0]
 	}
 	opts.ApplyDefaults()
 	return opts, nil
@@ -95,7 +106,7 @@ func (f tuiFlag) IsBoolFlag() bool {
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] != "run" {
-		fmt.Fprintln(os.Stderr, "usage: symphony-go run --workflow ./WORKFLOW.md [--once] [--issue ZEE-8] [--port 0] [--tui|--no-tui]")
+		fmt.Fprintln(os.Stderr, "usage: symphony-go run [path-to-WORKFLOW.md] [--workflow ./WORKFLOW.md] [--once] [--issue ZEE-8] [--port 0] [--tui|--no-tui]")
 		os.Exit(2)
 	}
 	opts, err := parseRunOptions(os.Args[2:])

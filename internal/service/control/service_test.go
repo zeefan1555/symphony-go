@@ -52,7 +52,10 @@ func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
 			IssueIdentifier: "ZEE-48",
 			State:           "In Progress",
 			WorkspacePath:   "/tmp/ZEE-48",
+			Attempt:         2,
 			SessionID:       "session-id",
+			ThreadID:        "thread-id",
+			TurnID:          "turn-id",
 			TurnCount:       2,
 			StartedAt:       generatedAt,
 			Tokens:          observability.TokenUsage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
@@ -76,8 +79,8 @@ func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
 	if running.Status != control.IssueStatusRunning || running.IssueID != "running-id" || running.Running == nil {
 		t.Fatalf("running detail = %#v, want running projection", running)
 	}
-	if running.Running.SessionID != "session-id" || running.Running.Tokens.TotalTokens != 15 {
-		t.Fatalf("running fields = %#v, want session and token projection", running.Running)
+	if running.Running.SessionID != "session-id" || running.Running.ThreadID != "thread-id" || running.Running.TurnID != "turn-id" || running.Running.Attempt != 2 || running.Running.Tokens.TotalTokens != 15 {
+		t.Fatalf("running fields = %#v, want session identity, attempt, and token projection", running.Running)
 	}
 
 	retrying, err := service.IssueDetail(context.Background(), "ZEE-49")

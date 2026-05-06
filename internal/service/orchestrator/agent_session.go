@@ -23,6 +23,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		IssueID:         issue.ID,
 		IssueIdentifier: issue.Identifier,
 		State:           issue.State,
+		Attempt:         attempt,
 		TurnCount:       1,
 		StartedAt:       time.Now(),
 		LastEvent:       "preparing workspace",
@@ -58,6 +59,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		IssueIdentifier: issue.Identifier,
 		State:           issue.State,
 		WorkspacePath:   workspacePath,
+		Attempt:         attempt,
 		TurnCount:       1,
 		StartedAt:       time.Now(),
 	})
@@ -93,6 +95,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 				IssueIdentifier: issue.Identifier,
 				State:           issue.State,
 				WorkspacePath:   workspacePath,
+				Attempt:         attempt,
 				TurnCount:       turn + 1,
 				StartedAt:       time.Now(),
 			})
@@ -123,6 +126,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 				IssueIdentifier: issue.Identifier,
 				State:           issue.State,
 				WorkspacePath:   workspacePath,
+				Attempt:         attempt,
 				TurnCount:       turn + 1,
 				StartedAt:       time.Now(),
 			})
@@ -137,6 +141,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 					IssueIdentifier: issue.Identifier,
 					State:           issue.State,
 					WorkspacePath:   workspacePath,
+					Attempt:         attempt,
 					TurnCount:       turn + 1,
 					StartedAt:       time.Now(),
 				})
@@ -149,6 +154,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 				IssueIdentifier: issue.Identifier,
 				State:           issue.State,
 				WorkspacePath:   workspacePath,
+				Attempt:         attempt,
 				TurnCount:       turn + 1,
 				StartedAt:       time.Now(),
 			})
@@ -161,6 +167,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			IssueIdentifier: issue.Identifier,
 			State:           issue.State,
 			WorkspacePath:   workspacePath,
+			Attempt:         attempt,
 			TurnCount:       turn + 1,
 			StartedAt:       time.Now(),
 		})

@@ -1,15 +1,15 @@
 spec_range	scenario_id	status	last_round	evidence	next_gap
-1-3	contract_scope	untested	-	-	-
-4	domain_model	untested	-	-	-
-5-6	workflow_config	partial	2026-05-01-workflow_config_dynamic_reload	go test ./internal/workflow -run Reloader; go test ./internal/orchestrator -run reload tests	workspace_safety
-7-8	orchestrator_state	untested	-	-	-
+1-3	contract_scope	covered	2026-05-06-contract_scope_static	docs/contract-scope.md:1-28; internal/app/contract_scope_test.go:10-68; internal/app/run.go:72-166; ./test.sh ./internal/app; ./build.sh	domain_model
+4	domain_model	covered	2026-05-06-domain_model_static	internal/service/issue/types.go:5-23; internal/service/workspace/workspace_test.go:15-110; internal/runtime/observability/snapshot.go:21-47; internal/service/orchestrator/orchestrator_test.go:110-140,3120-3131; internal/service/control/service_test.go:46-84; ./test.sh ./internal/runtime/observability ./internal/service/orchestrator ./internal/service/control	orchestrator_state
+5-6	workflow_config	covered	2026-05-06-workflow_config_static	internal/service/workflow/reloader.go:73-106; internal/service/workflow/reloader_test.go:13-81,83-131,133-174; internal/service/orchestrator/orchestrator.go:477-502; internal/service/orchestrator/orchestrator_test.go:2079-2338; ./test.sh ./internal/service/workflow ./internal/service/orchestrator -run reload-focused tests	workspace_safety
+7-8	orchestrator_state	covered	2026-05-06-orchestrator_state_static	internal/service/orchestrator/orchestrator.go:162-204,207-290,637-676; internal/service/orchestrator/retry.go:17-75; internal/service/orchestrator/orchestrator_test.go:38-68,188-240,414-584,669-748,751-1147,1221-1310,2195-2305; ./test.sh ./internal/service/orchestrator	security_ops
 9	workspace_safety	covered	ZEE-35	go/.symphony/logs/run-20260501-224057.human.log; go/.worktrees-safety/ZEE-35/WORKSPACE_SAFETY_PROOF.md; commit 7a58ac0	agent_runner
-10	agent_runner	partial	ZEE-42	.symphony/logs/run-20260502-165107.human.log; real Codex sessions 019de...5c6fce and 019de...db65d0; issue worktree .worktrees/ZEE-42	agent_runner.linear_graphql_tool_contract
-11	tracker_selection	untested	-	-	-
-12	agent_runner	partial	ZEE-42	.symphony/logs/run-20260502-165107.human.log shows command -v linear_graphql empty and CLI fallback success	agent_runner.linear_graphql_tool_contract
-13	observability	partial	ZEE-33	go/.symphony/logs/run-20260501-222142.jsonl; go/.symphony/logs/run-20260501-222142.human.log	observability.sink_failure
-14	orchestrator_state	untested	-	-	-
-15	security_ops	untested	-	-	-
-16	cli_lifecycle	untested	-	-	-
+10	agent_runner	covered	2026-05-06-agent_runner_static_completion	internal/service/codex/runner.go:279-417; internal/service/codex/runner_test.go:245-378; internal/service/codex/dynamic_tool.go:24-85,122-229; internal/service/codex/dynamic_tool_test.go:10-160; docs/runtime-policy.md:37-54; ./test.sh ./internal/service/codex	tracker_selection
+11	tracker_selection	covered	2026-05-06-tracker_selection_static	internal/integration/linear/client_test.go:15-135,177-255; internal/service/orchestrator/eligibility_test.go:10-140; ./test.sh ./internal/integration/linear ./internal/service/orchestrator	cli_lifecycle
+12	agent_runner	covered	2026-05-06-agent_runner_static_completion	internal/service/codex/runner.go:300-417; internal/service/codex/runner_test.go:245-378; internal/service/codex/dynamic_tool.go:24-85,122-229; internal/service/codex/dynamic_tool_test.go:10-160; docs/runtime-policy.md:50-60; ./test.sh ./internal/service/codex	tracker_selection
+13	observability	covered	2026-05-06-observability_sink_failure_static	internal/runtime/logging/jsonl.go:74-109,130-145,198-215; internal/runtime/logging/jsonl_test.go:92-172; SPEC.md:1277-1284; ./test.sh ./internal/runtime/logging	none
+14	orchestrator_state	covered	2026-05-06-orchestrator_state_static	internal/service/orchestrator/orchestrator.go:162-176,207-242,262-289,637-676; internal/service/orchestrator/orchestrator_test.go:188-240,494-584,751-1147,2195-2305; ./test.sh ./internal/service/orchestrator	security_ops
+15	security_ops	covered	2026-05-06-security_ops_static	docs/runtime-policy.md:5-60; internal/app/contract_scope_test.go:61-84; internal/service/workspace/workspace_test.go:86-165; internal/service/orchestrator/orchestrator.go:542-560; internal/service/control/service_test.go:235-270; internal/service/codex/runner_test.go:328-378; ./test.sh ./internal/app ./internal/service/control ./internal/service/workspace ./internal/service/codex	observability.sink_failure
+16	cli_lifecycle	covered	2026-05-06-cli_lifecycle_static	cmd/symphony-go/main.go:33-68,107-110; cmd/symphony-go/main_test.go:5-68; internal/app/run_test.go:87-202; ./test.sh ./cmd/symphony-go ./internal/app; ./build.sh	contract_scope
 17-18	real_integration	covered	ZEE-42	.symphony/logs/run-20260502-165107.jsonl; .symphony/logs/run-20260502-165107.human.log; Linear ZEE-42 Done; merge commit 96220b6	agent_runner.linear_graphql_tool_contract
 Appendix A	ssh_worker_optional	not_applicable	-	-	-

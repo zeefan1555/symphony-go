@@ -12,6 +12,9 @@ func TestDefaultRunOptionsEnableTUI(t *testing.T) {
 	if opts.MergeTarget != "main" {
 		t.Fatalf("merge target = %q, want main", opts.MergeTarget)
 	}
+	if opts.WorkflowPath != "./WORKFLOW.md" {
+		t.Fatalf("workflow path = %q, want ./WORKFLOW.md", opts.WorkflowPath)
+	}
 	if opts.mergeExplicit {
 		t.Fatal("default merge target should not be marked explicit")
 	}
@@ -27,6 +30,39 @@ func TestParseRunOptionsMarksExplicitMergeTarget(t *testing.T) {
 	}
 	if !opts.mergeExplicit {
 		t.Fatal("merge target flag should be marked explicit")
+	}
+}
+
+func TestParseRunOptionsAcceptsPositionalWorkflowPath(t *testing.T) {
+	opts, err := parseRunOptions([]string{"custom.WORKFLOW.md"})
+	if err != nil {
+		t.Fatalf("parseRunOptions() error = %v", err)
+	}
+	if opts.WorkflowPath != "custom.WORKFLOW.md" {
+		t.Fatalf("workflow path = %q, want custom.WORKFLOW.md", opts.WorkflowPath)
+	}
+	if opts.workflowExplicit {
+		t.Fatal("positional workflow path should not mark workflow flag explicit")
+	}
+}
+
+func TestParseRunOptionsWorkflowFlagOverridesPositionalPath(t *testing.T) {
+	opts, err := parseRunOptions([]string{"--workflow", "flag.WORKFLOW.md", "pos.WORKFLOW.md"})
+	if err != nil {
+		t.Fatalf("parseRunOptions() error = %v", err)
+	}
+	if opts.WorkflowPath != "flag.WORKFLOW.md" {
+		t.Fatalf("workflow path = %q, want flag.WORKFLOW.md", opts.WorkflowPath)
+	}
+	if !opts.workflowExplicit {
+		t.Fatal("workflow flag should be marked explicit")
+	}
+}
+
+func TestParseRunOptionsRejectsMultiplePositionalWorkflowPaths(t *testing.T) {
+	_, err := parseRunOptions([]string{"one.WORKFLOW.md", "two.WORKFLOW.md"})
+	if err == nil {
+		t.Fatal("parseRunOptions() error = nil, want multiple workflow path error")
 	}
 }
 

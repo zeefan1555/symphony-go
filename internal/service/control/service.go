@@ -444,7 +444,10 @@ func ProjectSnapshot(snapshot observability.Snapshot) RuntimeState {
 			IssueIdentifier: entry.IssueIdentifier,
 			State:           entry.State,
 			WorkspacePath:   entry.WorkspacePath,
+			Attempt:         entry.Attempt,
 			SessionID:       entry.SessionID,
+			ThreadID:        entry.ThreadID,
+			TurnID:          entry.TurnID,
 			PID:             entry.PID,
 			TurnCount:       entry.TurnCount,
 			LastEvent:       entry.LastEvent,
@@ -836,7 +839,10 @@ type IssueRun struct {
 	IssueIdentifier string     `json:"issue_identifier"`
 	State           string     `json:"state"`
 	WorkspacePath   string     `json:"workspace_path,omitempty"`
+	Attempt         int        `json:"attempt,omitempty"`
 	SessionID       string     `json:"session_id,omitempty"`
+	ThreadID        string     `json:"thread_id,omitempty"`
+	TurnID          string     `json:"turn_id,omitempty"`
 	PID             int        `json:"pid,omitempty"`
 	TurnCount       int        `json:"turn_count"`
 	LastEvent       string     `json:"last_event,omitempty"`

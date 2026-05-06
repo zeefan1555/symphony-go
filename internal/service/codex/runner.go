@@ -386,6 +386,8 @@ func (s *session) awaitTurn(ctx context.Context, timeout time.Duration, onEvent 
 				return nil
 			case "turn/failed", "turn/cancelled":
 				return fmt.Errorf("%s: %v", method, payload["params"])
+			case "turn/input_required", "turn/approval_required", "item/tool/requestUserInput", "item/commandExecution/requestApproval", "item/fileChange/requestApproval":
+				return fmt.Errorf("%s: unattended runs fail instead of waiting for user input or approval: %v", method, payload["params"])
 			case "item/tool/call":
 				if err := s.handleDynamicToolCall(ctx, payload); err != nil {
 					return err

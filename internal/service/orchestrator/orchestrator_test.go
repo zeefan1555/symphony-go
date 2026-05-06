@@ -115,6 +115,9 @@ func TestSnapshotTracksCodexEventTokens(t *testing.T) {
 	if entry.IssueID != issue.ID || entry.IssueIdentifier != issue.Identifier {
 		t.Fatalf("running entry issue = %#v", entry)
 	}
+	if entry.SessionID != "thread-1-turn-1" || entry.ThreadID != "thread-1" || entry.TurnID != "turn-1" {
+		t.Fatalf("running session identity = %#v, want thread/turn/session fields", entry)
+	}
 	if entry.LastEvent != "token_usage" {
 		t.Fatalf("last event = %q, want token_usage", entry.LastEvent)
 	}
@@ -2256,6 +2259,52 @@ func TestRefreshWorkflowFactoryFailureDoesNotHalfApply(t *testing.T) {
 	}
 }
 
+func TestPollSkipsDispatchWhenWorkflowReloadFailsAfterReconcile(t *testing.T) {
+	tracker := &reloadFailureTracker{
+		refreshed: []issuemodel.Issue{{
+			ID:         "running-id",
+			Identifier: "ZEE-RUNNING",
+			State:      "In Progress",
+		}},
+	}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates: []string{"In Progress"},
+				},
+				Agent: runtimeconfig.AgentConfig{MaxConcurrentAgents: 1},
+			},
+			PromptTemplate: "old prompt",
+		},
+		Reloader: &sequenceReloader{
+			errs: []error{errors.New("invalid workflow")},
+		},
+		Tracker:   tracker,
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), runtimeconfig.HooksConfig{}),
+		Runner:    &countingRunner{},
+	})
+	o.setRunning(observability.RunningEntry{
+		IssueID:         "running-id",
+		IssueIdentifier: "ZEE-RUNNING",
+		State:           "In Progress",
+		StartedAt:       time.Now(),
+	})
+
+	if err := o.poll(context.Background()); err != nil {
+		t.Fatalf("poll returned error = %v", err)
+	}
+	if tracker.refreshCalls != 1 {
+		t.Fatalf("state refresh calls = %d, want reconciliation before dispatch skip", tracker.refreshCalls)
+	}
+	if tracker.activeFetches != 0 {
+		t.Fatalf("active fetches = %d, want dispatch skipped after reload failure", tracker.activeFetches)
+	}
+	if got := o.Snapshot().LastError; got != "invalid workflow" {
+		t.Fatalf("last error = %q, want invalid workflow", got)
+	}
+}
+
 func TestRefreshWorkflowRetriesFactoryFailureWithoutFileTouch(t *testing.T) {
 	oldRoot := filepath.Join(t.TempDir(), "old")
 	newRoot := filepath.Join(t.TempDir(), "new")
@@ -2472,6 +2521,39 @@ func (configTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemo
 }
 
 func (configTracker) UpdateIssueState(context.Context, string, string) error {
+	return nil
+}
+
+type reloadFailureTracker struct {
+	activeFetches int
+	refreshCalls  int
+	refreshed     []issuemodel.Issue
+}
+
+func (t *reloadFailureTracker) FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error) {
+	t.activeFetches++
+	return []issuemodel.Issue{{
+		ID:         "candidate-id",
+		Identifier: "ZEE-CANDIDATE",
+		Title:      "candidate",
+		State:      "In Progress",
+	}}, nil
+}
+
+func (t *reloadFailureTracker) FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error) {
+	return nil, nil
+}
+
+func (t *reloadFailureTracker) FetchIssue(context.Context, string) (issuemodel.Issue, error) {
+	return issuemodel.Issue{}, nil
+}
+
+func (t *reloadFailureTracker) FetchIssueStatesByIDs(context.Context, []string) ([]issuemodel.Issue, error) {
+	t.refreshCalls++
+	return append([]issuemodel.Issue(nil), t.refreshed...), nil
+}
+
+func (t *reloadFailureTracker) UpdateIssueState(context.Context, string, string) error {
 	return nil
 }
 
@@ -3117,7 +3199,10 @@ func (r *snapshotRunner) RunSession(ctx context.Context, request codex.SessionRe
 	onEvent(codex.Event{
 		Name: "token_usage",
 		Payload: map[string]any{
-			"method": "thread/tokenUsage/updated",
+			"method":     "thread/tokenUsage/updated",
+			"session_id": "thread-1-turn-1",
+			"thread_id":  "thread-1",
+			"turn_id":    "turn-1",
 			"params": map[string]any{
 				"input_tokens":  10.0,
 				"output_tokens": 4.0,
