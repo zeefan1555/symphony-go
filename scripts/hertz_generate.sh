@@ -64,6 +64,9 @@ while IFS= read -r file; do
 done < <(find "$repo_root/gen/hertz/model" -type f -name '*.pb.go' | sort)
 find "$repo_root/gen/hertz/model" -type f -name '*.go' -exec perl -pi -e 's/\bIssueId\b/IssueID/g; s/\bGetIssueId\b/GetIssueID/g; s/\bSessionId\b/SessionID/g; s/\bGetSessionId\b/GetSessionID/g; s/json:"(running|retrying),omitempty"/json:"$1"/g' {} +
 
+handler_file="$repo_root/gen/hertz/handler/api/symphony_api.go"
+perl -0pi -e 's#// GetIssueFlow \.\n// \@router /api/v1/orchestrator/get-issue-flow \[POST\]\nfunc GetIssueFlow\(ctx context.Context, c \*app.RequestContext\) \{.*?\n\}\n\z#// GetIssueFlow .\n// \@router /api/v1/orchestrator/get-issue-flow [POST]\nfunc GetIssueFlow(ctx context.Context, c *app.RequestContext) {\n\tvar err error\n\tvar req orchestrator.GetIssueFlowReq\n\terr = c.BindAndValidate(&req)\n\tif err != nil {\n\t\tc.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{\n\t\t\tCode:    "invalid_orchestrator_request",\n\t\t\tMessage: err.Error(),\n\t\t}})\n\t\treturn\n\t}\n\n\tresp, err := hertzbinding.CurrentService().GetIssueFlow(ctx)\n\tif err != nil {\n\t\tenvelope, status := hertzbinding.ErrorEnvelope(err)\n\t\tc.JSON(status, envelope)\n\t\treturn\n\t}\n\n\tc.JSON(consts.StatusOK, resp)\n}\n#s' "$handler_file"
+
 if [ -f "$repo_root/gen/hertz/router/register.go" ]; then
   perl -0pi -e 's/\n\tcontrol_http "(?:github\.com\/zeefan1555\/symphony-go|symphony-go)\/gen\/hertz\/router\/control\/http"\n/\n/' "$repo_root/gen/hertz/router/register.go"
   perl -0pi -e 's/\n\tcontrol_http\.Register\(r\)\n/\n/' "$repo_root/gen/hertz/router/register.go"

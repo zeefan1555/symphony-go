@@ -41,8 +41,8 @@ func Render(snapshot observability.Snapshot, opts Options) string {
 
 	fmt.Fprintf(&b, "├─ %s\n", colorize(opts, "Running", ansiBold+ansiGreen))
 	fmt.Fprintln(&b, "│")
-	fmt.Fprintln(&b, "│   ID       STAGE          PID      AGE / TURN   TOKENS     SESSION        EVENT")
-	fmt.Fprintln(&b, "│   ────────────────────────────────────────────────────────────────────────────────────────────────────────────")
+	fmt.Fprintln(&b, "│   ID       STATE          PHASE/STAGE           PID      AGE / TURN   TOKENS     SESSION        EVENT")
+	fmt.Fprintln(&b, "│   ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────")
 	running := snapshot.Running
 	if opts.MaxAgents > 0 && len(running) > opts.MaxAgents {
 		running = running[:opts.MaxAgents]
@@ -51,10 +51,11 @@ func Render(snapshot observability.Snapshot, opts Options) string {
 		fmt.Fprintln(&b, "│  No active agents")
 	} else {
 		for _, entry := range running {
-			fmt.Fprintf(&b, "│ %s %-8s %-14s %-8s %-12s %8s %-14s %s\n",
+			fmt.Fprintf(&b, "│ %s %-8s %-14s %-21s %-8s %-12s %8s %-14s %s\n",
 				colorize(opts, "●", ansiGreen),
 				valueOrDefault(entry.IssueIdentifier, entry.IssueID),
 				valueOrDefault(entry.State, "-"),
+				stageLabel(entry),
 				formatPID(entry.PID),
 				fmt.Sprintf("%s / %d", formatAge(entry.StartedAt, now), entry.TurnCount),
 				formatInt(entry.Tokens.TotalTokens),
@@ -124,6 +125,16 @@ func lastActivity(entry observability.RunningEntry) string {
 	}
 	if entry.LastEvent != "" {
 		return entry.LastEvent
+	}
+	return "-"
+}
+
+func stageLabel(entry observability.RunningEntry) string {
+	if entry.AgentPhase != "" && entry.Stage != "" {
+		return entry.AgentPhase + "/" + entry.Stage
+	}
+	if entry.Stage != "" {
+		return entry.Stage
 	}
 	return "-"
 }

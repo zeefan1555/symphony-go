@@ -159,6 +159,8 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 			IssueID:         "issue-id",
 			IssueIdentifier: "ZEE-47",
 			State:           "In Progress",
+			AgentPhase:      "implementer",
+			Stage:           "running_agent",
 			WorkspacePath:   "/tmp/ZEE-47",
 			SessionID:       "thread-1",
 			PID:             1234,
@@ -213,6 +215,8 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 				IssueID         string `json:"issue_id"`
 				IssueIdentifier string `json:"issue_identifier"`
 				State           string `json:"state"`
+				AgentPhase      string `json:"agent_phase"`
+				Stage           string `json:"stage"`
 				WorkspacePath   string `json:"workspace_path"`
 				SessionID       string `json:"session_id"`
 				PID             int    `json:"pid"`
@@ -266,6 +270,9 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 	running := state.Running[0]
 	if running.IssueIdentifier != "ZEE-47" || running.State != "In Progress" || running.WorkspacePath != "/tmp/ZEE-47" {
 		t.Fatalf("running entry = %#v, want ZEE-47 projection", running)
+	}
+	if running.AgentPhase != "implementer" || running.Stage != "running_agent" {
+		t.Fatalf("running phase/stage = %#v, want implementer/running_agent", running)
 	}
 	if running.SessionID != "thread-1" || running.PID != 1234 || running.TurnCount != 3 {
 		t.Fatalf("running execution fields = %#v, want session/pid/turn count", running)
@@ -795,6 +802,59 @@ func TestOrchestratorRouteReturnsIssueRunProjection(t *testing.T) {
 	}
 	if body.Projection.IssueIdentifier != "ZEE-56" || body.Projection.RuntimeState != "running" {
 		t.Fatalf("projection = %#v, want running ZEE-56", body.Projection)
+	}
+}
+
+func TestOrchestratorRouteReturnsIssueFlowTrunk(t *testing.T) {
+	service := control.NewService(nil)
+	server := hertzserver.New(service)
+	baseURL := startTestServer(t, server)
+
+	resp := postJSON(t, baseURL, "/api/v1/orchestrator/get-issue-flow", `{}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		Flow struct {
+			Boundary struct {
+				Name string `json:"name"`
+			} `json:"boundary"`
+			Name  string `json:"name"`
+			Steps []struct {
+				Name          string `json:"name"`
+				CoreInterface string `json:"core_interface"`
+			} `json:"steps"`
+			Transitions []struct {
+				From            string `json:"from"`
+				To              string `json:"to"`
+				FailureHandling string `json:"failure_handling"`
+			} `json:"transitions"`
+			FailurePolicy []string `json:"failure_policy"`
+		} `json:"flow"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Flow.Boundary.Name != "orchestrator.issue_flow" || body.Flow.Name != "issue-flow-trunk" {
+		t.Fatalf("flow header = %#v, want orchestrator issue-flow trunk", body.Flow)
+	}
+	wantSteps := []string{"Blocked", "Todo", "In Progress", "AI Review", "Merging", "Done"}
+	if len(body.Flow.Steps) != len(wantSteps) {
+		t.Fatalf("steps = %#v, want trunk steps", body.Flow.Steps)
+	}
+	for i, want := range wantSteps {
+		if body.Flow.Steps[i].Name != want || body.Flow.Steps[i].CoreInterface == "" {
+			t.Fatalf("step[%d] = %#v, want %s with core interface", i, body.Flow.Steps[i], want)
+		}
+	}
+	if len(body.Flow.Transitions) != len(wantSteps)-1 || body.Flow.Transitions[0].From != "Blocked" || body.Flow.Transitions[0].To != "Todo" {
+		t.Fatalf("transitions = %#v, want trunk transitions", body.Flow.Transitions)
+	}
+	if body.Flow.Transitions[0].FailureHandling == "" || len(body.Flow.FailurePolicy) == 0 {
+		t.Fatalf("flow missing failure handling: %#v", body.Flow)
 	}
 }
 

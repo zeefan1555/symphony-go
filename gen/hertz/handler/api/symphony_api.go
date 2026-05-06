@@ -403,3 +403,27 @@ func UpdateTrackerIssueState(ctx context.Context, c *app.RequestContext) {
 
 	c.JSON(consts.StatusOK, resp)
 }
+
+// GetIssueFlow .
+// @router /api/v1/orchestrator/get-issue-flow [POST]
+func GetIssueFlow(ctx context.Context, c *app.RequestContext) {
+	var err error
+	var req orchestrator.GetIssueFlowReq
+	err = c.BindAndValidate(&req)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, &common.ErrorEnvelope{Error: &common.ErrorDetail{
+			Code:    "invalid_orchestrator_request",
+			Message: err.Error(),
+		}})
+		return
+	}
+
+	resp, err := hertzbinding.CurrentService().GetIssueFlow(ctx)
+	if err != nil {
+		envelope, status := hertzbinding.ErrorEnvelope(err)
+		c.JSON(status, envelope)
+		return
+	}
+
+	c.JSON(consts.StatusOK, resp)
+}

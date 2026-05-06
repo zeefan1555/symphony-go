@@ -11,6 +11,7 @@ import (
 	"symphony-go/internal/runtime/observability"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
+	"symphony-go/internal/service/issueflow"
 	"symphony-go/internal/service/workflow"
 	"symphony-go/internal/service/workspace"
 )
@@ -61,6 +62,7 @@ type ControlService interface {
 	RuntimeState(context.Context) (RuntimeState, error)
 	IssueDetail(context.Context, string) (IssueDetail, error)
 	ObservabilitySnapshot(context.Context) (ObservabilitySnapshot, error)
+	IssueFlow(context.Context) (IssueFlowResult, error)
 	ProjectIssueRun(context.Context, string) (IssueRunProjection, error)
 	RuntimeSettings(context.Context) (RuntimeSettingsResult, error)
 	ListTrackerIssues(context.Context, []string) (TrackerIssueList, error)
@@ -150,6 +152,13 @@ func (s *Service) ObservabilitySnapshot(ctx context.Context) (ObservabilitySnaps
 		Boundary: ObservabilityBoundary(),
 		State:    state,
 	}, nil
+}
+
+func (s *Service) IssueFlow(ctx context.Context) (IssueFlowResult, error) {
+	if err := ctx.Err(); err != nil {
+		return IssueFlowResult{}, err
+	}
+	return projectIssueFlow(issueflow.DefinitionForTrunk()), nil
 }
 
 func (s *Service) ProjectIssueRun(ctx context.Context, issueIdentifier string) (IssueRunProjection, error) {
@@ -443,6 +452,8 @@ func ProjectSnapshot(snapshot observability.Snapshot) RuntimeState {
 			IssueID:         entry.IssueID,
 			IssueIdentifier: entry.IssueIdentifier,
 			State:           entry.State,
+			AgentPhase:      entry.AgentPhase,
+			Stage:           entry.Stage,
 			WorkspacePath:   entry.WorkspacePath,
 			Attempt:         entry.Attempt,
 			SessionID:       entry.SessionID,
@@ -546,13 +557,48 @@ func ProjectIssueRunState(state RuntimeState, issueIdentifier string) IssueRunPr
 		}
 	}
 	return IssueRunProjection{
-		Boundary: CapabilityBoundary{
-			Name:               "orchestrator.issue_run_projection",
-			Purpose:            "Project issue-run control state from the handwritten orchestrator runtime.",
-			HandwrittenAdapter: "internal/service/control",
-		},
+		Boundary:        OrchestratorBoundary("issue_run_projection", "Project issue-run control state from the handwritten orchestrator runtime."),
 		IssueIdentifier: issueIdentifier,
 		RuntimeState:    runtimeState,
+	}
+}
+
+func projectIssueFlow(def issueflow.Definition) IssueFlowResult {
+	steps := make([]IssueFlowStep, 0, len(def.Steps))
+	for _, step := range def.Steps {
+		steps = append(steps, IssueFlowStep{
+			Name:          step.Name,
+			Actor:         step.Actor,
+			Purpose:       step.Purpose,
+			CoreInterface: step.CoreInterface,
+		})
+	}
+	transitions := make([]IssueFlowTransition, 0, len(def.Transitions))
+	for _, transition := range def.Transitions {
+		transitions = append(transitions, IssueFlowTransition{
+			From:            transition.From,
+			To:              transition.To,
+			Actor:           transition.Actor,
+			CoreInterface:   transition.CoreInterface,
+			SuccessSignal:   transition.SuccessSignal,
+			FailureHandling: transition.FailureHandling,
+		})
+	}
+	return IssueFlowResult{
+		Boundary:      OrchestratorBoundary("issue_flow", "Expose the human-readable trunk issue lifecycle and its core interfaces."),
+		Name:          def.Name,
+		Purpose:       def.Purpose,
+		Steps:         steps,
+		Transitions:   transitions,
+		FailurePolicy: append([]string(nil), def.FailurePolicy...),
+	}
+}
+
+func OrchestratorBoundary(name, purpose string) CapabilityBoundary {
+	return CapabilityBoundary{
+		Name:               "orchestrator." + name,
+		Purpose:            purpose,
+		HandwrittenAdapter: "internal/service/control",
 	}
 }
 
@@ -647,6 +693,31 @@ type CapabilityBoundary struct {
 type ObservabilitySnapshot struct {
 	Boundary CapabilityBoundary `json:"boundary"`
 	State    RuntimeState       `json:"state"`
+}
+
+type IssueFlowResult struct {
+	Boundary      CapabilityBoundary    `json:"boundary"`
+	Name          string                `json:"name"`
+	Purpose       string                `json:"purpose"`
+	Steps         []IssueFlowStep       `json:"steps"`
+	Transitions   []IssueFlowTransition `json:"transitions"`
+	FailurePolicy []string              `json:"failure_policy"`
+}
+
+type IssueFlowStep struct {
+	Name          string `json:"name"`
+	Actor         string `json:"actor"`
+	Purpose       string `json:"purpose"`
+	CoreInterface string `json:"core_interface"`
+}
+
+type IssueFlowTransition struct {
+	From            string `json:"from"`
+	To              string `json:"to"`
+	Actor           string `json:"actor"`
+	CoreInterface   string `json:"core_interface"`
+	SuccessSignal   string `json:"success_signal"`
+	FailureHandling string `json:"failure_handling"`
 }
 
 type IssueRunProjection struct {
@@ -838,6 +909,8 @@ type IssueRun struct {
 	IssueID         string     `json:"issue_id"`
 	IssueIdentifier string     `json:"issue_identifier"`
 	State           string     `json:"state"`
+	AgentPhase      string     `json:"agent_phase,omitempty"`
+	Stage           string     `json:"stage,omitempty"`
 	WorkspacePath   string     `json:"workspace_path,omitempty"`
 	Attempt         int        `json:"attempt,omitempty"`
 	SessionID       string     `json:"session_id,omitempty"`

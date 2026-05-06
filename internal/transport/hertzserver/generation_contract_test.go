@@ -341,6 +341,7 @@ func expectedHertzMethodContracts() []hertzMethodContract {
 		{Domain: "control", Method: "Refresh", Route: "/api/v1/control/refresh"},
 		{Domain: "control", Method: "GetIssue", Route: "/api/v1/control/get-issue"},
 		{Domain: "observability", Method: "GetObservabilitySnapshot", Route: "/api/v1/observability/get-snapshot"},
+		{Domain: "orchestrator", Method: "GetIssueFlow", Route: "/api/v1/orchestrator/get-issue-flow"},
 		{Domain: "orchestrator", Method: "ProjectIssueRun", Route: "/api/v1/orchestrator/project-issue-run"},
 		{Domain: "runtime", Method: "GetRuntimeSettings", Route: "/api/v1/runtime/get-settings"},
 		{Domain: "tracker", Method: "ListTrackerIssues", Route: "/api/v1/tracker/list-issues"},

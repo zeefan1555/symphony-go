@@ -35,6 +35,8 @@ message IssueRun {
   optional string last_event_at = 11;
   TokenUsage tokens = 12;
   double runtime_seconds = 13;
+  optional string agent_phase = 14;
+  optional string stage = 15;
 }
 
 message RetryRun {

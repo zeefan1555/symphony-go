@@ -37,6 +37,7 @@ func Register(r *server.Hertz) {
 			}
 			{
 				_orchestrator := _v1.Group("/orchestrator", _orchestratorMw()...)
+				_orchestrator.POST("/get-issue-flow", append(_getissueflowMw(), api.GetIssueFlow)...)
 				_orchestrator.POST("/project-issue-run", append(_projectissuerunMw(), api.ProjectIssueRun)...)
 			}
 			{

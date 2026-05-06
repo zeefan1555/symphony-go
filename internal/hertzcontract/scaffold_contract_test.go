@@ -38,8 +38,11 @@ func TestStandardHertzIDLDefinesOrchestratorDiagnosticEntry(t *testing.T) {
 
 	for _, want := range []string{
 		"service SymphonyAPI",
+		"GetIssueFlow",
 		"ProjectIssueRun",
+		"GetIssueFlowReq",
 		"ProjectIssueRunReq",
+		`(api.post) = "/api/v1/orchestrator/get-issue-flow"`,
 		`(api.post) = "/api/v1/orchestrator/project-issue-run"`,
 	} {
 		if !strings.Contains(mainIDL, want) {
@@ -47,6 +50,10 @@ func TestStandardHertzIDLDefinesOrchestratorDiagnosticEntry(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
+		"GetIssueFlowReq",
+		"IssueFlowStep",
+		"IssueFlowTransition",
+		"IssueFlow",
 		"ProjectIssueRunReq",
 		"IssueRunProjection",
 	} {
@@ -62,7 +69,9 @@ func TestOrchestratorScaffoldIsExposedAsDiagnosticRoute(t *testing.T) {
 
 	for _, want := range []string{
 		`_v1.Group("/orchestrator"`,
+		`POST("/get-issue-flow"`,
 		`POST("/project-issue-run"`,
+		"GetIssueFlow",
 		"ProjectIssueRun",
 	} {
 		if !strings.Contains(controlRoute, want) {

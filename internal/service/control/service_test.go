@@ -51,6 +51,8 @@ func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
 			IssueID:         "running-id",
 			IssueIdentifier: "ZEE-48",
 			State:           "In Progress",
+			AgentPhase:      "implementer",
+			Stage:           "running_agent",
 			WorkspacePath:   "/tmp/ZEE-48",
 			Attempt:         2,
 			SessionID:       "session-id",
@@ -81,6 +83,9 @@ func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
 	}
 	if running.Running.SessionID != "session-id" || running.Running.ThreadID != "thread-id" || running.Running.TurnID != "turn-id" || running.Running.Attempt != 2 || running.Running.Tokens.TotalTokens != 15 {
 		t.Fatalf("running fields = %#v, want session identity, attempt, and token projection", running.Running)
+	}
+	if running.Running.AgentPhase != "implementer" || running.Running.Stage != "running_agent" {
+		t.Fatalf("running phase/stage = %#v, want implementer running_agent", running.Running)
 	}
 
 	retrying, err := service.IssueDetail(context.Background(), "ZEE-49")
@@ -229,6 +234,34 @@ func TestServiceProjectsIssueRunState(t *testing.T) {
 	_, err = service.ProjectIssueRun(context.Background(), "")
 	if !errors.Is(err, control.ErrInvalidIssueIdentifier) {
 		t.Fatalf("ProjectIssueRun empty error = %v, want ErrInvalidIssueIdentifier", err)
+	}
+}
+
+func TestServiceExposesIssueFlowTrunk(t *testing.T) {
+	service := control.NewService(nil)
+
+	flow, err := service.IssueFlow(context.Background())
+	if err != nil {
+		t.Fatalf("IssueFlow returned error: %v", err)
+	}
+
+	if flow.Boundary.Name != "orchestrator.issue_flow" {
+		t.Fatalf("boundary = %#v, want orchestrator issue flow", flow.Boundary)
+	}
+	wantSteps := []string{"Blocked", "Todo", "In Progress", "AI Review", "Merging", "Done"}
+	if len(flow.Steps) != len(wantSteps) {
+		t.Fatalf("steps = %#v, want trunk steps", flow.Steps)
+	}
+	for i, want := range wantSteps {
+		if flow.Steps[i].Name != want || flow.Steps[i].CoreInterface == "" {
+			t.Fatalf("step[%d] = %#v, want %s with core interface", i, flow.Steps[i], want)
+		}
+	}
+	if len(flow.Transitions) != len(wantSteps)-1 || flow.Transitions[0].From != "Blocked" || flow.Transitions[0].To != "Todo" {
+		t.Fatalf("transitions = %#v, want trunk transitions from Blocked to Done", flow.Transitions)
+	}
+	if len(flow.FailurePolicy) == 0 {
+		t.Fatal("failure policy must describe retry/human wait behavior")
 	}
 }
 

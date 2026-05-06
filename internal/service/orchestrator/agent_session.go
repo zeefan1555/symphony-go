@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
-	"symphony-go/internal/runtime/observability"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/workflow"
@@ -19,16 +17,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 	default:
 		return fmt.Errorf("unknown agent phase %q", phase)
 	}
-	o.setRunning(observability.RunningEntry{
-		IssueID:         issue.ID,
-		IssueIdentifier: issue.Identifier,
-		State:           issue.State,
-		Attempt:         attempt,
-		TurnCount:       1,
-		StartedAt:       time.Now(),
-		LastEvent:       "preparing workspace",
-		LastMessage:     "preparing workspace",
-	})
+	o.setRunningStage(issue, attempt, phase, stagePreparingWorkspace, "preparing workspace", "", 1)
 	hookCtx := workspace.WithHookIssue(ctx, issue)
 	workspacePath, _, err := rt.workspace.Ensure(hookCtx, issue)
 	if err != nil {
@@ -40,6 +29,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			o.logIssue(issue, "after_run_hook_failed", err.Error(), nil)
 		}
 	}()
+	o.setRunningStage(issue, attempt, phase, stageRunningWorkspaceHooks, "running before_run hook", workspacePath, 1)
 	if err := rt.workspace.BeforeRun(hookCtx, workspacePath); err != nil {
 		o.removeRunning(issue.ID)
 		return err
@@ -50,19 +40,12 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		value := attempt
 		renderAttempt = &value
 	}
+	o.setRunningStage(issue, attempt, phase, stageRenderingPrompt, "rendering workflow prompt", workspacePath, 1)
 	prompt, err := workflow.Render(rt.workflow.PromptTemplate, issue, renderAttempt)
 	if err != nil {
 		return err
 	}
-	o.setRunning(observability.RunningEntry{
-		IssueID:         issue.ID,
-		IssueIdentifier: issue.Identifier,
-		State:           issue.State,
-		WorkspacePath:   workspacePath,
-		Attempt:         attempt,
-		TurnCount:       1,
-		StartedAt:       time.Now(),
-	})
+	o.setRunningStage(issue, attempt, phase, stageRunningAgent, "running Codex turn", workspacePath, 1)
 	var nextIssue *issuemodel.Issue
 	maxTurnsReached := false
 	noRetryNeeded := false
@@ -90,15 +73,7 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 			refreshed.State = "Merging"
 			o.logIssue(refreshed, "state_changed", "AI Review -> Merging", nil)
 			issue = refreshed
-			o.setRunning(observability.RunningEntry{
-				IssueID:         issue.ID,
-				IssueIdentifier: issue.Identifier,
-				State:           issue.State,
-				WorkspacePath:   workspacePath,
-				Attempt:         attempt,
-				TurnCount:       turn + 1,
-				StartedAt:       time.Now(),
-			})
+			o.setRunningStage(issue, attempt, phaseReviewer, stageContinuingMerging, "continuing in Merging", workspacePath, turn+1)
 			next := issue
 			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
 		}
@@ -121,56 +96,24 @@ func (o *Orchestrator) runPhaseAgent(ctx context.Context, rt runtimeSnapshot, is
 		}
 		if refreshed.State == "AI Review" {
 			issue = refreshed
-			o.setRunning(observability.RunningEntry{
-				IssueID:         issue.ID,
-				IssueIdentifier: issue.Identifier,
-				State:           issue.State,
-				WorkspacePath:   workspacePath,
-				Attempt:         attempt,
-				TurnCount:       turn + 1,
-				StartedAt:       time.Now(),
-			})
+			o.setRunningStage(issue, attempt, phaseReviewer, stageContinuingAIReview, "continuing in AI Review", workspacePath, turn+1)
 			next := issue
 			return codex.TurnPrompt{Text: aiReviewContinuationPromptText, Continuation: true, Issue: &next}, true, nil
 		}
 		if refreshed.State == "Merging" {
 			if phase != phaseReviewer {
 				issue = refreshed
-				o.setRunning(observability.RunningEntry{
-					IssueID:         issue.ID,
-					IssueIdentifier: issue.Identifier,
-					State:           issue.State,
-					WorkspacePath:   workspacePath,
-					Attempt:         attempt,
-					TurnCount:       turn + 1,
-					StartedAt:       time.Now(),
-				})
+				o.setRunningStage(issue, attempt, phaseReviewer, stageContinuingMerging, "continuing in Merging", workspacePath, turn+1)
 				next := issue
 				return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
 			}
 			issue = refreshed
-			o.setRunning(observability.RunningEntry{
-				IssueID:         issue.ID,
-				IssueIdentifier: issue.Identifier,
-				State:           issue.State,
-				WorkspacePath:   workspacePath,
-				Attempt:         attempt,
-				TurnCount:       turn + 1,
-				StartedAt:       time.Now(),
-			})
+			o.setRunningStage(issue, attempt, phaseReviewer, stageContinuingMerging, "continuing in Merging", workspacePath, turn+1)
 			next := issue
 			return codex.TurnPrompt{Text: mergingContinuationPromptText, Continuation: true, Issue: &next}, true, nil
 		}
 		issue = refreshed
-		o.setRunning(observability.RunningEntry{
-			IssueID:         issue.ID,
-			IssueIdentifier: issue.Identifier,
-			State:           issue.State,
-			WorkspacePath:   workspacePath,
-			Attempt:         attempt,
-			TurnCount:       turn + 1,
-			StartedAt:       time.Now(),
-		})
+		o.setRunningStage(issue, attempt, phase, stageContinuingImplementation, "continuing implementation", workspacePath, turn+1)
 		next := issue
 		return codex.TurnPrompt{Text: continuationPromptText, Continuation: true, Issue: &next}, true, nil
 	}

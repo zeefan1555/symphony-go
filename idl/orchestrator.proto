@@ -7,6 +7,37 @@ option go_package = "symphony-go/gen/hertz/model/orchestrator";
 import "api.proto";
 import "common.proto";
 
+message GetIssueFlowReq {}
+
+message IssueFlowStep {
+  string name = 1;
+  string actor = 2;
+  string purpose = 3;
+  string core_interface = 4;
+}
+
+message IssueFlowTransition {
+  string from = 1;
+  string to = 2;
+  string actor = 3;
+  string core_interface = 4;
+  string success_signal = 5;
+  string failure_handling = 6;
+}
+
+message IssueFlow {
+  common.CapabilityBoundary boundary = 1;
+  string name = 2;
+  string purpose = 3;
+  repeated IssueFlowStep steps = 4;
+  repeated IssueFlowTransition transitions = 5;
+  repeated string failure_policy = 6;
+}
+
+message GetIssueFlowResp {
+  IssueFlow flow = 1;
+}
+
 message ProjectIssueRunReq {
   string issue_identifier = 1 [(api.body) = "issue_identifier"];
 }

@@ -27,6 +27,9 @@ service SymphonyAPI {
   rpc GetObservabilitySnapshot(observability.GetObservabilitySnapshotReq) returns (observability.GetObservabilitySnapshotResp) {
     option (api.post) = "/api/v1/observability/get-snapshot";
   }
+  rpc GetIssueFlow(orchestrator.GetIssueFlowReq) returns (orchestrator.GetIssueFlowResp) {
+    option (api.post) = "/api/v1/orchestrator/get-issue-flow";
+  }
   rpc ProjectIssueRun(orchestrator.ProjectIssueRunReq) returns (orchestrator.ProjectIssueRunResp) {
     option (api.post) = "/api/v1/orchestrator/project-issue-run";
   }

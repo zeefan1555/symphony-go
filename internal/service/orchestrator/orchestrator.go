@@ -616,14 +616,7 @@ func (o *Orchestrator) dispatchIssueDone(ctx context.Context, issue issuemodel.I
 	delete(o.retryTimers, issue.ID)
 	delete(o.retryAttempts, issue.ID)
 	o.removeRetryLocked(issue.ID)
-	o.setRunningLocked(observability.RunningEntry{
-		IssueID:         issue.ID,
-		IssueIdentifier: issue.Identifier,
-		State:           issue.State,
-		StartedAt:       time.Now(),
-		LastEvent:       "queued",
-		LastMessage:     "queued for worker",
-	})
+	o.setRunningStageLocked(issue, attempt, "", stageQueued, "queued for worker", "", 1)
 	o.mu.Unlock()
 
 	go func() {

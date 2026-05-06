@@ -57,6 +57,14 @@ func (a ControlBinding) GetObservabilitySnapshot(ctx context.Context) (*observab
 	}, nil
 }
 
+func (a ControlBinding) GetIssueFlow(ctx context.Context) (*orchestratormodel.GetIssueFlowResp, error) {
+	flow, err := a.control.IssueFlow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return issueFlowModel(flow), nil
+}
+
 func (a ControlBinding) ProjectIssueRun(ctx context.Context, issueIdentifier string) (*orchestratormodel.ProjectIssueRunResp, error) {
 	projection, err := a.control.ProjectIssueRun(ctx, issueIdentifier)
 	if err != nil {
@@ -327,6 +335,12 @@ func issueRunModel(entry controlplane.IssueRun) *commonmodel.IssueRun {
 		},
 		RuntimeSeconds: entry.RuntimeSeconds,
 	}
+	if entry.AgentPhase != "" {
+		modelEntry.AgentPhase = stringPtr(entry.AgentPhase)
+	}
+	if entry.Stage != "" {
+		modelEntry.Stage = stringPtr(entry.Stage)
+	}
 	if entry.WorkspacePath != "" {
 		modelEntry.WorkspacePath = stringPtr(entry.WorkspacePath)
 	}
@@ -374,6 +388,39 @@ func issueRunProjectionModel(projection controlplane.IssueRunProjection) *orches
 			Boundary:        capabilityBoundaryModel(projection.Boundary),
 			IssueIdentifier: projection.IssueIdentifier,
 			RuntimeState:    projection.RuntimeState,
+		},
+	}
+}
+
+func issueFlowModel(flow controlplane.IssueFlowResult) *orchestratormodel.GetIssueFlowResp {
+	steps := make([]*orchestratormodel.IssueFlowStep, 0, len(flow.Steps))
+	for _, step := range flow.Steps {
+		steps = append(steps, &orchestratormodel.IssueFlowStep{
+			Name:          step.Name,
+			Actor:         step.Actor,
+			Purpose:       step.Purpose,
+			CoreInterface: step.CoreInterface,
+		})
+	}
+	transitions := make([]*orchestratormodel.IssueFlowTransition, 0, len(flow.Transitions))
+	for _, transition := range flow.Transitions {
+		transitions = append(transitions, &orchestratormodel.IssueFlowTransition{
+			From:            transition.From,
+			To:              transition.To,
+			Actor:           transition.Actor,
+			CoreInterface:   transition.CoreInterface,
+			SuccessSignal:   transition.SuccessSignal,
+			FailureHandling: transition.FailureHandling,
+		})
+	}
+	return &orchestratormodel.GetIssueFlowResp{
+		Flow: &orchestratormodel.IssueFlow{
+			Boundary:      capabilityBoundaryModel(flow.Boundary),
+			Name:          flow.Name,
+			Purpose:       flow.Purpose,
+			Steps:         steps,
+			Transitions:   transitions,
+			FailurePolicy: append([]string(nil), flow.FailurePolicy...),
 		},
 	}
 }

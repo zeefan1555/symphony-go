@@ -20,6 +20,7 @@ type ControlService interface {
 	GetState(context.Context) (*commonmodel.RuntimeState, error)
 	GetIssue(context.Context, string) (*commonmodel.IssueDetail, error)
 	GetObservabilitySnapshot(context.Context) (*observabilitymodel.GetObservabilitySnapshotResp, error)
+	GetIssueFlow(context.Context) (*orchestratormodel.GetIssueFlowResp, error)
 	ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error)
 	GetRuntimeSettings(context.Context) (*runtimemodel.GetRuntimeSettingsResp, error)
 	ListTrackerIssues(context.Context, []string) (*trackermodel.ListTrackerIssuesResp, error)
@@ -63,6 +64,10 @@ func (unavailableControlService) GetIssue(context.Context, string) (*commonmodel
 
 func (unavailableControlService) GetObservabilitySnapshot(context.Context) (*observabilitymodel.GetObservabilitySnapshotResp, error) {
 	return nil, NewError(503, "observability_unavailable", "observability snapshot is unavailable")
+}
+
+func (unavailableControlService) GetIssueFlow(context.Context) (*orchestratormodel.GetIssueFlowResp, error) {
+	return nil, NewError(503, "orchestrator_unavailable", "orchestrator issue flow is unavailable")
 }
 
 func (unavailableControlService) ProjectIssueRun(context.Context, string) (*orchestratormodel.ProjectIssueRunResp, error) {

@@ -158,6 +158,51 @@ func TestSnapshotTracksCodexEventTokens(t *testing.T) {
 	}
 }
 
+func TestRunningStageShowsPhaseAndCurrentStep(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-STAGE", Title: "stage visibility", State: "In Progress"}
+	runner := &blockingRunner{
+		started: make(chan string, 1),
+		release: make(chan struct{}),
+	}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{ActiveStates: []string{"In Progress"}},
+				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1, MaxConcurrentAgents: 1},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   &listTracker{issues: []issuemodel.Issue{issue}},
+		Workspace: workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook()),
+		Runner:    runner,
+	})
+
+	if !o.dispatchIssue(ctx, issue, 0) {
+		t.Fatal("dispatchIssue returned false, want dispatch")
+	}
+	select {
+	case <-runner.started:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for worker start: %v", ctx.Err())
+	}
+
+	snapshot := o.Snapshot()
+	if len(snapshot.Running) != 1 {
+		t.Fatalf("running entries = %#v, want one active issue", snapshot.Running)
+	}
+	entry := snapshot.Running[0]
+	if entry.AgentPhase != string(phaseImplementer) || entry.Stage != string(stageRunningAgent) {
+		t.Fatalf("phase/stage = %q/%q, want implementer/running_agent", entry.AgentPhase, entry.Stage)
+	}
+	if entry.LastMessage != "running Codex turn" || entry.WorkspacePath == "" {
+		t.Fatalf("running entry = %#v, want human-readable stage message and workspace", entry)
+	}
+	close(runner.release)
+}
+
 func TestLogIssueWritesStructuredAndLegacyIssueFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "logs", "run.jsonl")
 	logger, err := logging.New(path)

@@ -22,6 +22,8 @@ type RunningEntry struct {
 	IssueID         string     `json:"issue_id"`
 	IssueIdentifier string     `json:"issue_identifier"`
 	State           string     `json:"state"`
+	AgentPhase      string     `json:"agent_phase,omitempty"`
+	Stage           string     `json:"stage,omitempty"`
 	WorkspacePath   string     `json:"workspace_path,omitempty"`
 	Attempt         int        `json:"attempt,omitempty"`
 	SessionID       string     `json:"session_id,omitempty"`
