@@ -3,6 +3,31 @@
 本文件记录 `symphony-issue-run` 流程每次保留下来的优化点。每条记录必须能回答：
 这次卡在哪里、证据是什么、改了 Skill / Workflow / 代码的哪一层、以及怎么验证。
 
+## 2026-05-06 15:19 +08 - repo-only
+
+- Trigger: 用户要求参考 `ref/elixir-symphony-example/elixir/WORKFLOW.md` 和示例 `.codex/skills`，把根目录 workflow 按示例规范调整；随后明确示例里的 `Human Review` 位置改成 `AI Review` 即可。
+- Evidence:
+  - 示例 workflow 的核心路径是 PR 先创建/更新并完成 feedback sweep，review 后进入 `Merging`，`Merging` 打开 `.codex/skills/land/SKILL.md` 并循环 land，而不是直接跑本仓旧的 PR script。
+  - Go orchestrator 对 `AI Review` 有一等路由：`internal/service/orchestrator/phases.go` 会在 `AI Review` 和 `Merging` 状态运行 reviewer phase；`eligibility.go` 需要 `agent.review_policy` 允许 AI Review。
+- Optimization:
+  - Workflow 层：移除 active states 里的 `Human Review`，保留 `AI Review`，并把示例的 PR handoff/review/land 规范迁入根目录 `WORKFLOW.md`。
+  - Skill 层：同步 `linear`、`land`、`symphony-issue-run`、`tdd-acceptance-pr` 和 `prd-issue-run`，让 PR 创建发生在 AI Review 前，Merging 只执行 `land`。
+  - 测试层：更新 repo workflow contract，锁住 Elixir-style AI Review + land flow，并禁止旧 `.codex/skills/pr/scripts/pr_merge_flow.sh` 文案回归。
+- Files:
+  - `WORKFLOW.md`
+  - `.codex/skills/linear/SKILL.md`
+  - `.codex/skills/land/SKILL.md`
+  - `.codex/skills/symphony-issue-run/SKILL.md`
+  - `.codex/skills/tdd-acceptance-pr/SKILL.md`
+  - `.codex/skills/prd-issue-run/SKILL.md`
+  - `internal/service/workflow/workflow_test.go`
+  - `docs/optimization/symphony-issue-run.md`
+- Validation:
+  - 通过：`git diff --check`
+  - 通过：`./test.sh ./internal/service/workflow`
+  - 通过：`make build`
+- Follow-up: 下一次真实 issue-run 重点验证 PR 是否在 `AI Review` 前创建并链接，`Merging` 是否打开 `land` skill 而不是旧 PR script。
+
 ## 2026-05-06 15:09 +08 - repo-only
 
 - Trigger: 用户根据 ZEE-93 MCP smoke 结果纠正方向：MCP 写入会触发审批，不能作为全自动 child workflow；应参考 `ref/elixir-symphony-example/.codex/skills/linear/SKILL.md`，回到本仓 listener 使用的 Linear GraphQL 路径。

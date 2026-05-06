@@ -7,9 +7,7 @@ description: |
 
 # Linear GraphQL
 
-Use this skill for Linear reads and writes during Symphony app-server sessions.
-It matches the same GraphQL path used by the Symphony listener and avoids
-Linear MCP/app write approvals in unattended child sessions.
+Use this skill for raw Linear GraphQL work during Symphony app-server sessions.
 
 ## Primary tool
 
@@ -379,8 +377,6 @@ mutation FileUpload(
 
 - Use `linear_graphql` for comment edits, uploads, and ad-hoc Linear API
   queries.
-- Do not fall back to Linear MCP/app issue or comment tools from unattended
-  child sessions; MCP writes require approval and break full automation.
 - Prefer the narrowest issue lookup that matches what you already know:
   key -> identifier search -> internal id.
 - For state transitions, fetch team states first and use the exact `stateId`

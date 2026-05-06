@@ -156,7 +156,7 @@ For the selected child:
 1. Triage: read issue/comments/labels/blockers/Workpad; post an agent brief if needed; assign self; keep exactly one category label and one state label; move into an active implementation state.
 2. Create or reuse an issue branch/worktree from current `origin/main`. If running directly from the repo root, create a clean branch such as `symphony-go/<ISSUE>` and keep root `main` clean for sync/merge.
 3. TDD: write one public-behavior RED test, implement minimal GREEN, repeat, then run relevant `./test.sh` and `./build.sh` wrappers.
-4. Acceptance PR: re-read issue, tick only proven checklist items, update one Workpad, run `.codex/skills/pr/scripts/pr_merge_flow.sh` when in the expected issue worktree. If working directly from the root checkout and the PR script refuses that layout, perform the equivalent manual flow: commit, push branch, create PR with `Linear: <ISSUE>`, verify mergeability/checks, squash merge, fast-forward root `main`, and verify Linear Done.
+4. Acceptance PR: re-read issue, tick only proven checklist items, update one Workpad, create/update the PR with `Linear: <ISSUE>`, verify PR feedback/checks, move the child to `AI Review`, then let `Merging` use `.codex/skills/land/SKILL.md` to land and verify Linear Done.
 5. Return to parent assessment and pick the next child.
 
 ## Parent Closure

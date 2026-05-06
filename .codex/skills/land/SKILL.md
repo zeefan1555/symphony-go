@@ -31,7 +31,7 @@ This skill is scoped to `/Users/bytedance/symphony-go`.
 - `gh` CLI is authenticated.
 - You are on the PR branch with a clean working tree.
 - A PR already exists for the current branch. PR creation belongs to the
-  implementation/push stage before Human Review, not to Merging.
+  implementation/push stage before AI Review, not to Merging.
 
 ## Primary Command
 

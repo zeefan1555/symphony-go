@@ -18,9 +18,10 @@ Do not use it for other repositories.
 
 ## Operating Contract
 
-- Default flow is fully automated: `Todo -> In Progress -> AI Review -> Merging -> Done`.
+- Default flow follows the Elixir-style PR handoff with AI review:
+  `Todo -> In Progress -> AI Review -> Merging -> Done`.
 - The listener, workflow, and orchestrator own state transitions; do not pause
-  for a human to move `Human Review` or `Merging` unless the user explicitly asks
+  for a human to move `AI Review` or `Merging` unless the user explicitly asks
   for a manual gate.
 - `Human Review` is only an exceptional hold for real external blockers such as
   missing auth, unavailable tools, or permissions that cannot be fixed in-session.
@@ -85,8 +86,8 @@ shape:
 - Linear 读写必须使用派生会话可用的 `linear_graphql` 工具；不要调用
   Linear MCP/app issue/comment 写入或 `linear` CLI 兜底。
 - Linear workpad、状态说明、commit message 和可见说明默认使用中文。
-- `Merging` 阶段使用 `.codex/skills/pr/SKILL.md` 的 PR merge flow；
-  不在当前 sandbox 内直接把 issue worktree 分支合入本地 `main`。
+- `AI Review` 前必须创建/更新 PR、完成 PR feedback sweep，并确认 checks 绿色。
+- `Merging` 阶段打开并遵守 `.codex/skills/land/SKILL.md`，不要直接调用 `gh pr merge`。
 ```
 
 Capture the identifier and URL, then verify identifier, URL, state, team, and
@@ -175,10 +176,11 @@ Expected healthy evidence:
 - Issue moves `Todo -> In Progress`.
 - `.worktrees/<ISSUE>` is created.
 - Workpad receives `initial`, `handoff`, `ai_review`, and merge/terminal evidence.
-- AI Review passes or sends the issue to `Rework` with reasons.
-- Rework produces a new implementation commit and returns to `AI Review`.
-- `Merging` uses `.codex/skills/pr/SKILL.md` to create/update a GitHub PR,
-  wait for checks, squash-merge it, and sync root `main`.
+- Implementation creates/updates a GitHub PR before `AI Review`.
+- AI Review passes to `Merging` or sends the issue to `Rework` with reasons.
+- Rework produces a new implementation commit, updates the PR, and returns to `AI Review`.
+- `Merging` uses `.codex/skills/land/SKILL.md` to wait for checks/review,
+  handle feedback, squash-merge, and sync root `main`.
 - Issue reaches `Done`.
 
 If the issue stalls, diagnose before restarting:
@@ -196,13 +198,15 @@ Treat repeated stalls as framework signal. Do not keep restarting blindly.
 
 ## Merging Checks
 
-`Merging` must use the PR merge flow documented in `.codex/skills/pr/SKILL.md`.
-The issue worktree branch is pushed, a GitHub PR is created or updated, checks
-are handled there, and the PR is squash-merged before root `main` is synced.
+`Merging` must use the land flow documented in `.codex/skills/land/SKILL.md`.
+The issue worktree branch should already be pushed and linked to an open PR
+before `AI Review`; `Merging` waits for review/checks, handles feedback, and
+squash-merges before root `main` is synced.
 
-Do not directly run `git merge --no-ff <issue-branch>` in the root checkout for
-the normal path. If the PR flow fails, inspect the exact PR/script/GitHub
-blocker and record it instead of falling back to local main merge.
+Do not call `gh pr merge` directly and do not run `git merge --no-ff
+<issue-branch>` in the root checkout for the normal path. If land fails,
+inspect the exact PR/GitHub/checks blocker and record it instead of falling
+back to local main merge.
 
 After terminal state, verify:
 
@@ -240,8 +244,9 @@ Classify findings:
 
 - Skill gaps: instructions caused manual waiting, duplicate listeners, wrong
   team/project/state, missing terminal checks, or unclear handoff.
-- Workflow gaps: prompt caused unnecessary remote pulls, wrong PR flow usage, wrong state
-  routing, weak AI Review/Rework loop, or ambiguous repo-root/worktree behavior.
+- Workflow gaps: prompt caused wrong PR creation timing, wrong land usage,
+  wrong state routing, weak AI Review/Rework loop, or ambiguous
+  repo-root/worktree behavior.
 - Code gaps: behavior should be first-class in the orchestrator, workspace
   manager, Linear adapter, runner, logs, or TUI instead of relying on humans.
 - Environment gaps: auth, git permissions, stale processes, or local filesystem
@@ -301,7 +306,7 @@ the exact files.
 
 ## Common Mistakes
 
-- Do not stop at `Human Review`; default flow should not go there.
+- Do not stop at `Human Review`; default flow should only use it for true external blockers.
 - Do not stop at `AI Review` or `Merging`; wait for terminal or a real blocker.
 - Do not run only `make run-once` when the user asked for a full framework run.
 - Do not start a second listener when one is already polling the same issue.
@@ -310,8 +315,9 @@ the exact files.
 - Do not hardcode another repository path, remote, branch, project, or model.
 - Do not declare health from a PID file alone; confirm with `ps` and logs.
 - Do not delete `.worktrees/<ISSUE>` manually while the issue is active.
-- Do not declare `Merging` complete until root checkout, `origin/main`, Linear
-  state, workpad evidence, and worktree cleanup have all been checked.
+- Do not declare `Merging` complete until the land skill has merged the PR and
+  root checkout, `origin/main`, Linear state, workpad evidence, and worktree
+  cleanup have all been checked.
 - Do not leave optimization learnings only in chat; record them in the docs,
   then commit and push verified changes.
 
@@ -324,7 +330,7 @@ Report back with:
 - Final issue state.
 - Worktree path and cleanup result.
 - AI Review result and any Rework loop.
-- PR URL, squash merge/root sync evidence if `Merging` ran.
+- PR URL, AI Review result, and squash merge/root sync evidence if `Merging` ran.
 - Root checkout status after merge.
 - Optimization notes recorded, files changed, validation commands, commit, and
   push result.

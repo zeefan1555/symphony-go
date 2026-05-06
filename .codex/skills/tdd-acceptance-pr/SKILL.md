@@ -1,16 +1,16 @@
 ---
 name: tdd-acceptance-pr
-description: Review a TDD-completed Linear issue against acceptance criteria, tick proven checklist items, and run the Symphony Go PR merge flow. Use when TDD is green and the user asks to review acceptance criteria, check boxes, create/push/merge a PR, or verify Linear auto-Done.
+description: Review a TDD-completed Linear issue against acceptance criteria, tick proven checklist items, create/update the PR, and hand off to AI Review / land flow.
 ---
 
 # TDD Acceptance PR
 
 This skill is scoped to `/Users/bytedance/symphony-go`.
 
-Use after TDD is green and the next job is acceptance review plus PR merge. This
-skill is high-cohesion: it owns checklist review, Linear workpad evidence, PR
-creation, merge, root sync, and Linear Done verification. It may call the
-deterministic PR script, but do not reduce this flow to "go use another skill".
+Use after TDD is green and the next job is acceptance review plus PR handoff.
+This skill is high-cohesion: it owns checklist review, Linear workpad evidence,
+PR creation/update, PR feedback sweep, AI Review handoff, and later land/Done
+verification when the issue reaches `Merging`.
 
 ## Preconditions
 
@@ -29,8 +29,8 @@ deterministic PR script, but do not reduce this flow to "go use another skill".
    triage/comment, copy them into the workpad review section.
 3. For each box, write evidence: file path, command, diff, or out-of-scope note.
 4. Only change `[ ]` to `[x]` when current code and validation prove it.
-5. If any in-scope criterion cannot be proven, stop before PR merge and write the
-   blocker, exact command/output, and next action to the workpad.
+5. If any in-scope criterion cannot be proven, stop before AI Review handoff and
+   write the blocker, exact command/output, and next action to the workpad.
 6. If the user says to ignore unchecked boxes, record that instruction and continue, but do not claim ignored boxes are done.
 
 ## Local Verification
@@ -57,14 +57,16 @@ Maintain one persistent `## Codex Workpad` comment in Chinese. Update it with:
 - current branch and issue id;
 - acceptance checklist with `[x]` only for proven items;
 - validation commands and pass/fail result;
-- PR URL, merge commit, and root `main` sync result after merge;
-- Linear auto-Done observation after merge.
+- PR URL and PR checks / feedback sweep evidence before AI Review;
+- land result, merge commit, root `main` sync result, and Linear Done
+  observation after Merging.
 
 Do not create extra summary comments unless the workpad cannot be updated.
 
-## PR Merge Flow
+## PR Handoff Flow
 
-Prepare a Chinese PR title/body with `Linear: <ISSUE>`, then run:
+Prepare a Chinese PR title/body with `Linear: <ISSUE>`, then use the local
+`push` skill to push the branch and create/update the PR.
 
 ```bash
 repo_root=/Users/bytedance/symphony-go
@@ -78,20 +80,22 @@ cat > "$tmp_body" <<'EOF'
 Linear: <ISSUE>
 EOF
 
-"$repo_root/.codex/skills/pr/scripts/pr_merge_flow.sh" \
-  --repo-root "$repo_root" \
-  --target main --commit-message "<type(scope): 中文提交信息>" \
-  --pr-title "<中文 PR 标题>" \
-  --pr-body-file "$tmp_body"
+git diff --check
+make build
+git push -u origin HEAD
+gh pr create --title "<中文 PR 标题>" --body-file "$tmp_body" \
+  || gh pr edit --title "<中文 PR 标题>" --body-file "$tmp_body"
+gh pr edit --add-label symphony
 ```
 
-The script commits, pushes, creates/updates the PR, waits for checks,
-squash-merges, and fast-forwards root `main`. If it stops after side effects,
-inspect live PR/branch/root/Linear state before retrying.
+After the PR exists, run the PR feedback sweep from `WORKFLOW.md`, confirm
+checks are green, link the PR to the Linear issue, update the workpad, and move
+the issue to `AI Review`.
 
 ## Done Verification
 
-After the PR script succeeds:
+After AI Review passes and the issue reaches `Merging`, open and follow
+`.codex/skills/land/SKILL.md`. After land succeeds:
 
 1. Confirm `gh pr view <PR> --json state,mergedAt,mergeCommit,url`.
 2. Confirm root `main`: `git status --short --branch` and `git log -1 --oneline --decorate`.

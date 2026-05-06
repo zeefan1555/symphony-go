@@ -125,24 +125,24 @@ prompt
 	}
 }
 
-func TestRepoWorkflowUsesPRMergeFlow(t *testing.T) {
+func TestRepoWorkflowUsesElixirStyleAIReviewLandFlow(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(raw)
 	for _, want := range []string{
-		".codex/skills/pr/SKILL.md",
-		"PR merge flow",
-		".codex/skills/pr/scripts/pr_merge_flow.sh",
-		"不要在当前 sandbox 内直接把 issue worktree 分支合入 repo root 的 `main`",
-		"Merging 快路径",
-		"不要重新执行 AI Review",
-		"先运行 `.codex/skills/pr/scripts/pr_merge_flow.sh`，再集中更新一次 workpad",
-		"PR script 和远端 checks 是 `Merging` 阶段的质量门槛",
-		"脚本前不要再执行 `linear auth whoami`",
-		"脚本前不要读取完整历史 workpad",
-		"如果 PR script 成功但 root `main` 没有同步到 `origin/main`",
+		"active_states:\n    - Todo\n    - In Progress\n    - AI Review\n    - Merging\n    - Rework",
+		"本 workflow 使用 `AI Review` 作为示例 workflow 里 `Human Review` 的自动审核位置",
+		"`push`：实现阶段创建或更新 PR，并把 PR 链接回 Linear",
+		"`land`：当 issue 进入 `Merging` 时",
+		"PR feedback sweep protocol",
+		"每一条 actionable reviewer comment",
+		"使用 `push` skill push branch，创建或更新 PR",
+		"当 issue 处于 `AI Review`，reviewer agent 审查 issue、workpad、PR",
+		"打开并遵守 `.codex/skills/land/SKILL.md`",
+		"不要直接调用 `gh pr merge`",
+		"PR checks 绿色，branch 已 push，PR 已链接到 issue",
 		"使用 `linear_graphql`，不要使用 Linear MCP/app 工具",
 		"读取 issue、team states、comments：使用 `linear_graphql` query",
 		"更新 issue 状态：先读取 team states 拿到目标 `stateId`，再使用 `linear_graphql` 的 `issueUpdate` mutation",
@@ -159,6 +159,10 @@ func TestRepoWorkflowUsesPRMergeFlow(t *testing.T) {
 		"验证后 `git push origin main`",
 		"`Merging` 阶段不走 PR land",
 		"在 `Merging` 中不要创建 PR",
+		".codex/skills/pr/SKILL.md",
+		".codex/skills/pr/scripts/pr_merge_flow.sh",
+		"Merging 快路径",
+		"PR script 和远端 checks 是 `Merging` 阶段的质量门槛",
 		"使用 Linear MCP/app 工具，不要使用 Linear CLI",
 		"不要使用 `linear` CLI 或 `linear_graphql` 作为兜底",
 		"通过 Linear MCP/app issue 更新工具将状态更新为 `In Progress`",
