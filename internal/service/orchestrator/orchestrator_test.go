@@ -36,6 +36,15 @@ func TestSnapshotStartsWithEmptyCollections(t *testing.T) {
 	}
 }
 
+func TestStateComparisonNormalizesCaseAndSpace(t *testing.T) {
+	if !isActive("In Progress", []string{" in progress "}) {
+		t.Fatal("isActive should match state names after trim and case normalization")
+	}
+	if !isTerminal("Done", []string{"done"}) {
+		t.Fatal("isTerminal should match terminal state names after case normalization")
+	}
+}
+
 func TestRequestRefreshSignalsPollWithoutBlocking(t *testing.T) {
 	o := New(Options{Workflow: &runtimeconfig.Workflow{Config: runtimeconfig.Config{}}})
 
@@ -213,7 +222,7 @@ func TestLogIssueWritesStructuredAndLegacyIssueFields(t *testing.T) {
 	o := New(Options{Logger: logger})
 
 	issue := issuemodel.Issue{ID: "issue-id", Identifier: "ZEE-8"}
-	o.logIssue(issue, "dispatch_skipped", "claimed", nil)
+	o.logIssue(issue, "dispatch_started", "dispatch started", map[string]any{"state": "In Progress"})
 	if err := logger.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -228,6 +237,9 @@ func TestLogIssueWritesStructuredAndLegacyIssueFields(t *testing.T) {
 	}
 	if event.IssueID != issue.ID || event.IssueIdentifier != issue.Identifier {
 		t.Fatalf("structured issue fields = %#v", event)
+	}
+	if event.Event != "dispatch_started" || event.Fields["state"] != "In Progress" {
+		t.Fatalf("dispatch log event = %#v, want dispatch_started with state", event)
 	}
 	if event.Fields["issue_id"] != issue.ID || event.Fields["issue_identifier"] != issue.Identifier {
 		t.Fatalf("legacy issue fields = %#v", event.Fields)
@@ -1414,8 +1426,8 @@ func TestRunAgentContinuesWithFixedContinuationPrompt(t *testing.T) {
 	if err := o.runAgent(ctx, issue, 0); err != nil {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
-	if runner.calls != 2 {
-		t.Fatalf("RunSession calls = %d, want 2 issue-flow turns", runner.calls)
+	if runner.calls != 1 {
+		t.Fatalf("RunSession calls = %d, want one live session for issue-flow turns", runner.calls)
 	}
 	if len(runner.prompts) != 2 {
 		t.Fatalf("prompts = %#v, want two turns", runner.prompts)
@@ -1522,7 +1534,7 @@ func TestRunAgentReviewPolicyHumanDoesNotMoveImplementationToHumanReview(t *test
 				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 1,
 					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
-						Mode:                "human",
+						Mode:                "auto",
 						AllowManualAIReview: true,
 						OnAIFail:            "rework",
 					},
@@ -1562,7 +1574,7 @@ func TestAIReviewStateDoesNotUseManualPolicyTransition(t *testing.T) {
 				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 1,
 					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
-						Mode:                "human",
+						Mode:                "auto",
 						AllowManualAIReview: true,
 						OnAIFail:            "rework",
 					},
@@ -1647,7 +1659,7 @@ func TestReviewerAgentContinuesIntoMerging(t *testing.T) {
 				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 2,
 					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{
-						Mode:                "human",
+						Mode:                "auto",
 						AllowManualAIReview: true,
 						OnAIFail:            "rework",
 					},
@@ -1664,8 +1676,8 @@ func TestReviewerAgentContinuesIntoMerging(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if runner.calls != 2 {
-		t.Fatalf("reviewer runner calls = %d, want 2 issue-flow turns", runner.calls)
+	if runner.calls != 1 {
+		t.Fatalf("reviewer runner calls = %d, want one live session for issue-flow turns", runner.calls)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
@@ -1721,8 +1733,8 @@ func TestReviewerPassFinalPromotesToMergingContinuation(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if runner.calls != 2 {
-		t.Fatalf("reviewer runner calls = %d, want 2 issue-flow turns", runner.calls)
+	if runner.calls != 1 {
+		t.Fatalf("reviewer runner calls = %d, want one live session for issue-flow turns", runner.calls)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
@@ -1797,7 +1809,10 @@ func TestMergingPassFinalAutoPromotesToDone(t *testing.T) {
 					ActiveStates:   []string{"Merging"},
 					TerminalStates: []string{"Done"},
 				},
-				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
+				Agent: runtimeconfig.AgentConfig{
+					MaxTurns:     1,
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{Mode: "auto"},
+				},
 			},
 			PromptTemplate: "merge {{ issue.identifier }}",
 		},
@@ -1989,8 +2004,8 @@ func TestRunAgentContinuesIntoAIReviewWithReviewPrompt(t *testing.T) {
 		t.Fatalf("runAgent returned error: %v", err)
 	}
 
-	if runner.calls != 2 {
-		t.Fatalf("runner calls = %d, want 2 issue-flow turns", runner.calls)
+	if runner.calls != 1 {
+		t.Fatalf("runner calls = %d, want one live session for issue-flow turns", runner.calls)
 	}
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
@@ -2498,6 +2513,7 @@ func writeOrchestratorWorkflow(t *testing.T, path, project, root, command, inter
 	content := `---
 tracker:
   kind: linear
+  api_key: $LINEAR_API_KEY
   project_slug: ` + project + `
 polling:
   interval_ms: ` + interval + `

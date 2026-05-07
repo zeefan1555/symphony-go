@@ -145,6 +145,74 @@ func TestStateRouteReturnsEmptyRuntimeState(t *testing.T) {
 	}
 }
 
+func TestSpecAliasStateRouteReturnsRuntimeState(t *testing.T) {
+	service := control.NewService(snapshotProvider{snapshot: observability.Snapshot{
+		GeneratedAt: time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC),
+		Running:     []observability.RunningEntry{},
+		Retrying:    []observability.RetryEntry{},
+		Polling:     observability.PollingStatus{IntervalMS: 45000},
+	}})
+	baseURL := startTestServer(t, hertzserver.New(service))
+
+	resp := get(t, baseURL, "/api/v1/state")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var body struct {
+		State struct {
+			Polling struct {
+				IntervalMS int `json:"interval_ms"`
+			} `json:"polling"`
+		} `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.State.Polling.IntervalMS != 45000 {
+		t.Fatalf("polling.interval_ms = %d, want 45000", body.State.Polling.IntervalMS)
+	}
+}
+
+func TestSpecAliasIssueRouteUsesErrorEnvelope(t *testing.T) {
+	service := control.NewService(snapshotProvider{snapshot: observability.Snapshot{
+		Running:  []observability.RunningEntry{},
+		Retrying: []observability.RetryEntry{},
+	}})
+	baseURL := startTestServer(t, hertzserver.New(service))
+
+	resp := get(t, baseURL, "/api/v1/ZEE-404")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Error.Code != "issue_not_found" {
+		t.Fatalf("error code = %q, want issue_not_found", body.Error.Code)
+	}
+}
+
+func TestSpecAliasRefreshRouteQueuesRefresh(t *testing.T) {
+	provider := &refreshSnapshotProvider{results: []bool{true}}
+	baseURL := startTestServer(t, hertzserver.New(control.NewService(provider)))
+
+	resp := postJSON(t, baseURL, "/api/v1/refresh", "{}")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("refresh calls = %d, want one", provider.calls)
+	}
+}
+
 func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
 	startedAt := generatedAt.Add(-2 * time.Minute)
@@ -1084,6 +1152,15 @@ func postJSON(t *testing.T, baseURL, path, body string) *http.Response {
 	return resp
 }
 
+func get(t *testing.T, baseURL, path string) *http.Response {
+	t.Helper()
+	resp, err := http.Get(baseURL + path)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	return resp
+}
+
 func startTestServer(t *testing.T, server *hertzserver.Server) string {
 	t.Helper()
 
@@ -1130,6 +1207,7 @@ func writeWorkflowFile(t *testing.T) string {
 	content := `---
 tracker:
   kind: linear
+  api_key: $LINEAR_API_KEY
   project_slug: demo
   active_states:
     - Todo

@@ -43,6 +43,37 @@ type fakeIssueTracker struct {
 	issue        issuemodel.Issue
 }
 
+type fakeRuntimeProvider struct {
+	fakeSnapshotProvider
+	config    runtimeconfig.Config
+	workspace *workspace.Manager
+	runner    *fakeControlCodexRunner
+	tracker   *fakeIssueTracker
+}
+
+func (p fakeRuntimeProvider) RuntimeConfig() runtimeconfig.Config {
+	return p.config
+}
+
+func (p fakeRuntimeProvider) RuntimeWorkspace() *workspace.Manager {
+	return p.workspace
+}
+
+func (p fakeRuntimeProvider) RuntimeRunner() interface {
+	RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
+} {
+	return p.runner
+}
+
+func (p fakeRuntimeProvider) RuntimeTracker() interface {
+	FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error)
+	FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error)
+	FetchIssue(context.Context, string) (issuemodel.Issue, error)
+	UpdateIssueState(context.Context, string, string) error
+} {
+	return p.tracker
+}
+
 func TestServiceReadsIssueDetailFromSnapshotProvider(t *testing.T) {
 	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
 	dueAt := generatedAt.Add(30 * time.Second)
@@ -303,6 +334,44 @@ func TestServiceExposesRuntimeSettingsWithoutSecrets(t *testing.T) {
 	}
 	if settings.ServerPort != 18080 || !settings.ServerPortSet || settings.MergeTarget != "main" {
 		t.Fatalf("runtime settings = %#v, want server and merge config", settings)
+	}
+}
+
+func TestServiceRuntimeSettingsUsesLiveProviderConfig(t *testing.T) {
+	provider := fakeRuntimeProvider{
+		config: runtimeconfig.Config{
+			Tracker: runtimeconfig.TrackerConfig{
+				Kind:           "linear",
+				ProjectSlug:    "demo-live",
+				ActiveStates:   []string{"Todo", "AI Review"},
+				TerminalStates: []string{"Done"},
+			},
+			Polling:   runtimeconfig.PollingConfig{IntervalMS: 45000},
+			Workspace: runtimeconfig.WorkspaceConfig{Root: "/tmp/live-workspaces"},
+		},
+	}
+	service := control.NewServiceWithOptions(control.ServiceOptions{
+		Provider: provider,
+		Config: runtimeconfig.Config{
+			Tracker:   runtimeconfig.TrackerConfig{ProjectSlug: "stale", ActiveStates: []string{"Stale"}},
+			Polling:   runtimeconfig.PollingConfig{IntervalMS: 1},
+			Workspace: runtimeconfig.WorkspaceConfig{Root: "/tmp/stale"},
+		},
+	})
+
+	result, err := service.RuntimeSettings(context.Background())
+	if err != nil {
+		t.Fatalf("RuntimeSettings returned error: %v", err)
+	}
+	settings := result.Settings
+	if settings.TrackerProjectSlug != "demo-live" {
+		t.Fatalf("project slug = %q, want live provider config", settings.TrackerProjectSlug)
+	}
+	if settings.PollingIntervalMS != 45000 || settings.WorkspaceRoot != "/tmp/live-workspaces" {
+		t.Fatalf("runtime settings = %#v, want live polling and workspace", settings)
+	}
+	if len(settings.TrackerActiveStates) != 2 || settings.TrackerActiveStates[1] != "AI Review" {
+		t.Fatalf("active states = %#v, want live active states", settings.TrackerActiveStates)
 	}
 }
 
@@ -616,6 +685,7 @@ func writeControlWorkflowFile(t *testing.T) string {
 	content := `---
 tracker:
   kind: linear
+  api_key: $LINEAR_API_KEY
   project_slug: demo
   active_states:
     - Todo

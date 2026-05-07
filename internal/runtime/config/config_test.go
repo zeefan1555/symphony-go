@@ -16,6 +16,7 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 	resolved, err := Resolve(Config{
 		Tracker: TrackerConfig{
 			Kind:        "linear",
+			APIKey:      "$LINEAR_API_KEY",
 			ProjectSlug: "demo",
 		},
 	}, workflowPath)
@@ -26,7 +27,7 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 		t.Fatalf("endpoint = %q", resolved.Tracker.Endpoint)
 	}
 	if resolved.Tracker.APIKey != "lin_test" {
-		t.Fatalf("api key was not resolved from LINEAR_API_KEY")
+		t.Fatalf("api key was not resolved through explicit $LINEAR_API_KEY")
 	}
 	if !reflect.DeepEqual(resolved.Tracker.ActiveStates, []string{"Todo", "In Progress"}) {
 		t.Fatalf("active states = %#v", resolved.Tracker.ActiveStates)
@@ -84,7 +85,7 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 func TestResolvePreservesExplicitMergeTarget(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(Config{
-		Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Tracker: validTracker(),
 		Merge:   MergeConfig{Target: "release"},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
@@ -101,7 +102,7 @@ func TestResolveUsesAppConfigMergeTarget(t *testing.T) {
 	writeAppConfig(t, dir, "release")
 
 	resolved, err := Resolve(Config{
-		Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Tracker: validTracker(),
 	}, filepath.Join(dir, "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +121,7 @@ func TestResolveAppConfigMergeTargetOverridesWorkflowWithWarning(t *testing.T) {
 	writeAppConfig(t, dir, "release")
 
 	resolved, err := Resolve(Config{
-		Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Tracker: validTracker(),
 		Merge:   MergeConfig{Target: "main"},
 	}, filepath.Join(dir, "WORKFLOW.md"))
 	if err != nil {
@@ -147,7 +148,7 @@ func TestResolveDoesNotUseEnvironmentAsAppConfigOverride(t *testing.T) {
 	writeAppConfig(t, dir, "config-release")
 
 	resolved, err := Resolve(Config{
-		Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Tracker: validTracker(),
 	}, filepath.Join(dir, "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +161,7 @@ func TestResolveDoesNotUseEnvironmentAsAppConfigOverride(t *testing.T) {
 func TestResolvePreservesExplicitServerPortZero(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(Config{
-		Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Tracker: validTracker(),
 		Server:  ServerConfig{Port: 0, PortSet: true},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
@@ -192,6 +193,20 @@ func TestResolveUsesExplicitEnvIndirectionOnly(t *testing.T) {
 	if resolved.Tracker.APIKey != "lin_from_env" {
 		t.Fatalf("api key = %q", resolved.Tracker.APIKey)
 	}
+
+	t.Setenv("LINEAR_API_KEY", "lin_global_should_not_be_used")
+	_, err = Resolve(Config{
+		Tracker: TrackerConfig{
+			Kind:        "linear",
+			ProjectSlug: "demo",
+		},
+	}, workflowPath)
+	if err == nil {
+		t.Fatal("expected missing tracker API key without explicit $VAR")
+	}
+	if Code(err) != ErrMissingTrackerAPIKey {
+		t.Fatalf("code = %q, want %s", Code(err), ErrMissingTrackerAPIKey)
+	}
 }
 
 func TestResolvePreservesExplicitCodexStallTimeout(t *testing.T) {
@@ -205,7 +220,7 @@ func TestResolvePreservesExplicitCodexStallTimeout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resolved, err := Resolve(Config{
-				Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+				Tracker: validTracker(),
 				Codex: CodexConfig{
 					StallTimeoutMS:    tc.raw,
 					StallTimeoutMSSet: true,
@@ -224,7 +239,7 @@ func TestResolvePreservesExplicitCodexStallTimeout(t *testing.T) {
 func TestResolveDefaultsAbsentCodexStallTimeout(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(Config{
-		Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Tracker: validTracker(),
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +252,7 @@ func TestResolveDefaultsAbsentCodexStallTimeout(t *testing.T) {
 func TestResolvePreservesProgrammaticPositiveCodexStallTimeout(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(Config{
-		Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Tracker: validTracker(),
 		Codex:   CodexConfig{StallTimeoutMS: 100},
 	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 	if err != nil {
@@ -277,7 +292,7 @@ func TestResolveRejectsInvalidReviewPolicy(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Resolve(Config{
-				Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+				Tracker: validTracker(),
 				Agent:   AgentConfig{ReviewPolicy: tc.policy},
 			}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
 			if err == nil {
@@ -293,7 +308,7 @@ func TestResolveRejectsInvalidReviewPolicy(t *testing.T) {
 func TestResolveNormalizesPerStateConcurrency(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(Config{
-		Tracker: TrackerConfig{Kind: "linear", ProjectSlug: "demo"},
+		Tracker: validTracker(),
 		Agent: AgentConfig{
 			MaxConcurrentAgentsByState: map[string]int{
 				"Todo":        2,
@@ -323,4 +338,8 @@ func writeAppConfig(t *testing.T, dir string, mergeTarget string) {
 	if err := os.WriteFile(filepath.Join(confDir, "config.yaml"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func validTracker() TrackerConfig {
+	return TrackerConfig{Kind: "linear", APIKey: "lin_test", ProjectSlug: "demo"}
 }

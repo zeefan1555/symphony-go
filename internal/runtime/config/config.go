@@ -168,9 +168,6 @@ func applyDefaults(cfg *Config) {
 
 func resolveEnv(cfg *Config) {
 	cfg.Tracker.APIKey = resolveDollar(cfg.Tracker.APIKey)
-	if cfg.Tracker.APIKey == "" && cfg.Tracker.Kind == "linear" {
-		cfg.Tracker.APIKey = os.Getenv("LINEAR_API_KEY")
-	}
 	cfg.Workspace.Root = resolveDollar(cfg.Workspace.Root)
 }
 
@@ -234,7 +231,7 @@ func validate(cfg Config) error {
 		return &Error{Code: ErrUnsupportedTrackerKind, Message: fmt.Sprintf("tracker.kind %q is not supported", cfg.Tracker.Kind)}
 	}
 	if cfg.Tracker.APIKey == "" {
-		return &Error{Code: ErrMissingTrackerAPIKey, Message: "tracker.api_key or LINEAR_API_KEY is required"}
+		return &Error{Code: ErrMissingTrackerAPIKey, Message: "tracker.api_key is required; use explicit $VAR indirection for environment secrets"}
 	}
 	if cfg.Tracker.ProjectSlug == "" {
 		return &Error{Code: ErrMissingTrackerProjectSlug, Message: "tracker.project_slug is required for linear"}

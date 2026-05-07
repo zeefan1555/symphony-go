@@ -16,6 +16,39 @@ import (
 	issuemodel "symphony-go/internal/service/issue"
 )
 
+const (
+	ErrAPIRequest       = "linear_api_request"
+	ErrAPIStatus        = "linear_api_status"
+	ErrGraphQLErrors    = "linear_graphql_errors"
+	ErrUnknownPayload   = "linear_unknown_payload"
+	ErrMissingEndCursor = "linear_missing_end_cursor"
+)
+
+type Error struct {
+	Code    string
+	Message string
+	Err     error
+}
+
+func (e *Error) Error() string {
+	if e.Err == nil {
+		return e.Code + ": " + e.Message
+	}
+	return e.Code + ": " + e.Message + ": " + e.Err.Error()
+}
+
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+func Code(err error) string {
+	var linearErr *Error
+	if errors.As(err, &linearErr) {
+		return linearErr.Code
+	}
+	return ""
+}
+
 const pollQuery = `
 query SymphonyGoPoll($projectSlug: String!, $stateNames: [String!]!, $first: Int!, $after: String) {
   issues(filter: {project: {slugId: {eq: $projectSlug}}, state: {name: {in: $stateNames}}}, first: $first, after: $after) {
@@ -161,7 +194,7 @@ func (c *Client) FetchIssuesByStates(ctx context.Context, states []string) ([]is
 			return issues, nil
 		}
 		if body.Data.Issues.PageInfo.EndCursor == nil {
-			return nil, errors.New("linear_missing_end_cursor")
+			return nil, &Error{Code: ErrMissingEndCursor, Message: "Linear pageInfo.hasNextPage=true without endCursor"}
 		}
 		after = body.Data.Issues.PageInfo.EndCursor
 	}
@@ -292,7 +325,7 @@ func (c *Client) GraphQL(ctx context.Context, query string, variables map[string
 	}
 	if errorsValue, ok := payload["errors"]; ok {
 		if errorsList, ok := errorsValue.([]any); ok && len(errorsList) > 0 {
-			return fmt.Errorf("Linear GraphQL errors: %v", errorsList)
+			return &Error{Code: ErrGraphQLErrors, Message: fmt.Sprintf("Linear GraphQL errors: %v", errorsList)}
 		}
 	}
 	raw, err := json.Marshal(payload)
@@ -309,7 +342,7 @@ func (c *Client) GraphQLRaw(ctx context.Context, query string, variables map[str
 	}
 	var body map[string]any
 	if err := json.Unmarshal(respBody, &body); err != nil {
-		return nil, err
+		return nil, &Error{Code: ErrUnknownPayload, Message: "decode Linear GraphQL response", Err: err}
 	}
 	if body == nil {
 		body = map[string]any{}
@@ -339,7 +372,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, &Error{Code: ErrAPIRequest, Message: "send Linear GraphQL request", Err: err}
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
@@ -347,7 +380,7 @@ func (c *Client) doGraphQL(ctx context.Context, query string, variables map[stri
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Linear GraphQL status %d: %s", resp.StatusCode, string(respBody))
+		return nil, &Error{Code: ErrAPIStatus, Message: fmt.Sprintf("Linear GraphQL status %d: %s", resp.StatusCode, string(respBody))}
 	}
 	return respBody, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	runtimeconfig "symphony-go/internal/runtime/config"
@@ -141,6 +142,58 @@ func TestRunIssueTrunkAIReviewPassContinuesToMerging(t *testing.T) {
 	}
 }
 
+func TestRunIssueTrunkReusesOneSessionForContinuation(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "continue", State: StateInProgress}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("RunSession calls = %d, want one live session for worker continuation", runner.calls)
+	}
+	got := promptTexts(runner.prompts)
+	want := []string{"work on ZEE-1", ContinuationPromptText}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("prompts = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunIssueTrunkRunsHooksOncePerWorkerAttempt(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "hooks", State: StateInProgress}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	var hooks []string
+	rt.Workspace = workspace.New(filepath.Join(t.TempDir(), "worktrees"), runtimeconfig.HooksConfig{
+		BeforeRun: "true",
+		AfterRun:  "true",
+	})
+	rt.Workspace.SetHookObserver(func(event workspace.HookEvent) {
+		if event.Stage == "completed" {
+			hooks = append(hooks, event.Name)
+		}
+	})
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	want := []string{"before_run", "after_run"}
+	if !reflect.DeepEqual(hooks, want) {
+		t.Fatalf("hooks = %#v, want %#v for one worker attempt", hooks, want)
+	}
+}
+
 func TestRunIssueTrunkMergePassMarksDone(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "merge", State: StateMerging}
 	tracker := &fakeTracker{issue: issue}
@@ -156,6 +209,42 @@ func TestRunIssueTrunkMergePassMarksDone(t *testing.T) {
 	}
 	if tracker.updateState != StateDone {
 		t.Fatalf("UpdateIssueState = %q, want Done", tracker.updateState)
+	}
+}
+
+func TestRunIssueTrunkReviewPassDoesNotWriteStateWhenExtensionDisabled(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "manual review", State: StateAIReview}
+	tracker := &fakeTracker{issue: issue}
+	rt := testRuntime(t, tracker, &fakeRunner{agentMessage: "Review: PASS"}, &fakeObserver{})
+	rt.Workflow.Config.Agent.ReviewPolicy.Mode = "human"
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeWaitHuman {
+		t.Fatalf("outcome = %q, want human wait", result.Outcome)
+	}
+	if tracker.updateState != "" {
+		t.Fatalf("UpdateIssueState = %q, want no extension state write", tracker.updateState)
+	}
+}
+
+func TestRunIssueTrunkMergePassDoesNotWriteStateWhenExtensionDisabled(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "manual merge", State: StateMerging}
+	tracker := &fakeTracker{issue: issue}
+	rt := testRuntime(t, tracker, &fakeRunner{agentMessage: "Merge: PASS"}, &fakeObserver{})
+	rt.Workflow.Config.Agent.ReviewPolicy.Mode = "human"
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeWaitHuman {
+		t.Fatalf("outcome = %q, want human wait", result.Outcome)
+	}
+	if tracker.updateState != "" {
+		t.Fatalf("UpdateIssueState = %q, want no extension state write", tracker.updateState)
 	}
 }
 
@@ -178,6 +267,36 @@ func TestRunIssueTrunkInProgressRunsImplementer(t *testing.T) {
 	}
 	if !observer.sawStage(PhaseImplementer, StageRunningAgent) {
 		t.Fatalf("stages = %#v, want implementer running_agent", observer.stages)
+	}
+}
+
+func TestRunIssueTrunkNormalizesStateNames(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "case drift", State: "In Progress"}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	rt.Workflow.Config.Tracker.ActiveStates = []string{"in progress"}
+	rt.Workflow.Config.Tracker.TerminalStates = []string{"done"}
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("runner calls = %d, want agent run for normalized active state", runner.calls)
+	}
+
+	terminal := issue
+	terminal.State = "Done"
+	result, err = RunIssueTrunk(context.Background(), rt, terminal, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk terminal returned error: %v", err)
+	}
+	if result.Outcome != OutcomeDone {
+		t.Fatalf("terminal outcome = %q, want done", result.Outcome)
 	}
 }
 
@@ -316,31 +435,44 @@ type fakeRunner struct {
 func (f *fakeRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
 	f.calls++
 	f.request = request
-	f.prompts = append(f.prompts, request.Prompts...)
 	if f.err != nil {
 		return codex.SessionResult{}, f.err
 	}
-	result := codex.Result{SessionID: "session-1", ThreadID: "thread-1", TurnID: "turn-1"}
-	if f.agentMessage != "" && onEvent != nil {
-		onEvent(codex.Event{Name: "item/completed", Payload: map[string]any{
-			"params": map[string]any{
-				"item": map[string]any{
-					"type": "agentMessage",
-					"text": f.agentMessage,
+	result := codex.SessionResult{SessionID: "session-1", ThreadID: "thread-1"}
+	for turnIndex := 0; turnIndex < len(request.Prompts); turnIndex++ {
+		f.prompts = append(f.prompts, request.Prompts[turnIndex])
+		turnResult := codex.Result{SessionID: "session-1", ThreadID: "thread-1", TurnID: "turn-1"}
+		result.Turns = append(result.Turns, turnResult)
+		if f.agentMessage != "" && onEvent != nil {
+			onEvent(codex.Event{Name: "item/completed", Payload: map[string]any{
+				"params": map[string]any{
+					"item": map[string]any{
+						"type": "agentMessage",
+						"text": f.agentMessage,
+					},
 				},
-			},
-		}})
-	}
-	if request.AfterTurn != nil {
-		next, ok, err := request.AfterTurn(ctx, result, 1)
+			}})
+		}
+		if request.AfterTurn == nil {
+			continue
+		}
+		next, ok, err := request.AfterTurn(ctx, turnResult, turnIndex+1)
 		if err != nil {
 			return codex.SessionResult{}, err
 		}
 		if ok {
-			f.prompts = append(f.prompts, next)
+			request.Prompts = append(request.Prompts, next)
 		}
 	}
-	return codex.SessionResult{SessionID: result.SessionID, ThreadID: result.ThreadID, Turns: []codex.Result{result}}, nil
+	return result, nil
+}
+
+func promptTexts(prompts []codex.TurnPrompt) []string {
+	texts := make([]string, 0, len(prompts))
+	for _, prompt := range prompts {
+		texts = append(texts, prompt.Text)
+	}
+	return texts
 }
 
 type fakeObserver struct {
@@ -388,7 +520,10 @@ func testRuntime(t *testing.T, tracker *fakeTracker, runner *fakeRunner, observe
 					ActiveStates:   []string{StateTodo, StateInProgress, StateAIReview, StateMerging, StateHumanReview},
 					TerminalStates: []string{StateDone},
 				},
-				Agent: runtimeconfig.AgentConfig{MaxTurns: 2},
+				Agent: runtimeconfig.AgentConfig{
+					MaxTurns:     2,
+					ReviewPolicy: runtimeconfig.ReviewPolicyConfig{Mode: "auto"},
+				},
 			},
 			PromptTemplate: "work on {{ issue.identifier }}",
 		},

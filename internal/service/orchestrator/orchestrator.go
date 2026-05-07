@@ -204,7 +204,7 @@ func (o *Orchestrator) pollDispatched(ctx context.Context) ([]<-chan struct{}, e
 			continue
 		}
 		issue = refreshed
-		fmt.Printf("issue=%s state=%s title=%s\n", issue.Identifier, issue.State, issue.Title)
+		o.logIssue(issue, "dispatch_started", "dispatch started", map[string]any{"state": issue.State})
 		done, ok := o.dispatchIssueDone(ctx, issue, 0)
 		if !ok {
 			o.logIssue(issue, "dispatch_skipped", "claimed", nil)
@@ -535,6 +535,40 @@ func (o *Orchestrator) currentRuntime() runtimeSnapshot {
 		repoRoot:    o.opts.RepoRoot,
 		mergeTarget: effectiveMergeTarget(o.opts),
 	}
+}
+
+func (o *Orchestrator) RuntimeConfig() runtimeconfig.Config {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	if o.opts.Workflow == nil {
+		return runtimeconfig.Config{}
+	}
+	return o.opts.Workflow.Config
+}
+
+func (o *Orchestrator) RuntimeWorkspace() *workspace.Manager {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.opts.Workspace
+}
+
+func (o *Orchestrator) RuntimeRunner() interface {
+	RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
+} {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.opts.Runner
+}
+
+func (o *Orchestrator) RuntimeTracker() interface {
+	FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error)
+	FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error)
+	FetchIssue(context.Context, string) (issuemodel.Issue, error)
+	UpdateIssueState(context.Context, string, string) error
+} {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.opts.Tracker
 }
 
 func (o *Orchestrator) refreshWorkflow() bool {
@@ -906,21 +940,11 @@ func countLines(value string) int {
 }
 
 func isActive(state string, active []string) bool {
-	for _, item := range active {
-		if item == state {
-			return true
-		}
-	}
-	return false
+	return stateNameIn(state, active)
 }
 
 func isTerminal(state string, terminal []string) bool {
-	for _, item := range terminal {
-		if item == state {
-			return true
-		}
-	}
-	return false
+	return stateNameIn(state, terminal)
 }
 
 func (o *Orchestrator) log(issue, event, message string, fields map[string]any) {

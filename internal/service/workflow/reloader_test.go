@@ -137,6 +137,7 @@ func TestReloaderCurrentClonesTurnSandboxPolicy(t *testing.T) {
 	content := `---
 tracker:
   kind: linear
+  api_key: $LINEAR_API_KEY
   project_slug: demo
 codex:
   turn_sandbox_policy:
@@ -190,6 +191,7 @@ func writeWorkflow(t *testing.T, path string, interval string, prompt string) {
 	content := `---
 tracker:
   kind: linear
+  api_key: $LINEAR_API_KEY
   project_slug: demo
 polling:
   interval_ms: ` + interval + `
