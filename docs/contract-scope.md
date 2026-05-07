@@ -19,7 +19,7 @@ The core runtime is assembled from these SPEC components:
 
 Repository policy stays in `WORKFLOW.md`. Ticket editing rules, PR handling, validation gates, workpad shape, and handoff wording belong in the workflow prompt and agent skills unless a SPEC-required orchestrator gate needs a narrow state transition.
 
-Current orchestrator-owned tracker writes are limited to runtime control points such as claiming work, same-session review and merge gates, and final terminal cleanup. General ticket writing remains workflow-owned through the injected `linear_graphql` tool.
+The SPEC core remains a scheduler/runner and tracker reader. Symphony Go also ships a repo-local `issueflow` extension for this repository's unattended smoke workflow. That extension may perform narrow state writes (`Todo -> In Progress`, `AI Review -> Merging`, `Merging -> Done`) only when enabled by the repo workflow policy and covered by tests. General ticket comments, PR metadata, and arbitrary issue edits remain workflow-agent responsibilities through `linear_graphql`.
 
 ## Optional Surfaces
 

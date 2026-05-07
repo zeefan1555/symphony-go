@@ -53,6 +53,10 @@ Symphony Go implements the optional `linear_graphql` client-side tool. The tool 
 
 Invalid input, unsupported tool names, missing auth, transport failures, and GraphQL top-level `errors` all return `success=false` tool output that the model can inspect in-session.
 
+## Issueflow State Writes
+
+The core runtime reads tracker state, schedules workers, and runs one live Codex app-server session per worker attempt. The repo-local `issueflow` extension performs narrow state writes for unattended smoke workflow control: claiming `Todo -> In Progress`, advancing `AI Review -> Merging`, and marking `Merging -> Done`. Review and merge advancement are enabled only when `agent.review_policy.mode: auto`; other modes leave the issue for workflow tooling or an operator.
+
 ## Harness Hardening
 
 The current repository workflow is optimized for a trusted local development harness. Before using untrusted tracker data, untrusted workflow edits, or broader credentials, operators should reduce the available credentials, tool surface, filesystem writable roots, and network access to the minimum required for that workflow.

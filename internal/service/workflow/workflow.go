@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,6 +13,39 @@ import (
 	runtimeconfig "symphony-go/internal/runtime/config"
 	issuemodel "symphony-go/internal/service/issue"
 )
+
+const (
+	ErrMissingWorkflowFile      = "missing_workflow_file"
+	ErrWorkflowParse            = "workflow_parse_error"
+	ErrWorkflowFrontMatterShape = "workflow_front_matter_not_a_map"
+	ErrTemplateParse            = "template_parse_error"
+	ErrTemplateRender           = "template_render_error"
+)
+
+type Error struct {
+	Code    string
+	Message string
+	Err     error
+}
+
+func (e *Error) Error() string {
+	if e.Err == nil {
+		return e.Code + ": " + e.Message
+	}
+	return e.Code + ": " + e.Message + ": " + e.Err.Error()
+}
+
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+func Code(err error) string {
+	var workflowErr *Error
+	if errors.As(err, &workflowErr) {
+		return workflowErr.Code
+	}
+	return ""
+}
 
 const defaultPromptTemplate = `You are working on a Linear issue.
 
@@ -28,13 +62,20 @@ No description provided.
 func Load(path string) (*runtimeconfig.Workflow, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read workflow: %w", err)
+		return nil, &Error{Code: ErrMissingWorkflowFile, Message: "read workflow", Err: err}
 	}
 	cfgBytes, prompt := splitFrontMatter(content)
 	var cfg runtimeconfig.Config
 	if len(bytes.TrimSpace(cfgBytes)) > 0 {
-		if err := yaml.Unmarshal(cfgBytes, &cfg); err != nil {
-			return nil, fmt.Errorf("parse workflow front matter: %w", err)
+		var node yaml.Node
+		if err := yaml.Unmarshal(cfgBytes, &node); err != nil {
+			return nil, &Error{Code: ErrWorkflowParse, Message: "parse workflow front matter", Err: err}
+		}
+		if !frontMatterIsMap(node) {
+			return nil, &Error{Code: ErrWorkflowFrontMatterShape, Message: "workflow front matter must be a YAML mapping"}
+		}
+		if err := node.Decode(&cfg); err != nil {
+			return nil, &Error{Code: ErrWorkflowParse, Message: "parse workflow front matter", Err: err}
 		}
 	}
 	resolved, err := runtimeconfig.Resolve(cfg, path)
@@ -54,13 +95,20 @@ func Render(template string, issue issuemodel.Issue, attempt *int) (string, erro
 	engine.StrictVariables()
 	parsed, err := engine.ParseString(source)
 	if err != nil {
-		return "", fmt.Errorf("template_parse_error: %w template=%q", err, source)
+		return "", &Error{Code: ErrTemplateParse, Message: fmt.Sprintf("parse template %q", source), Err: err}
 	}
 	rendered, err := parsed.RenderString(renderBindings(issue, attempt))
 	if err != nil {
-		return "", fmt.Errorf("template_render_error: %w", err)
+		return "", &Error{Code: ErrTemplateRender, Message: "render template", Err: err}
 	}
 	return rendered, nil
+}
+
+func frontMatterIsMap(node yaml.Node) bool {
+	if node.Kind == yaml.DocumentNode && len(node.Content) == 1 {
+		return node.Content[0].Kind == yaml.MappingNode
+	}
+	return node.Kind == yaml.MappingNode
 }
 
 func splitFrontMatter(content []byte) ([]byte, []byte) {

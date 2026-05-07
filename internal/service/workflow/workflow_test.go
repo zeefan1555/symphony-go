@@ -18,6 +18,7 @@ func TestLoadAndRenderChineseWorkflow(t *testing.T) {
 	content := `---
 tracker:
   kind: linear
+  api_key: $LINEAR_API_KEY
   project_slug: "demo"
   active_states:
     - Todo
@@ -114,8 +115,8 @@ func TestRenderUsesStrictVariables(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected strict variable error")
 	}
-	if !strings.Contains(err.Error(), "template_render_error") {
-		t.Fatalf("error = %v, want template_render_error", err)
+	if Code(err) != ErrTemplateRender {
+		t.Fatalf("code = %q, want %s", Code(err), ErrTemplateRender)
 	}
 }
 
@@ -124,8 +125,36 @@ func TestRenderSurfacesInvalidTemplateWithContext(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected template parse error")
 	}
-	if !strings.Contains(err.Error(), "template_parse_error") || !strings.Contains(err.Error(), "{% if issue.identifier %}") {
+	if Code(err) != ErrTemplateParse || !strings.Contains(err.Error(), "{% if issue.identifier %}") {
 		t.Fatalf("error = %v, want template_parse_error with template context", err)
+	}
+}
+
+func TestLoadReturnsTypedErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content *string
+		want    string
+	}{
+		{name: "missing", want: ErrMissingWorkflowFile},
+		{name: "parse", content: strPtr("---\ntracker: [\n---\nprompt\n"), want: ErrWorkflowParse},
+		{name: "shape", content: strPtr("---\n- tracker\n---\nprompt\n"), want: ErrWorkflowFrontMatterShape},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "WORKFLOW.md")
+			if tc.content != nil {
+				if err := os.WriteFile(path, []byte(*tc.content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("expected typed workflow error")
+			}
+			if Code(err) != tc.want {
+				t.Fatalf("code = %q, want %s; err=%v", Code(err), tc.want, err)
+			}
+		})
 	}
 }
 
@@ -159,6 +188,7 @@ func TestLoadPreservesExplicitCodexStallTimeout(t *testing.T) {
 			content := fmt.Sprintf(`---
 tracker:
   kind: linear
+  api_key: $LINEAR_API_KEY
   project_slug: "demo"
 codex:
   stall_timeout_ms: %d
@@ -187,6 +217,7 @@ func TestLoadDefaultsNullCodexStallTimeout(t *testing.T) {
 	content := `---
 tracker:
   kind: linear
+  api_key: $LINEAR_API_KEY
   project_slug: "demo"
 codex:
   stall_timeout_ms: null
@@ -204,6 +235,10 @@ prompt
 	if loaded.Config.Codex.StallTimeoutMS != 300000 {
 		t.Fatalf("stall timeout = %d, want default 300000", loaded.Config.Codex.StallTimeoutMS)
 	}
+}
+
+func strPtr(value string) *string {
+	return &value
 }
 
 func TestRepoWorkflowUsesAIReviewPRSkillFastPath(t *testing.T) {

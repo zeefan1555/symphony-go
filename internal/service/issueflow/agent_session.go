@@ -2,7 +2,6 @@ package issueflow
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"symphony-go/internal/service/codex"
@@ -11,18 +10,19 @@ import (
 	"symphony-go/internal/service/workspace"
 )
 
-func runAgentTurn(ctx context.Context, rt Runtime, issue issuemodel.Issue, attempt int, phase AgentPhase, stage RunStage, promptText string, continuation bool, turn int) (TurnResult, error) {
+func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, attempt int) (Result, error) {
+	phase := nextWorkerPhase(issue)
 	switch phase {
 	case PhaseImplementer, PhaseReviewer:
 	default:
-		return TurnResult{}, fmt.Errorf("unknown agent phase %q", phase)
+		return Result{}, fmt.Errorf("unknown agent phase %q", phase)
 	}
 	setRunningStage(rt, issue, attempt, phase, StagePreparingWorkspace, "preparing workspace", "", 1)
 	hookCtx := workspace.WithHookIssue(ctx, issue)
 	workspacePath, _, err := rt.Workspace.Ensure(hookCtx, issue)
 	if err != nil {
 		removeRunning(rt, issue.ID)
-		return TurnResult{}, err
+		return Result{Outcome: OutcomeRetryFailure}, err
 	}
 	defer func() {
 		if err := rt.Workspace.AfterRun(workspace.WithHookIssue(context.Background(), issue), workspacePath); err != nil {
@@ -32,33 +32,86 @@ func runAgentTurn(ctx context.Context, rt Runtime, issue issuemodel.Issue, attem
 	setRunningStage(rt, issue, attempt, phase, StageRunningWorkspaceHooks, "running before_run hook", workspacePath, 1)
 	if err := rt.Workspace.BeforeRun(hookCtx, workspacePath); err != nil {
 		removeRunning(rt, issue.ID)
-		return TurnResult{}, err
+		return Result{Outcome: OutcomeRetryFailure}, err
 	}
 	var renderAttempt *int
 	if attempt > 0 {
 		value := attempt
 		renderAttempt = &value
 	}
-	if promptText == "" {
-		setRunningStage(rt, issue, attempt, phase, StageRenderingPrompt, "rendering workflow prompt", workspacePath, turn)
-		promptText, err = workflow.Render(rt.Workflow.PromptTemplate, issue, renderAttempt)
-		if err != nil {
-			return TurnResult{}, err
-		}
+	setRunningStage(rt, issue, attempt, phase, StageRenderingPrompt, "rendering workflow prompt", workspacePath, 1)
+	promptText, err := workflow.Render(rt.Workflow.PromptTemplate, issue, renderAttempt)
+	if err != nil {
+		removeRunning(rt, issue.ID)
+		return Result{Outcome: OutcomeRetryFailure}, err
 	}
-	setRunningStage(rt, issue, attempt, phase, stage, stageMessage(stage), workspacePath, turn)
+	setRunningStage(rt, issue, attempt, phase, nextWorkerStage(issue, 1), stageMessage(nextWorkerStage(issue, 1)), workspacePath, 1)
 	lastAgentMessage := ""
+	attemptResult := Result{Outcome: OutcomeRetryContinuation}
+	currentIssue := issue
 	request := codex.SessionRequest{
 		WorkspacePath: workspacePath,
 		Issue:         issue,
 		Prompts: []codex.TurnPrompt{{
 			Text:         promptText,
-			Continuation: continuation,
+			Continuation: false,
 			Attempt:      renderAttempt,
 			Issue:        &issue,
 		}},
+		AfterTurn: func(ctx context.Context, result codex.Result, turnCount int) (codex.TurnPrompt, bool, error) {
+			logIssue(rt, currentIssue, "turn_completed", "Codex turn completed", map[string]any{"session_id": result.SessionID})
+			refreshed, err := rt.Tracker.FetchIssue(ctx, currentIssue.ID)
+			if err != nil {
+				attemptResult = Result{Outcome: OutcomeRetryFailure}
+				return codex.TurnPrompt{}, false, err
+			}
+			currentIssue = refreshed
+			if outcome, done, err := decideAfterTurn(ctx, rt, currentIssue); done {
+				attemptResult = outcome
+				return codex.TurnPrompt{}, false, err
+			}
+			if reviewStatePasses(currentIssue, lastAgentMessage) {
+				if !stateWriteExtensionEnabled(rt) {
+					attemptResult = Result{Outcome: OutcomeWaitHuman}
+					return codex.TurnPrompt{}, false, nil
+				}
+				currentIssue, err = applyReviewPass(ctx, rt, currentIssue)
+				if err != nil {
+					attemptResult = Result{Outcome: OutcomeRetryFailure}
+					return codex.TurnPrompt{}, false, err
+				}
+			}
+			if mergingStatePasses(currentIssue, lastAgentMessage) {
+				if !stateWriteExtensionEnabled(rt) {
+					attemptResult = Result{Outcome: OutcomeWaitHuman}
+					return codex.TurnPrompt{}, false, nil
+				}
+				currentIssue, err = applyMergePass(ctx, rt, currentIssue)
+				if err != nil {
+					attemptResult = Result{Outcome: OutcomeRetryFailure}
+					return codex.TurnPrompt{}, false, err
+				}
+				attemptResult = Result{Outcome: OutcomeDone}
+				return codex.TurnPrompt{}, false, nil
+			}
+			if turnCount >= maxTurns(rt) {
+				attemptResult = Result{Outcome: OutcomeRetryContinuation}
+				return codex.TurnPrompt{}, false, nil
+			}
+			nextTurn := turnCount + 1
+			nextPhase := nextWorkerPhase(currentIssue)
+			nextStage := nextWorkerStage(currentIssue, nextTurn)
+			setRunningStage(rt, currentIssue, attempt, nextPhase, nextStage, stageMessage(nextStage), workspacePath, nextTurn)
+			promptIssue := currentIssue
+			return codex.TurnPrompt{
+				Text:         nextWorkerPrompt(currentIssue),
+				Continuation: true,
+				Attempt:      renderAttempt,
+				Issue:        &promptIssue,
+			}, true, nil
+		},
 	}
-	sessionResult, err := rt.Runner.RunSession(ctx, request, func(event codex.Event) {
+	_, err = rt.Runner.RunSession(ctx, request, func(event codex.Event) {
 		if text := CompletedAgentMessageText(event); text != "" {
 			lastAgentMessage = text
 		}
@@ -67,21 +120,9 @@ func runAgentTurn(ctx context.Context, rt Runtime, issue issuemodel.Issue, attem
 	})
 	removeRunning(rt, issue.ID)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return TurnResult{}, err
-		}
-		return TurnResult{}, err
+		return returnRetryOrStop(err)
 	}
-	if len(sessionResult.Turns) == 0 {
-		return TurnResult{Issue: issue, LastAgentMessage: lastAgentMessage}, nil
-	}
-	last := sessionResult.Turns[len(sessionResult.Turns)-1]
-	logIssue(rt, issue, "turn_completed", "Codex turn completed", map[string]any{"session_id": last.SessionID})
-	refreshed, err := rt.Tracker.FetchIssue(ctx, issue.ID)
-	if err != nil {
-		return TurnResult{}, err
-	}
-	return TurnResult{Issue: refreshed, LastAgentMessage: lastAgentMessage}, nil
+	return attemptResult, nil
 }
 
 func stageMessage(stage RunStage) string {

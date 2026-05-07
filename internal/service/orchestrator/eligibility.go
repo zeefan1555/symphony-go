@@ -116,8 +116,12 @@ func timeSortValue(value *time.Time) time.Time {
 }
 
 func stateNameIn(state string, list []string) bool {
+	state = strings.TrimSpace(state)
+	if state == "" {
+		return false
+	}
 	for _, item := range list {
-		if strings.EqualFold(item, state) {
+		if strings.EqualFold(strings.TrimSpace(item), state) {
 			return true
 		}
 	}

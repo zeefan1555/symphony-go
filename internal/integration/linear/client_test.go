@@ -3,6 +3,7 @@ package linear
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -121,6 +122,53 @@ func TestRawGraphQLHTTPErrorDoesNotLeakToken(t *testing.T) {
 	if strings.Contains(text, "lin_secret_token") {
 		t.Fatalf("error leaked token: %q", text)
 	}
+	if Code(err) != ErrAPIStatus {
+		t.Fatalf("code = %q, want %s", Code(err), ErrAPIStatus)
+	}
+}
+
+func TestLinearErrorCategories(t *testing.T) {
+	t.Run("request", func(t *testing.T) {
+		client := &Client{
+			Endpoint: "http://127.0.0.1:1",
+			APIKey:   "lin_test",
+			HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return nil, errors.New("network down")
+			})},
+		}
+		_, err := client.RawGraphQL(context.Background(), "query { viewer { id } }", nil)
+		if Code(err) != ErrAPIRequest {
+			t.Fatalf("code = %q, want %s; err=%v", Code(err), ErrAPIRequest, err)
+		}
+	})
+	t.Run("graphql_errors", func(t *testing.T) {
+		server := jsonServer(t, `{"data":null,"errors":[{"message":"bad query"}]}`, http.StatusOK)
+		defer server.Close()
+		client := &Client{Endpoint: server.URL, APIKey: "lin_test", HTTPClient: server.Client()}
+		var out map[string]any
+		err := client.GraphQL(context.Background(), "query Bad { nope }", nil, &out)
+		if Code(err) != ErrGraphQLErrors {
+			t.Fatalf("code = %q, want %s; err=%v", Code(err), ErrGraphQLErrors, err)
+		}
+	})
+	t.Run("unknown_payload", func(t *testing.T) {
+		server := jsonServer(t, `{not json`, http.StatusOK)
+		defer server.Close()
+		client := &Client{Endpoint: server.URL, APIKey: "lin_test", HTTPClient: server.Client()}
+		_, err := client.RawGraphQL(context.Background(), "query { viewer { id } }", nil)
+		if Code(err) != ErrUnknownPayload {
+			t.Fatalf("code = %q, want %s; err=%v", Code(err), ErrUnknownPayload, err)
+		}
+	})
+	t.Run("missing_end_cursor", func(t *testing.T) {
+		server := jsonServer(t, `{"data":{"issues":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":null}}}}`, http.StatusOK)
+		defer server.Close()
+		client := &Client{Endpoint: server.URL, APIKey: "lin_test", ProjectSlug: "demo", HTTPClient: server.Client()}
+		_, err := client.FetchActiveIssues(context.Background(), []string{"Todo"})
+		if Code(err) != ErrMissingEndCursor {
+			t.Fatalf("code = %q, want %s; err=%v", Code(err), ErrMissingEndCursor, err)
+		}
+	})
 }
 
 func TestUpsertWorkpadUpdatesExistingChineseComment(t *testing.T) {
@@ -357,4 +405,19 @@ func TestFetchIssuesByStatesMissingEndCursorReturnsError(t *testing.T) {
 	if !strings.Contains(err.Error(), "linear_missing_end_cursor") {
 		t.Fatalf("err = %v", err)
 	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func jsonServer(t *testing.T, body string, status int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
 }

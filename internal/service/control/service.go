@@ -47,6 +47,20 @@ type RefreshTrigger interface {
 	RequestRefresh(context.Context) (bool, error)
 }
 
+type RuntimeProvider interface {
+	RuntimeConfig() runtimeconfig.Config
+	RuntimeWorkspace() *workspace.Manager
+	RuntimeRunner() interface {
+		RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
+	}
+	RuntimeTracker() interface {
+		FetchActiveIssues(context.Context, []string) ([]issuemodel.Issue, error)
+		FetchIssuesByStates(context.Context, []string) ([]issuemodel.Issue, error)
+		FetchIssue(context.Context, string) (issuemodel.Issue, error)
+		UpdateIssueState(context.Context, string, string) error
+	}
+}
+
 type CodexSessionRunner interface {
 	RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
 }
@@ -120,6 +134,54 @@ func NewServiceWithOptions(opts ServiceOptions) *Service {
 	}
 }
 
+func (s *Service) runtimeProvider() RuntimeProvider {
+	if s == nil || s.provider == nil {
+		return nil
+	}
+	provider, _ := s.provider.(RuntimeProvider)
+	return provider
+}
+
+func (s *Service) currentConfig() runtimeconfig.Config {
+	if provider := s.runtimeProvider(); provider != nil {
+		return provider.RuntimeConfig()
+	}
+	if s == nil {
+		return runtimeconfig.Config{}
+	}
+	return s.config
+}
+
+func (s *Service) currentWorkspace() *workspace.Manager {
+	if provider := s.runtimeProvider(); provider != nil {
+		return provider.RuntimeWorkspace()
+	}
+	if s == nil {
+		return nil
+	}
+	return s.workspace
+}
+
+func (s *Service) currentRunner() CodexSessionRunner {
+	if provider := s.runtimeProvider(); provider != nil {
+		return provider.RuntimeRunner()
+	}
+	if s == nil {
+		return nil
+	}
+	return s.runner
+}
+
+func (s *Service) currentTracker() IssueTracker {
+	if provider := s.runtimeProvider(); provider != nil {
+		return provider.RuntimeTracker()
+	}
+	if s == nil {
+		return nil
+	}
+	return s.tracker
+}
+
 func (s *Service) RuntimeState(ctx context.Context) (RuntimeState, error) {
 	if err := ctx.Err(); err != nil {
 		return RuntimeState{}, err
@@ -181,7 +243,7 @@ func (s *Service) RuntimeSettings(ctx context.Context) (RuntimeSettingsResult, e
 	if s == nil {
 		return RuntimeSettingsResult{}, nil
 	}
-	cfg := s.config
+	cfg := s.currentConfig()
 	return RuntimeSettingsResult{
 		Boundary: RuntimeBoundary(),
 		Settings: RuntimeSettings{
@@ -209,7 +271,8 @@ func (s *Service) ListTrackerIssues(ctx context.Context, stateNames []string) (T
 	if err := ctx.Err(); err != nil {
 		return TrackerIssueList{}, err
 	}
-	if s == nil || s.tracker == nil {
+	tracker := s.currentTracker()
+	if tracker == nil {
 		return TrackerIssueList{}, ErrIssueTrackerRequired
 	}
 	states := cleanStates(stateNames)
@@ -218,9 +281,9 @@ func (s *Service) ListTrackerIssues(ctx context.Context, stateNames []string) (T
 		err    error
 	)
 	if len(states) == 0 {
-		issues, err = s.tracker.FetchActiveIssues(ctx, s.config.Tracker.ActiveStates)
+		issues, err = tracker.FetchActiveIssues(ctx, s.currentConfig().Tracker.ActiveStates)
 	} else {
-		issues, err = s.tracker.FetchIssuesByStates(ctx, states)
+		issues, err = tracker.FetchIssuesByStates(ctx, states)
 	}
 	if err != nil {
 		return TrackerIssueList{}, err
@@ -238,10 +301,11 @@ func (s *Service) GetTrackerIssue(ctx context.Context, issueIdentifier string) (
 	if strings.TrimSpace(issueIdentifier) == "" {
 		return TrackerIssueResult{}, ErrInvalidIssueIdentifier
 	}
-	if s == nil || s.tracker == nil {
+	tracker := s.currentTracker()
+	if tracker == nil {
 		return TrackerIssueResult{}, ErrIssueTrackerRequired
 	}
-	issue, err := s.tracker.FetchIssue(ctx, issueIdentifier)
+	issue, err := tracker.FetchIssue(ctx, issueIdentifier)
 	if err != nil {
 		return TrackerIssueResult{}, err
 	}
@@ -263,10 +327,11 @@ func (s *Service) UpdateTrackerIssueState(ctx context.Context, input TrackerIssu
 	if stateName == "" {
 		return TrackerIssueStateResult{}, ErrInvalidIssueState
 	}
-	if s == nil || s.tracker == nil {
+	tracker := s.currentTracker()
+	if tracker == nil {
 		return TrackerIssueStateResult{}, ErrIssueTrackerRequired
 	}
-	if err := s.tracker.UpdateIssueState(ctx, issueID, stateName); err != nil {
+	if err := tracker.UpdateIssueState(ctx, issueID, stateName); err != nil {
 		return TrackerIssueStateResult{}, err
 	}
 	return TrackerIssueStateResult{
@@ -284,27 +349,29 @@ func (s *Service) ResolveWorkspacePath(ctx context.Context, issueIdentifier stri
 	if strings.TrimSpace(issueIdentifier) == "" {
 		return WorkspacePreparation{}, ErrInvalidIssueIdentifier
 	}
-	if s == nil || s.workspace == nil {
+	manager := s.currentWorkspace()
+	if manager == nil {
 		return WorkspacePreparation{}, ErrWorkspaceManagerRequired
 	}
-	path, err := s.workspace.PathForIssue(issuemodel.Issue{Identifier: issueIdentifier})
+	path, err := manager.PathForIssue(issuemodel.Issue{Identifier: issueIdentifier})
 	if err != nil {
 		return WorkspacePreparation{}, err
 	}
-	return workspacePreparation(path, s.workspace.ValidateWorkspacePath(path) == nil), nil
+	return workspacePreparation(path, manager.ValidateWorkspacePath(path) == nil), nil
 }
 
 func (s *Service) ValidateWorkspacePath(ctx context.Context, path string) (WorkspacePathValidation, error) {
 	if err := ctx.Err(); err != nil {
 		return WorkspacePathValidation{}, err
 	}
-	if s == nil || s.workspace == nil {
+	manager := s.currentWorkspace()
+	if manager == nil {
 		return WorkspacePathValidation{}, ErrWorkspaceManagerRequired
 	}
 	return WorkspacePathValidation{
 		Boundary:        WorkspaceBoundary(),
 		WorkspacePath:   path,
-		ContainedInRoot: s.workspace.ValidateWorkspacePath(path) == nil,
+		ContainedInRoot: manager.ValidateWorkspacePath(path) == nil,
 	}, nil
 }
 
@@ -315,14 +382,15 @@ func (s *Service) PrepareWorkspace(ctx context.Context, issueIdentifier string) 
 	if strings.TrimSpace(issueIdentifier) == "" {
 		return WorkspacePreparation{}, ErrInvalidIssueIdentifier
 	}
-	if s == nil || s.workspace == nil {
+	manager := s.currentWorkspace()
+	if manager == nil {
 		return WorkspacePreparation{}, ErrWorkspaceManagerRequired
 	}
-	path, _, err := s.workspace.Ensure(ctx, issuemodel.Issue{Identifier: issueIdentifier})
+	path, _, err := manager.Ensure(ctx, issuemodel.Issue{Identifier: issueIdentifier})
 	if err != nil {
 		return WorkspacePreparation{}, err
 	}
-	return workspacePreparation(path, s.workspace.ValidateWorkspacePath(path) == nil), nil
+	return workspacePreparation(path, manager.ValidateWorkspacePath(path) == nil), nil
 }
 
 func (s *Service) CleanupWorkspace(ctx context.Context, path string) (WorkspaceCleanupResult, error) {
@@ -332,13 +400,14 @@ func (s *Service) CleanupWorkspace(ctx context.Context, path string) (WorkspaceC
 	if strings.TrimSpace(path) == "" {
 		return WorkspaceCleanupResult{}, ErrInvalidWorkspacePath
 	}
-	if s == nil || s.workspace == nil {
+	manager := s.currentWorkspace()
+	if manager == nil {
 		return WorkspaceCleanupResult{}, ErrWorkspaceManagerRequired
 	}
-	if err := s.workspace.ValidateWorkspacePath(path); err != nil {
+	if err := manager.ValidateWorkspacePath(path); err != nil {
 		return WorkspaceCleanupResult{}, fmt.Errorf("%w: %v", ErrInvalidWorkspacePath, err)
 	}
-	if err := s.workspace.Remove(ctx, path); err != nil {
+	if err := manager.Remove(ctx, path); err != nil {
 		return WorkspaceCleanupResult{}, err
 	}
 	return WorkspaceCleanupResult{
@@ -404,10 +473,11 @@ func (s *Service) RunCodexTurn(ctx context.Context, input CodexTurnInput) (Codex
 	if strings.TrimSpace(input.IssueIdentifier) == "" || strings.TrimSpace(input.WorkspacePath) == "" || strings.TrimSpace(input.PromptText) == "" {
 		return CodexTurnSummary{}, ErrInvalidCodexTurnRequest
 	}
-	if s == nil || s.runner == nil {
+	runner := s.currentRunner()
+	if runner == nil {
 		return CodexTurnSummary{}, ErrCodexRunnerRequired
 	}
-	result, err := s.runner.RunSession(ctx, codex.SessionRequest{
+	result, err := runner.RunSession(ctx, codex.SessionRequest{
 		WorkspacePath: input.WorkspacePath,
 		Issue:         issuemodel.Issue{Identifier: input.IssueIdentifier},
 		Prompts: []codex.TurnPrompt{{
