@@ -23,6 +23,8 @@ func TestContractScopeIsDocumentedAndRuntimeAssemblyStaysLayered(t *testing.T) {
 		"internal/service/codex",
 		"internal/runtime/logging",
 		"internal/runtime/observability",
+		"Run completion is workflow-defined",
+		"does not require every successful agent run to push an issue all the way to `Done`",
 		"terminal TUI and loopback HTTP control plane are operator surfaces",
 		"not a rich web UI or multi-tenant control plane",
 	} {

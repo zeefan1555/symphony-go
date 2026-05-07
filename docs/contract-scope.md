@@ -21,6 +21,8 @@ Repository policy stays in `WORKFLOW.md`. Ticket editing rules, PR handling, val
 
 The SPEC core remains a scheduler/runner and tracker reader. Symphony Go also ships a repo-local `issueflow` extension for this repository's unattended smoke workflow. That extension may perform narrow state writes (`Todo -> In Progress`, `AI Review -> Merging`, `Merging -> Done`) only when enabled by the repo workflow policy and covered by tests. General ticket comments, PR metadata, and arbitrary issue edits remain workflow-agent responsibilities through `linear_graphql`.
 
+Run completion is workflow-defined. The core service does not require every successful agent run to push an issue all the way to `Done`; a run may stop at a workflow handoff state such as `Human Review`, `AI Review`, or `Merging` when the repository workflow defines that as the correct operator or agent boundary.
+
 ## Optional Surfaces
 
 The terminal TUI and loopback HTTP control plane are operator surfaces around the core service. They do not change the scheduler/runner contract and are not a rich web UI or multi-tenant control plane.
