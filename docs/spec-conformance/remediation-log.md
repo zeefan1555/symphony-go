@@ -1,0 +1,5 @@
+# SPEC Remediation Log
+
+| round_id | gap_id | input_checkpoints | status | root_cause | changed_files | commit | verification | verdict | next_gap |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ROUND-20260507-GAP-runtime-policy-001 | GAP-runtime-policy-001 | CHK-000-006-A | verified | `docs/runtime-policy.md` 已有 trust/safety 文档，但未集中写清当前 `turn_sandbox_policy` 具体形态和无人值守 operator-confirmation fail-fast 策略，导致 implementation-defined 证据不完整。 | `docs/runtime-policy.md`, `docs/spec-conformance/README.md`, `docs/spec-conformance/coverage-map.md`, `docs/spec-conformance/conformance-ledger.md`, `docs/spec-conformance/remediation-log.md` | none | PASS: `./test.sh ./internal/app`; PASS: `git diff --check` | keep | SPEC-001-001 |

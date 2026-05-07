@@ -18,6 +18,10 @@ Runtime policy is loaded from `WORKFLOW.md`:
 
 Current repository workflow sets `codex.approval_policy: never` and `codex.thread_sandbox: workspace-write`. The runner augments `workspaceWrite` turn writable roots with the current issue workspace and git metadata roots discovered from that workspace.
 
+Current repository workflow sets `codex.turn_sandbox_policy.type: workspaceWrite`, full read-only access, network access enabled, and no `/tmp` or `TMPDIR` exclusion. The implementation forwards that policy to Codex app-server and only adds the per-issue writable roots needed for local worktree execution.
+
+Operator-confirmation posture is fail-fast for unattended child sessions. Symphony Go does not pause a child run for interactive approval or user input; targeted approval and input events fail the attempt so the orchestrator can retry, surface a blocker, or continue according to workflow policy.
+
 Operators should tighten these fields before using untrusted issue sources, untrusted workflow edits, or repositories whose hooks should not run with local developer credentials.
 
 ## Secret Handling
