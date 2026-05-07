@@ -13,5 +13,5 @@ current repository and remediating gaps.
 ## Current Cursor
 
 - Phase: `coverage`
-- Next ID: `SPEC-002-001`
+- Next ID: `SPEC-003-001`
 - Last updated: `2026-05-07`

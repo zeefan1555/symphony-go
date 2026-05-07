@@ -27,6 +27,8 @@ func TestContractScopeIsDocumentedAndRuntimeAssemblyStaysLayered(t *testing.T) {
 		"does not require every successful agent run to push an issue all the way to `Done`",
 		"terminal TUI and loopback HTTP control plane are operator surfaces",
 		"not a rich web UI or multi-tenant control plane",
+		"not a general-purpose workflow engine or distributed job scheduler",
+		"Workflow branching, product-specific ticket edits, PR handling, and human handoff rules stay in `WORKFLOW.md`",
 	} {
 		if !strings.Contains(scopeDoc, want) {
 			t.Fatalf("contract scope doc missing %q", want)

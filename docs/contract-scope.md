@@ -27,4 +27,6 @@ Run completion is workflow-defined. The core service does not require every succ
 
 The terminal TUI and loopback HTTP control plane are operator surfaces around the core service. They do not change the scheduler/runner contract and are not a rich web UI or multi-tenant control plane.
 
+Symphony Go is not a general-purpose workflow engine or distributed job scheduler. Workflow branching, product-specific ticket edits, PR handling, and human handoff rules stay in `WORKFLOW.md`, agent skills, and narrow repo-local extensions instead of becoming a generic orchestration DSL.
+
 The Linear client exposes write helpers because the current implementation ships orchestrator gates, the optional `linear_graphql` tool, and diagnostic control routes. These helpers are not a separate business workflow engine.
