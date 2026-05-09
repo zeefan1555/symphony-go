@@ -51,6 +51,14 @@ The runner currently fails fast for these app-server events:
 
 This policy keeps child sessions from silently hanging on approval prompts. It also enforces the workflow rule that unattended child sessions should use the injected `linear_graphql` tool for Linear writes instead of Linear MCP/app writes that may trigger interactive approvals.
 
+## Codex App-Server Protocol
+
+Codex app-server owns the wire protocol schema, transport message names, and generated types. Symphony Go does not vendor a generated Codex protocol schema. Its runner only owns orchestration concerns: the workspace cwd, prompt text, approval and sandbox policy pass-through, dynamic tool advertisement, event forwarding, timeout handling, and observability projection.
+
+The current target protocol is the app-server mode provided by the configured `codex.command`, which defaults to `codex app-server`. Compatibility is validated by focused runner tests and by the service's operational smoke workflow, not by treating Symphony Go as the protocol source of truth.
+
+App-server stdout is newline-framed JSON. Symphony Go accepts app-server lines up to 10 MiB so large protocol events do not fail at the scanner boundary before protocol handling can classify them.
+
 ## Dynamic Tools
 
 Symphony Go implements the optional `linear_graphql` client-side tool. The tool is advertised to app-server sessions through `thread/start.dynamicTools` when Linear auth is configured, and each tool call executes exactly one GraphQL operation through the active workflow's Linear endpoint and token.

@@ -15,6 +15,12 @@ import (
 	issuemodel "symphony-go/internal/service/issue"
 )
 
+func TestRunnerScannerAllowsTenMegabyteAppServerLines(t *testing.T) {
+	if maxAppServerLineBytes != 10*1024*1024 {
+		t.Fatalf("max app-server line bytes = %d, want 10 MiB", maxAppServerLineBytes)
+	}
+}
+
 func TestRunnerSendsChinesePromptAndGitWritableRoots(t *testing.T) {
 	workspacePath := t.TempDir()
 	if err := exec.Command("git", "-C", workspacePath, "init").Run(); err != nil {

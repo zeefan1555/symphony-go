@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	initializeID  = 1
-	threadStartID = 2
-	turnStartID   = 3
+	initializeID          = 1
+	threadStartID         = 2
+	turnStartID           = 3
+	maxAppServerLineBytes = 10 * 1024 * 1024
 )
 
 type Runner struct {
@@ -225,7 +226,7 @@ func (r *Runner) startSession(ctx context.Context, workspacePath string) (*sessi
 		lines:        make(chan lineResult),
 		dynamicTools: r.dynamicTools,
 	}
-	s.scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	s.scanner.Buffer(make([]byte, 0, 64*1024), maxAppServerLineBytes)
 	go s.readLines()
 	if err := s.initialize(); err != nil {
 		s.Close()
