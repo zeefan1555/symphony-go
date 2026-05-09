@@ -13,5 +13,5 @@ current repository and remediating gaps.
 ## Current Cursor
 
 - Phase: `remediation`
-- Next ID: `GAP-runtime-attempt-lifecycle-001`
+- Next ID: `GAP-http-extension-doc-001`
 - Last updated: `2026-05-10`
