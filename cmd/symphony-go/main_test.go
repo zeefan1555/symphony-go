@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"errors"
+	"testing"
+
+	"symphony-go/internal/app"
+)
 
 func TestDefaultRunOptionsEnableTUI(t *testing.T) {
 	opts := defaultRunOptions()
@@ -146,5 +151,71 @@ func TestTUIFalseDisablesContinuousTUI(t *testing.T) {
 
 	if opts.TUI {
 		t.Fatal("explicit --tui=false should disable TUI")
+	}
+}
+
+func TestRunMainLifecycleExitCodes(t *testing.T) {
+	startupErr := errors.New("workflow load failed")
+	tests := []struct {
+		name      string
+		args      []string
+		run       func(app.Options) error
+		wantCode  int
+		wantCalls int
+	}{
+		{
+			name:     "missing command exits usage",
+			args:     []string{"symphony-go"},
+			wantCode: 2,
+		},
+		{
+			name:     "parse failure exits usage",
+			args:     []string{"symphony-go", "run", "--port", "-1"},
+			wantCode: 2,
+		},
+		{
+			name: "normal success exits zero",
+			args: []string{"symphony-go", "run", "--once", "--workflow", "custom.WORKFLOW.md"},
+			run: func(opts app.Options) error {
+				if opts.WorkflowPath != "custom.WORKFLOW.md" || !opts.Once || opts.TUI {
+					t.Fatalf("app options = %#v, want once custom workflow without TUI", opts)
+				}
+				return nil
+			},
+			wantCode:  0,
+			wantCalls: 1,
+		},
+		{
+			name: "startup failure exits nonzero",
+			args: []string{"symphony-go", "run", "--workflow", "missing.WORKFLOW.md"},
+			run: func(app.Options) error {
+				return startupErr
+			},
+			wantCode:  1,
+			wantCalls: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			run := tt.run
+			if run == nil {
+				run = func(app.Options) error {
+					t.Fatal("app runner should not be called")
+					return nil
+				}
+			}
+			code := runMain(tt.args, func(opts app.Options) error {
+				calls++
+				return run(opts)
+			})
+			if code != tt.wantCode {
+				t.Fatalf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			if calls != tt.wantCalls {
+				t.Fatalf("app runner calls = %d, want %d", calls, tt.wantCalls)
+			}
+		})
 	}
 }

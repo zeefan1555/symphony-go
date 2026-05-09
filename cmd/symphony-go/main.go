@@ -105,18 +105,24 @@ func (f tuiFlag) IsBoolFlag() bool {
 }
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "run" {
+	os.Exit(runMain(os.Args, app.RunWithSignals))
+}
+
+func runMain(args []string, run func(app.Options) error) int {
+	if len(args) < 2 || args[1] != "run" {
 		fmt.Fprintln(os.Stderr, "usage: symphony-go run [path-to-WORKFLOW.md] [--workflow ./WORKFLOW.md] [--once] [--issue ZEE-8] [--port 0] [--tui|--no-tui]")
-		os.Exit(2)
+		return 2
 	}
-	opts, err := parseRunOptions(os.Args[2:])
+	opts, err := parseRunOptions(args[2:])
 	if err != nil {
-		os.Exit(2)
+		return 2
 	}
 
-	if err := app.RunWithSignals(opts.AppOptions()); err != nil {
-		fatal(err)
+	if err := run(opts.AppOptions()); err != nil {
+		fmt.Fprintln(os.Stderr, "symphony-go:", err)
+		return 1
 	}
+	return 0
 }
 
 func mergeTargetOverride(opts runOptions) string {
@@ -138,9 +144,4 @@ func (o runOptions) AppOptions() app.Options {
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
-}
-
-func fatal(err error) {
-	fmt.Fprintln(os.Stderr, "symphony-go:", err)
-	os.Exit(1)
 }
