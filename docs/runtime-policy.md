@@ -57,6 +57,29 @@ Symphony Go implements the optional `linear_graphql` client-side tool. The tool 
 
 Invalid input, unsupported tool names, missing auth, transport failures, and GraphQL top-level `errors` all return `success=false` tool output that the model can inspect in-session.
 
+## Run Attempt Lifecycle And Error Categories
+
+Symphony Go exposes run attempt state as an observable split-state projection rather than a persisted `RunAttempt` database record. The current projection is `observability.RunningEntry` while work is active and `observability.RetryEntry` when an attempt is waiting for retry. Together these records carry the issue id, issue identifier, tracker state, agent phase, stage, workspace path, attempt number, session/thread/turn ids, pid, token counters, runtime seconds, last event, last message, and retry error.
+
+Lifecycle stages are normalized for operator visibility around the actions the service owns:
+
+- `queued`: the orchestrator claimed an issue, removed any stale retry entry, and queued a worker.
+- `preparing_workspace`: the workspace manager is resolving, validating, creating, or reusing the per-issue workspace.
+- `running_workspace_hooks`: configured workspace hooks are running.
+- `rendering_prompt`: the workflow prompt is being rendered for the current attempt.
+- `running_agent`: the Codex app-server turn is active for the implementation phase.
+- `continuing_ai_review`, `continuing_merging`, and `continuing_implementation`: the same live session is continuing in the workflow-defined next phase.
+
+Terminal behavior is represented by `issueflow.Result.Outcome` plus the worker error and retry entry:
+
+- `done` and `wait_human` release the claim without retry.
+- `stopped` releases the claim when the current issue state is no longer active, the context is canceled, or the run has reached its workflow-defined stop point.
+- `retry_continuation` schedules the short continuation retry for an active issue after a normal turn.
+- `retry_failure` schedules the failure backoff path.
+- A non-nil worker error is logged and schedules the same failure backoff path.
+
+Codex runner failures are not a separate public enum. Operators should treat the stable categories as the message prefixes and retry path currently emitted by the runner: app-server startup/read timeout, protocol response error, turn timeout, turn failed, turn cancelled, approval required, user input required, stream EOF, and subprocess wait failure. The orchestrator maps these to retryable worker failure unless the issue state or workflow outcome says to stop.
+
 ## Issueflow State Writes
 
 The core runtime reads tracker state, schedules workers, and runs one live Codex app-server session per worker attempt. The repo-local `issueflow` extension performs narrow state writes for unattended smoke workflow control: claiming `Todo -> In Progress`, advancing `AI Review -> Merging`, and marking `Merging -> Done`. Review and merge advancement are enabled only when `agent.review_policy.mode: auto`; other modes leave the issue for workflow tooling or an operator.

@@ -12,6 +12,6 @@ current repository and remediating gaps.
 
 ## Current Cursor
 
-- Phase: `coverage`
-- Next ID: `SPEC-003-001`
-- Last updated: `2026-05-07`
+- Phase: `remediation`
+- Next ID: `GAP-runtime-attempt-lifecycle-001`
+- Last updated: `2026-05-10`

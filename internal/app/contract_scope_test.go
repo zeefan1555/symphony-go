@@ -80,6 +80,17 @@ func TestRuntimePolicyDocumentsSecurityAndOperationalSafety(t *testing.T) {
 		"untrusted tracker data",
 		"reduce the available credentials, tool surface, filesystem writable roots, and network access",
 		"The injected `linear_graphql` tool uses the configured Linear credential",
+		"observable split-state projection",
+		"`observability.RunningEntry`",
+		"`observability.RetryEntry`",
+		"Lifecycle stages are normalized for operator visibility",
+		"`queued`",
+		"`preparing_workspace`",
+		"`running_agent`",
+		"`retry_continuation` schedules the short continuation retry",
+		"`retry_failure` schedules the failure backoff path",
+		"Codex runner failures are not a separate public enum",
+		"app-server startup/read timeout",
 	} {
 		if !strings.Contains(policy, want) {
 			t.Fatalf("runtime policy missing %q", want)
