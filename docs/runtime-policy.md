@@ -80,6 +80,16 @@ Terminal behavior is represented by `issueflow.Result.Outcome` plus the worker e
 
 Codex runner failures are not a separate public enum. Operators should treat the stable categories as the message prefixes and retry path currently emitted by the runner: app-server startup/read timeout, protocol response error, turn timeout, turn failed, turn cancelled, approval required, user input required, stream EOF, and subprocess wait failure. The orchestrator maps these to retryable worker failure unless the issue state or workflow outcome says to stop.
 
+## HTTP Control Plane Extension
+
+The loopback HTTP control plane is an optional operator surface. It is disabled by default and does not change scheduler, runner, tracker, or workspace semantics.
+
+The extension is enabled when either `server.port` is present in `WORKFLOW.md` front matter or the CLI is started with `--port`. CLI `--port` is an explicit runtime override and takes precedence over workflow config. Port `0` is valid and asks the host OS to allocate an ephemeral port; negative ports are rejected by CLI parsing.
+
+The current bind host is loopback by default. Workflow front matter currently owns only `server.port`; there is no workflow `server.host` schema. The HTTP listener is opened once during runtime startup, before the orchestrator loop starts.
+
+Dynamic workflow reload rebuilds workflow, tracker, workspace, and runner dependencies, but it does not live-rebind extension-owned listeners. Changing `server.port` therefore requires restarting the `symphony-go run` process.
+
 ## Issueflow State Writes
 
 The core runtime reads tracker state, schedules workers, and runs one live Codex app-server session per worker attempt. The repo-local `issueflow` extension performs narrow state writes for unattended smoke workflow control: claiming `Todo -> In Progress`, advancing `AI Review -> Merging`, and marking `Merging -> Done`. Review and merge advancement are enabled only when `agent.review_policy.mode: auto`; other modes leave the issue for workflow tooling or an operator.

@@ -91,6 +91,13 @@ func TestRuntimePolicyDocumentsSecurityAndOperationalSafety(t *testing.T) {
 		"`retry_failure` schedules the failure backoff path",
 		"Codex runner failures are not a separate public enum",
 		"app-server startup/read timeout",
+		"loopback HTTP control plane is an optional operator surface",
+		"`server.port` is present in `WORKFLOW.md`",
+		"CLI `--port` is an explicit runtime override",
+		"Port `0` is valid",
+		"negative ports are rejected by CLI parsing",
+		"there is no workflow `server.host` schema",
+		"Changing `server.port` therefore requires restarting",
 	} {
 		if !strings.Contains(policy, want) {
 			t.Fatalf("runtime policy missing %q", want)
