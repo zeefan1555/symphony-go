@@ -13,5 +13,5 @@ current repository and remediating gaps.
 ## Current Cursor
 
 - Phase: `remediation`
-- Next ID: `GAP-codex-protocol-buffer-001`
+- Next ID: `GAP-observability-http-state-001`
 - Last updated: `2026-05-10`
