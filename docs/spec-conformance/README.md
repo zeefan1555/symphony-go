@@ -13,5 +13,5 @@ current repository and remediating gaps.
 ## Current Cursor
 
 - Phase: `remediation`
-- Next ID: `GAP-conformance-closeout-001`
+- Next ID: `none`
 - Last updated: `2026-05-10`
