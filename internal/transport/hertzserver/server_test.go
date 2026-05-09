@@ -261,7 +261,8 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 			NextPollInMS: 20000,
 			IntervalMS:   30000,
 		},
-		LastError: "last error",
+		RateLimits: map[string]any{"primary": map[string]any{"remaining": float64(42)}},
+		LastError:  "last error",
 	}})
 	server := hertzserver.New(service)
 	baseURL := startTestServer(t, server)
@@ -321,7 +322,8 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 				NextPollInMS int64  `json:"next_poll_in_ms"`
 				IntervalMS   int    `json:"interval_ms"`
 			} `json:"polling"`
-			LastError string `json:"last_error"`
+			RateLimits map[string]map[string]float64 `json:"rate_limits"`
+			LastError  string                        `json:"last_error"`
 		} `json:"state"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
@@ -373,6 +375,9 @@ func TestStateRouteReturnsRuntimeProjection(t *testing.T) {
 	}
 	if state.Polling.LastPollAt != "2026-05-04T01:01:53Z" || state.Polling.NextPollAt != "2026-05-04T01:02:23Z" {
 		t.Fatalf("polling timestamps = %#v, want RFC3339 timestamps", state.Polling)
+	}
+	if state.RateLimits["primary"]["remaining"] != 42 {
+		t.Fatalf("rate limits = %#v, want primary remaining 42", state.RateLimits)
 	}
 	if state.LastError != "last error" {
 		t.Fatalf("last_error = %q, want last error", state.LastError)

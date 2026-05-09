@@ -98,6 +98,16 @@ The current bind host is loopback by default. Workflow front matter currently ow
 
 Dynamic workflow reload rebuilds workflow, tracker, workspace, and runner dependencies, but it does not live-rebind extension-owned listeners. Changing `server.port` therefore requires restarting the `symphony-go run` process.
 
+## Observability Failure Boundaries
+
+Runtime snapshots are in-process projections of orchestrator state. Snapshot projection should not perform network I/O or block on external services; if no snapshot provider is installed, the control service returns an unavailable error instead of fabricating state.
+
+The terminal TUI is a best-effort dashboard over the same in-process snapshot. It renders in its own loop and does not feed decisions back into dispatch, retry, or reconciliation.
+
+Log sink setup is fail-soft when at least one sink remains available. If the persistent human log sink cannot be opened, the logger writes a `log_sink_failed` warning to the JSONL sink and continues.
+
+The HTTP control plane is an optional runtime extension. Listen failures fail startup because the operator explicitly requested the extension. Runtime HTTP server errors are treated as control-plane extension failures and cancel the app run rather than changing orchestrator state silently.
+
 ## Issueflow State Writes
 
 The core runtime reads tracker state, schedules workers, and runs one live Codex app-server session per worker attempt. The repo-local `issueflow` extension performs narrow state writes for unattended smoke workflow control: claiming `Todo -> In Progress`, advancing `AI Review -> Merging`, and marking `Merging -> Done`. Review and merge advancement are enabled only when `agent.review_policy.mode: auto`; other modes leave the issue for workflow tooling or an operator.

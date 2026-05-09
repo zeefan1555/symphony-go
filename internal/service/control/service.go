@@ -577,7 +577,8 @@ func ProjectSnapshot(snapshot observability.Snapshot) RuntimeState {
 			IntervalMS:   snapshot.Polling.IntervalMS,
 			LastPollAt:   snapshot.Polling.LastPollAt,
 		},
-		LastError: snapshot.LastError,
+		LastError:  snapshot.LastError,
+		RateLimits: snapshot.RateLimits,
 	}
 }
 
@@ -957,6 +958,7 @@ type RuntimeState struct {
 	CodexTotals CodexTotals `json:"codex_totals"`
 	Polling     Polling     `json:"polling"`
 	LastError   string      `json:"last_error,omitempty"`
+	RateLimits  any         `json:"rate_limits,omitempty"`
 }
 
 type IssueDetail struct {

@@ -643,7 +643,8 @@ func TestServiceReadsRuntimeStateFromSnapshotProvider(t *testing.T) {
 			NextPollInMS: 20000,
 			IntervalMS:   30000,
 		},
-		LastError: "last error",
+		RateLimits: map[string]any{"primary": map[string]any{"remaining": float64(42)}},
+		LastError:  "last error",
 	}}
 
 	service := control.NewService(provider)
@@ -672,6 +673,10 @@ func TestServiceReadsRuntimeStateFromSnapshotProvider(t *testing.T) {
 	}
 	if !state.Polling.Checking || state.Polling.NextPollInMS != 20000 {
 		t.Fatalf("Polling = %#v, want checking next poll in 20000ms", state.Polling)
+	}
+	rateLimits, ok := state.RateLimits.(map[string]any)
+	if !ok || rateLimits["primary"] == nil {
+		t.Fatalf("RateLimits = %#v, want primary limit snapshot", state.RateLimits)
 	}
 	if state.LastError != "last error" {
 		t.Fatalf("LastError = %q, want last error", state.LastError)

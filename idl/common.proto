@@ -4,6 +4,8 @@ package common;
 
 option go_package = "symphony-go/gen/hertz/model/common";
 
+import "google/protobuf/struct.proto";
+
 message CapabilityBoundary {
   string name = 1;
   string purpose = 2;
@@ -71,6 +73,7 @@ message RuntimeState {
   CodexTotals codex_totals = 5;
   PollingStatus polling = 6;
   optional string last_error = 7;
+  google.protobuf.Value rate_limits = 8;
 }
 
 message IssueDetail {

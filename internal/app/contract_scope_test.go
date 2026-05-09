@@ -103,6 +103,12 @@ func TestRuntimePolicyDocumentsSecurityAndOperationalSafety(t *testing.T) {
 		"negative ports are rejected by CLI parsing",
 		"there is no workflow `server.host` schema",
 		"Changing `server.port` therefore requires restarting",
+		"Snapshot projection should not perform network I/O",
+		"control service returns an unavailable error",
+		"terminal TUI is a best-effort dashboard",
+		"does not feed decisions back into dispatch, retry, or reconciliation",
+		"`log_sink_failed` warning",
+		"Runtime HTTP server errors are treated as control-plane extension failures",
 	} {
 		if !strings.Contains(policy, want) {
 			t.Fatalf("runtime policy missing %q", want)

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	codexsessionmodel "symphony-go/gen/hertz/model/codexsession"
 	commonmodel "symphony-go/gen/hertz/model/common"
 	controlmodel "symphony-go/gen/hertz/model/control"
@@ -303,6 +305,11 @@ func runtimeStateModel(state controlplane.RuntimeState) *commonmodel.RuntimeStat
 	}
 	if state.LastError != "" {
 		modelState.LastError = stringPtr(state.LastError)
+	}
+	if state.RateLimits != nil {
+		if value, err := structpb.NewValue(state.RateLimits); err == nil {
+			modelState.RateLimits = value
+		}
 	}
 	return modelState
 }
