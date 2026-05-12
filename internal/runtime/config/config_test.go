@@ -47,6 +47,9 @@ func TestResolveAppliesSpecDefaultsAndRelativeWorkspaceRoot(t *testing.T) {
 	if resolved.Hooks.TimeoutMS != 60000 {
 		t.Fatalf("hook timeout = %d", resolved.Hooks.TimeoutMS)
 	}
+	if len(resolved.Worker.SSHHosts) != 0 {
+		t.Fatalf("worker ssh hosts = %#v, want empty", resolved.Worker.SSHHosts)
+	}
 	if resolved.Merge.Target != "main" {
 		t.Fatalf("merge target = %q, want main", resolved.Merge.Target)
 	}
@@ -206,6 +209,64 @@ func TestResolveUsesExplicitEnvIndirectionOnly(t *testing.T) {
 	}
 	if Code(err) != ErrMissingTrackerAPIKey {
 		t.Fatalf("code = %q, want %s", Code(err), ErrMissingTrackerAPIKey)
+	}
+}
+
+func TestResolvePreservesWorkerSSHConfig(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	resolved, err := Resolve(Config{
+		Tracker: validTracker(),
+		Worker: WorkerConfig{
+			SSHHosts:                   []string{" worker-01:2200 ", "worker-02"},
+			MaxConcurrentAgentsPerHost: 2,
+		},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(resolved.Worker.SSHHosts, []string{"worker-01:2200", "worker-02"}) {
+		t.Fatalf("ssh hosts = %#v", resolved.Worker.SSHHosts)
+	}
+	if resolved.Worker.MaxConcurrentAgentsPerHost != 2 {
+		t.Fatalf("max per host = %d, want 2", resolved.Worker.MaxConcurrentAgentsPerHost)
+	}
+}
+
+func TestResolveRejectsInvalidWorkerConfig(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	for _, tc := range []struct {
+		name   string
+		worker WorkerConfig
+	}{
+		{
+			name:   "blank host",
+			worker: WorkerConfig{SSHHosts: []string{"worker-01", " "}},
+		},
+		{
+			name:   "negative per host cap",
+			worker: WorkerConfig{SSHHosts: []string{"worker-01"}, MaxConcurrentAgentsPerHost: -1},
+		},
+		{
+			name: "explicit zero per host cap",
+			worker: WorkerConfig{
+				SSHHosts:                        []string{"worker-01"},
+				MaxConcurrentAgentsPerHost:      0,
+				MaxConcurrentAgentsPerHostIsSet: true,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Resolve(Config{
+				Tracker: validTracker(),
+				Worker:  tc.worker,
+			}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+			if err == nil {
+				t.Fatal("expected invalid worker config error")
+			}
+			if Code(err) != ErrInvalidWorkerConfig {
+				t.Fatalf("code = %q", Code(err))
+			}
+		})
 	}
 }
 

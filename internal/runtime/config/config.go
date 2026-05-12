@@ -20,6 +20,7 @@ const (
 	ErrInvalidMaxRetryBackoff    = "invalid_max_retry_backoff"
 	ErrInvalidPollingInterval    = "invalid_polling_interval"
 	ErrInvalidServerPort         = "invalid_server_port"
+	ErrInvalidWorkerConfig       = "invalid_worker_config"
 	ErrInvalidReviewPolicy       = "invalid_review_policy"
 	WarnWorkflowMergeTarget      = "workflow_merge_target_deprecated"
 )
@@ -59,6 +60,7 @@ func Resolve(raw Config, workflowPath string) (Config, error) {
 	applyDefaults(&cfg)
 	resolveEnv(&cfg)
 	normalizeStates(&cfg)
+	normalizeWorker(&cfg)
 	normalizeMerge(&cfg)
 	if err := normalizeWorkspaceRoot(&cfg, workflowPath); err != nil {
 		return Config{}, err
@@ -131,6 +133,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Workspace.Root == "" {
 		cfg.Workspace.Root = filepath.Join(os.TempDir(), "symphony_workspaces")
 	}
+	if cfg.Worker.SSHHosts == nil {
+		cfg.Worker.SSHHosts = []string{}
+	}
 	if cfg.Hooks.TimeoutMS == 0 {
 		cfg.Hooks.TimeoutMS = 60000
 	}
@@ -186,6 +191,14 @@ func normalizeStates(cfg *Config) {
 		}
 	}
 	cfg.Agent.MaxConcurrentAgentsByState = normalized
+}
+
+func normalizeWorker(cfg *Config) {
+	hosts := make([]string, 0, len(cfg.Worker.SSHHosts))
+	for _, host := range cfg.Worker.SSHHosts {
+		hosts = append(hosts, strings.TrimSpace(host))
+	}
+	cfg.Worker.SSHHosts = hosts
 }
 
 func normalizeMerge(cfg *Config) {
@@ -245,6 +258,9 @@ func validate(cfg Config) error {
 	if cfg.Server.PortSet && cfg.Server.Port < 0 {
 		return &Error{Code: ErrInvalidServerPort, Message: "server.port must be zero or positive"}
 	}
+	if err := validateWorker(cfg.Worker); err != nil {
+		return err
+	}
 	if cfg.Hooks.TimeoutMS <= 0 {
 		return &Error{Code: ErrInvalidHookTimeout, Message: "hooks.timeout_ms must be positive"}
 	}
@@ -256,6 +272,18 @@ func validate(cfg Config) error {
 	}
 	if err := validateReviewPolicy(cfg.Agent.ReviewPolicy); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateWorker(worker WorkerConfig) error {
+	for _, host := range worker.SSHHosts {
+		if host == "" {
+			return &Error{Code: ErrInvalidWorkerConfig, Message: "worker.ssh_hosts must not contain blank hosts"}
+		}
+	}
+	if worker.MaxConcurrentAgentsPerHost < 0 || (worker.MaxConcurrentAgentsPerHostIsSet && worker.MaxConcurrentAgentsPerHost == 0) {
+		return &Error{Code: ErrInvalidWorkerConfig, Message: "worker.max_concurrent_agents_per_host must be positive when set"}
 	}
 	return nil
 }

@@ -112,6 +112,7 @@ func cloneWorkflow(input *runtimeconfig.Workflow) *runtimeconfig.Workflow {
 	copy := *input
 	copy.Config.Tracker.ActiveStates = append([]string(nil), input.Config.Tracker.ActiveStates...)
 	copy.Config.Tracker.TerminalStates = append([]string(nil), input.Config.Tracker.TerminalStates...)
+	copy.Config.Worker.SSHHosts = append([]string(nil), input.Config.Worker.SSHHosts...)
 	if input.Config.Agent.MaxConcurrentAgentsByState != nil {
 		copy.Config.Agent.MaxConcurrentAgentsByState = map[string]int{}
 		for key, value := range input.Config.Agent.MaxConcurrentAgentsByState {

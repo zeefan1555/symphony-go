@@ -12,6 +12,7 @@ type Config struct {
 	Server    ServerConfig    `yaml:"server"`
 	Polling   PollingConfig   `yaml:"polling"`
 	Workspace WorkspaceConfig `yaml:"workspace"`
+	Worker    WorkerConfig    `yaml:"worker"`
 	Hooks     HooksConfig     `yaml:"hooks"`
 	Merge     MergeConfig     `yaml:"merge"`
 	Agent     AgentConfig     `yaml:"agent"`
@@ -55,6 +56,23 @@ type PollingConfig struct {
 
 type WorkspaceConfig struct {
 	Root string `yaml:"root"`
+}
+
+type WorkerConfig struct {
+	SSHHosts                        []string `yaml:"ssh_hosts"`
+	MaxConcurrentAgentsPerHost      int      `yaml:"max_concurrent_agents_per_host"`
+	MaxConcurrentAgentsPerHostIsSet bool     `yaml:"-"`
+}
+
+func (c *WorkerConfig) UnmarshalYAML(value *yaml.Node) error {
+	type raw WorkerConfig
+	var decoded raw
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*c = WorkerConfig(decoded)
+	c.MaxConcurrentAgentsPerHostIsSet = yamlMappingHasNonNullKey(value, "max_concurrent_agents_per_host")
+	return nil
 }
 
 type HooksConfig struct {

@@ -174,6 +174,39 @@ prompt
 	}
 }
 
+func TestReloaderCurrentClonesWorkerSSHHosts(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "WORKFLOW.md")
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	content := `---
+tracker:
+  kind: linear
+  api_key: $LINEAR_API_KEY
+  project_slug: demo
+worker:
+  ssh_hosts:
+    - worker-01:2200
+    - worker-02
+---
+prompt
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reloader, err := NewReloader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := reloader.Current()
+	current.Config.Worker.SSHHosts[0] = "mutated"
+
+	next := reloader.Current()
+	if next.Config.Worker.SSHHosts[0] != "worker-01:2200" {
+		t.Fatalf("worker ssh hosts were mutated: %#v", next.Config.Worker.SSHHosts)
+	}
+}
+
 type fakeFileInfo struct {
 	modTime time.Time
 	size    int64
