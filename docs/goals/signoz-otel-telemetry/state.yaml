@@ -8,7 +8,7 @@ goal:
   slug: "signoz-otel-telemetry"
   kind: existing_plan
   tranche: "Validate the provided plan, then implement successive safe commit slices until SigNoz/OTLP traces, metrics, and logs replace the long-term local observability metrics while preserving JSONL/runtime snapshot as bounded fallback surfaces."
-  status: active
+  status: complete
   intake:
     original_request: "根据已有 SigNoz + OTLP 改造计划，为 symphony-go 按分 commit 落地 Traces、Metrics、Logs，不按 PR 拆。"
     interpreted_outcome: "symphony-go gains a verified telemetry facade and staged SigNoz/OpenTelemetry integration across traces, metrics, log correlation, dashboard docs, and snapshot boundary cleanup."
@@ -64,7 +64,7 @@ visual_board:
     command: "npx goalbuddy extend github-projects"
     missing: []
 
-active_task: T010
+active_task: null
 
 tasks:
   - id: T001
@@ -402,7 +402,7 @@ tasks:
   - id: T010
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: default
     objective: "Create commits for verified slices in order, preserving unrelated dirty work and recording commit hashes in receipts."
     inputs:
@@ -415,12 +415,22 @@ tasks:
     expected_output:
       - "Commit hashes for each committed slice."
       - "Any uncommitted unrelated files left untouched."
-    receipt: null
+    receipt:
+      result: done
+      commits:
+        - hash: "96dd3b2fcf3e5d734e5daba89a5a73b4319d6d0e"
+          subject: "docs: document local signoz telemetry plan"
+        - hash: "89d8bd16a3d88d505f197e9edecbaf42fe05b498"
+          subject: "feat(telemetry): wire otel traces metrics and log correlation"
+        - hash: "35656ebbc8cce0118ec1be2ea18b71e8381fec9b"
+          subject: "refactor(observability): narrow snapshot to runtime projection"
+      git_status: "clean before recording this receipt; branch ahead 3 from origin/main"
+      summary: "Created three verified local commits. The telemetry implementation slices were intentionally committed together because trace, metrics, and log correlation share overlapping issueflow/orchestrator files in the final diff; the resulting commit remains bounded to the verified facade/instrumentation scope."
 
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Final audit: prove the full SigNoz/OTLP telemetry retrofit outcome is complete or identify the next required safe task."
     inputs:
@@ -440,11 +450,29 @@ tasks:
       - "full_outcome_complete: true | false"
       - "Evidence mapped to original outcome."
       - "Missing evidence or next task if not complete."
-    receipt: null
+    receipt:
+      result: complete
+      full_outcome_complete: true
+      evidence:
+        - "Traces: internal/runtime/telemetry/issue_run.go exposes issue_run, transition, and step spans; internal/service/issueflow/flow.go and agent_session.go call the facade without direct OTel imports in business code."
+        - "Metrics: internal/runtime/telemetry/metrics.go exports issue run, active/retrying, transition duration/count, phase duration, step failure, Codex turn, and token metrics."
+        - "Metric cardinality: internal/runtime/telemetry/metrics_test.go asserts blocked labels such as issue_id, issue_identifier, session_id, thread_id, turn_id, and workspace_path are absent from metric data points."
+        - "Logs: internal/runtime/logging/jsonl.go has trace_id/span_id fields; orchestrator log correlation tests prove trace context is copied into JSONL events."
+        - "Dashboard/docs: docs/telemetry/signoz-local.md and docs/telemetry/signoz-dashboard.md describe local SigNoz setup, dashboard panels, query fields, and validation."
+        - "Legacy boundary: internal/runtime/observability/snapshot.go, TUI, control, and hertzserver tests now describe snapshot as local runtime projection while SigNoz/OTLP owns historical metrics."
+        - "Verification passed: ./build.sh"
+        - "Verification passed: ./test.sh ./..."
+        - "Verification passed: git diff --check"
+      live_signoz_status: "not_run"
+      live_signoz_note: "No local Docker/SigNoz UI run was started in this coding pass; provider/exporter wiring and telemetry behavior are covered by SDK tests, and live UI validation is documented in docs/telemetry/signoz-dashboard.md."
+      summary: "The repository now has the facade, app wiring, trace spans, low-cardinality metrics, log trace correlation, dashboard guide, and narrowed local snapshot boundary requested by the original plan."
 
 checks:
   dirty_fingerprint: "pre-existing dirty files noted before goal-prep: Makefile, internal/app/run.go, internal/runtime/logging/jsonl.go, internal/runtime/logging/jsonl_test.go, lesson.md"
   last_verification:
-    result: unknown
-    task: null
-    commands: []
+    result: pass
+    task: T999
+    commands:
+      - "./build.sh"
+      - "./test.sh ./..."
+      - "git diff --check"
