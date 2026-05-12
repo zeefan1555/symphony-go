@@ -59,6 +59,7 @@ query SymphonyGoPoll($projectSlug: String!, $stateNames: [String!]!, $first: Int
       description
       priority
       state { name }
+      assignee { id }
       branchName
       url
       labels { nodes { name } }
@@ -79,6 +80,7 @@ query SymphonyGoIssueById($id: String!) {
     description
     priority
     state { name }
+    assignee { id }
     branchName
     url
     labels { nodes { name } }
@@ -95,9 +97,15 @@ query SymphonyGoIssueStatesByIDs($ids: [ID!], $first: Int!) {
       id
       identifier
       state { name }
+      assignee { id }
       inverseRelations { nodes { type issue { id identifier state { name } } } }
     }
   }
+}`
+
+const viewerQuery = `
+query SymphonyGoViewer {
+  viewer { id }
 }`
 
 const stateLookupQuery = `
@@ -139,6 +147,7 @@ type Client struct {
 	Endpoint    string
 	APIKey      string
 	ProjectSlug string
+	Assignee    string
 	HTTPClient  *http.Client
 }
 
@@ -161,15 +170,24 @@ func New(cfg runtimeconfig.TrackerConfig) (*Client, error) {
 		Endpoint:    endpoint,
 		APIKey:      apiKey,
 		ProjectSlug: cfg.ProjectSlug,
+		Assignee:    cfg.Assignee,
 		HTTPClient:  &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
 
 func (c *Client) FetchActiveIssues(ctx context.Context, states []string) ([]issuemodel.Issue, error) {
-	return c.FetchIssuesByStates(ctx, states)
+	filter, err := c.routingAssigneeFilter(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return c.fetchIssuesByStates(ctx, states, filter)
 }
 
 func (c *Client) FetchIssuesByStates(ctx context.Context, states []string) ([]issuemodel.Issue, error) {
+	return c.fetchIssuesByStates(ctx, states, nil)
+}
+
+func (c *Client) fetchIssuesByStates(ctx context.Context, states []string, filter *assigneeFilter) ([]issuemodel.Issue, error) {
 	if len(states) == 0 {
 		return []issuemodel.Issue{}, nil
 	}
@@ -189,7 +207,7 @@ func (c *Client) FetchIssuesByStates(ctx context.Context, states []string) ([]is
 		}, &body); err != nil {
 			return nil, err
 		}
-		issues = append(issues, normalizeIssues(body.Data.Issues.Nodes)...)
+		issues = append(issues, normalizeIssues(body.Data.Issues.Nodes, filter)...)
 		if !body.Data.Issues.PageInfo.HasNextPage {
 			return issues, nil
 		}
@@ -209,12 +227,16 @@ func (c *Client) FetchIssue(ctx context.Context, id string) (issuemodel.Issue, e
 	if err := c.GraphQL(ctx, issueByIDQuery, map[string]any{"id": id}, &body); err != nil {
 		return issuemodel.Issue{}, err
 	}
-	return normalizeIssue(body.Data.Issue), nil
+	return normalizeIssue(body.Data.Issue, nil), nil
 }
 
 func (c *Client) FetchIssueStatesByIDs(ctx context.Context, ids []string) ([]issuemodel.Issue, error) {
 	if len(ids) == 0 {
 		return []issuemodel.Issue{}, nil
+	}
+	filter, err := c.routingAssigneeFilter(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var body struct {
 		Data struct {
@@ -229,7 +251,7 @@ func (c *Client) FetchIssueStatesByIDs(ctx context.Context, ids []string) ([]iss
 	}, &body); err != nil {
 		return nil, err
 	}
-	return normalizeIssues(body.Data.Issues.Nodes), nil
+	return normalizeIssues(body.Data.Issues.Nodes, filter), nil
 }
 
 func (c *Client) UpdateIssueState(ctx context.Context, issueID, stateName string) error {
@@ -417,6 +439,9 @@ type rawIssue struct {
 	State       struct {
 		Name string `json:"name"`
 	} `json:"state"`
+	Assignee struct {
+		ID string `json:"id"`
+	} `json:"assignee"`
 	BranchName string `json:"branchName"`
 	URL        string `json:"url"`
 	Labels     struct {
@@ -448,15 +473,51 @@ type rawIssueConnection struct {
 	} `json:"pageInfo"`
 }
 
-func normalizeIssues(raw []rawIssue) []issuemodel.Issue {
+type assigneeFilter struct {
+	matchValue string
+}
+
+func (c *Client) routingAssigneeFilter(ctx context.Context) (*assigneeFilter, error) {
+	assignee := strings.TrimSpace(c.Assignee)
+	if assignee == "" {
+		return nil, nil
+	}
+	if assignee == "me" {
+		viewerID, err := c.viewerID(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if viewerID == "" {
+			return nil, errors.New("missing Linear viewer identity")
+		}
+		return &assigneeFilter{matchValue: viewerID}, nil
+	}
+	return &assigneeFilter{matchValue: assignee}, nil
+}
+
+func (c *Client) viewerID(ctx context.Context) (string, error) {
+	var body struct {
+		Data struct {
+			Viewer struct {
+				ID string `json:"id"`
+			} `json:"viewer"`
+		} `json:"data"`
+	}
+	if err := c.GraphQL(ctx, viewerQuery, map[string]any{}, &body); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(body.Data.Viewer.ID), nil
+}
+
+func normalizeIssues(raw []rawIssue, filter *assigneeFilter) []issuemodel.Issue {
 	issues := make([]issuemodel.Issue, 0, len(raw))
 	for _, item := range raw {
-		issues = append(issues, normalizeIssue(item))
+		issues = append(issues, normalizeIssue(item, filter))
 	}
 	return issues
 }
 
-func normalizeIssue(raw rawIssue) issuemodel.Issue {
+func normalizeIssue(raw rawIssue, filter *assigneeFilter) issuemodel.Issue {
 	labels := make([]string, 0, len(raw.Labels.Nodes))
 	for _, label := range raw.Labels.Nodes {
 		if label.Name != "" {
@@ -474,19 +535,27 @@ func normalizeIssue(raw rawIssue) issuemodel.Issue {
 			State:      relation.Issue.State.Name,
 		})
 	}
+	assigned := true
+	var assignedToWorker *bool
+	if filter != nil {
+		assigned = raw.Assignee.ID != "" && raw.Assignee.ID == filter.matchValue
+		assignedToWorker = &assigned
+	}
 	return issuemodel.Issue{
-		ID:          raw.ID,
-		Identifier:  raw.Identifier,
-		Title:       raw.Title,
-		Description: raw.Description,
-		Priority:    raw.Priority,
-		State:       raw.State.Name,
-		BranchName:  raw.BranchName,
-		URL:         raw.URL,
-		Labels:      labels,
-		BlockedBy:   blockers,
-		CreatedAt:   parseTime(raw.CreatedAt),
-		UpdatedAt:   parseTime(raw.UpdatedAt),
+		ID:               raw.ID,
+		Identifier:       raw.Identifier,
+		Title:            raw.Title,
+		Description:      raw.Description,
+		Priority:         raw.Priority,
+		State:            raw.State.Name,
+		BranchName:       raw.BranchName,
+		URL:              raw.URL,
+		AssigneeID:       raw.Assignee.ID,
+		AssignedToWorker: assignedToWorker,
+		Labels:           labels,
+		BlockedBy:        blockers,
+		CreatedAt:        parseTime(raw.CreatedAt),
+		UpdatedAt:        parseTime(raw.UpdatedAt),
 	}
 }
 

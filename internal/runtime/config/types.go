@@ -46,6 +46,7 @@ type TrackerConfig struct {
 	Endpoint       string   `yaml:"endpoint"`
 	APIKey         string   `yaml:"api_key"`
 	ProjectSlug    string   `yaml:"project_slug"`
+	Assignee       string   `yaml:"assignee"`
 	ActiveStates   []string `yaml:"active_states"`
 	TerminalStates []string `yaml:"terminal_states"`
 }

@@ -101,6 +101,30 @@ func TestReviewWaitStateIsNotDispatchEligible(t *testing.T) {
 	}
 }
 
+func TestIssueAssignedAwayIsNotDispatchEligible(t *testing.T) {
+	assigned := false
+	issue := issuemodel.Issue{
+		ID:               "i1",
+		Identifier:       "ZEE-1",
+		Title:            "Other worker",
+		State:            "Todo",
+		AssignedToWorker: &assigned,
+	}
+
+	ok, reason := candidateEligible(issue, eligibilityState{
+		activeStates:   []string{"Todo", "In Progress"},
+		terminalStates: []string{"Done", "Canceled"},
+		maxConcurrent:  1,
+	})
+
+	if ok {
+		t.Fatal("expected issue assigned away to be ineligible for dispatch")
+	}
+	if reason != "not_assigned_to_worker" {
+		t.Fatalf("reason = %q", reason)
+	}
+}
+
 func TestManualAIReviewStateIsDispatchEligible(t *testing.T) {
 	issue := issuemodel.Issue{
 		ID:         "i1",

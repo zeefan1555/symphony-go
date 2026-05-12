@@ -173,6 +173,10 @@ func applyDefaults(cfg *Config) {
 
 func resolveEnv(cfg *Config) {
 	cfg.Tracker.APIKey = resolveDollar(cfg.Tracker.APIKey)
+	cfg.Tracker.Assignee = resolveDollar(cfg.Tracker.Assignee)
+	if cfg.Tracker.Assignee == "" {
+		cfg.Tracker.Assignee = os.Getenv("LINEAR_ASSIGNEE")
+	}
 	cfg.Workspace.Root = resolveDollar(cfg.Workspace.Root)
 }
 

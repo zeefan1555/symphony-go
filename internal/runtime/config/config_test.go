@@ -212,6 +212,41 @@ func TestResolveUsesExplicitEnvIndirectionOnly(t *testing.T) {
 	}
 }
 
+func TestResolveTrackerAssigneeFromExplicitOrFallbackEnv(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	t.Setenv("LINEAR_ASSIGNEE_FOR_TEST", "user-explicit")
+	t.Setenv("LINEAR_ASSIGNEE", "user-fallback")
+
+	resolved, err := Resolve(Config{
+		Tracker: TrackerConfig{
+			Kind:        "linear",
+			APIKey:      "$LINEAR_API_KEY",
+			ProjectSlug: "demo",
+			Assignee:    "$LINEAR_ASSIGNEE_FOR_TEST",
+		},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Tracker.Assignee != "user-explicit" {
+		t.Fatalf("assignee = %q, want explicit env", resolved.Tracker.Assignee)
+	}
+
+	resolved, err = Resolve(Config{
+		Tracker: TrackerConfig{
+			Kind:        "linear",
+			APIKey:      "$LINEAR_API_KEY",
+			ProjectSlug: "demo",
+		},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Tracker.Assignee != "user-fallback" {
+		t.Fatalf("assignee = %q, want fallback env", resolved.Tracker.Assignee)
+	}
+}
+
 func TestResolvePreservesWorkerSSHConfig(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	resolved, err := Resolve(Config{

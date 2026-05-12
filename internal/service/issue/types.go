@@ -17,8 +17,11 @@ type Issue struct {
 	State       string
 	BranchName  string
 	URL         string
-	Labels      []string
-	BlockedBy   []BlockerRef
-	CreatedAt   *time.Time
-	UpdatedAt   *time.Time
+	AssigneeID  string
+	// AssignedToWorker is nil when the tracker did not evaluate worker routing.
+	AssignedToWorker *bool
+	Labels           []string
+	BlockedBy        []BlockerRef
+	CreatedAt        *time.Time
+	UpdatedAt        *time.Time
 }

@@ -237,6 +237,59 @@ func TestFetchActiveIssuesPaginatesAndNormalizes(t *testing.T) {
 	}
 }
 
+func TestFetchActiveIssuesMarksWorkerAssignment(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"issues":{"nodes":[{"id":"i1","identifier":"ZEE-1","title":"Assigned","state":{"name":"Todo"},"assignee":{"id":"user-1"},"labels":{"nodes":[]},"inverseRelations":{"nodes":[]}},{"id":"i2","identifier":"ZEE-2","title":"Other","state":{"name":"Todo"},"assignee":{"id":"user-2"},"labels":{"nodes":[]},"inverseRelations":{"nodes":[]}}],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}`))
+	}))
+	defer server.Close()
+
+	client := &Client{Endpoint: server.URL, APIKey: "lin_test", ProjectSlug: "demo", Assignee: "user-1", HTTPClient: server.Client()}
+	issues, err := client.FetchActiveIssues(context.Background(), []string{"Todo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 2 {
+		t.Fatalf("issues = %#v", issues)
+	}
+	if issues[0].AssigneeID != "user-1" || issues[0].AssignedToWorker == nil || !*issues[0].AssignedToWorker {
+		t.Fatalf("assigned issue routing = %#v", issues[0])
+	}
+	if issues[1].AssigneeID != "user-2" || issues[1].AssignedToWorker == nil || *issues[1].AssignedToWorker {
+		t.Fatalf("other issue routing = %#v", issues[1])
+	}
+}
+
+func TestFetchActiveIssuesResolvesMeAssignee(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(payload["query"].(string), "viewer") {
+			_, _ = w.Write([]byte(`{"data":{"viewer":{"id":"viewer-1"}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"issues":{"nodes":[{"id":"i1","identifier":"ZEE-1","title":"Mine","state":{"name":"Todo"},"assignee":{"id":"viewer-1"},"labels":{"nodes":[]},"inverseRelations":{"nodes":[]}}],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}`))
+	}))
+	defer server.Close()
+
+	client := &Client{Endpoint: server.URL, APIKey: "lin_test", ProjectSlug: "demo", Assignee: "me", HTTPClient: server.Client()}
+	issues, err := client.FetchActiveIssues(context.Background(), []string{"Todo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d, want viewer + issues", requests)
+	}
+	if len(issues) != 1 || issues[0].AssignedToWorker == nil || !*issues[0].AssignedToWorker {
+		t.Fatalf("issues = %#v", issues)
+	}
+}
+
 func TestNewAppliesLinearDefaultsAndEnvAPIKey(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_env")
 
@@ -255,6 +308,9 @@ func TestNewAppliesLinearDefaultsAndEnvAPIKey(t *testing.T) {
 	}
 	if client.ProjectSlug != "demo" {
 		t.Fatalf("project slug = %q", client.ProjectSlug)
+	}
+	if client.Assignee != "" {
+		t.Fatalf("assignee = %q, want empty", client.Assignee)
 	}
 	if client.HTTPClient == nil || client.HTTPClient.Timeout != 30*time.Second {
 		t.Fatalf("timeout = %#v, want 30s", client.HTTPClient)

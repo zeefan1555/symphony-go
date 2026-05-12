@@ -297,6 +297,11 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) error {
 			o.cancelRunning(issue.ID)
 			continue
 		}
+		if issue.AssignedToWorker != nil && !*issue.AssignedToWorker {
+			o.logIssue(issue, "worker_routing_changed", "issue no longer assigned to this worker", map[string]any{"state": issue.State, "assignee_id": issue.AssigneeID})
+			o.cancelRunning(issue.ID)
+			continue
+		}
 		if isActive(issue.State, rt.workflow.Config.Tracker.ActiveStates) {
 			o.updateRunningState(issue.ID, issue.State)
 			continue

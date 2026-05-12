@@ -35,6 +35,9 @@ func candidateEligible(issue issuemodel.Issue, state eligibilityState) (bool, st
 	if strings.EqualFold(issue.State, "AI Review") && !state.aiReview {
 		return false, "waiting_for_ai_review"
 	}
+	if issue.AssignedToWorker != nil && !*issue.AssignedToWorker {
+		return false, "not_assigned_to_worker"
+	}
 	if state.claimed != nil && state.claimed[issue.ID] {
 		return false, "claimed"
 	}
