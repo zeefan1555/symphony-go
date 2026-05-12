@@ -108,10 +108,13 @@ func NewRuntime(opts Options) (*Runtime, error) {
 		return nil, err
 	}
 	repoRoot := orchestrator.RepoRootFromWorkflow(absWorkflow)
-	logPath := logging.LogPath(filepath.Dir(absWorkflow))
+	logBaseDir := filepath.Dir(absWorkflow)
+	logPath := logging.LogPath(logBaseDir)
 	logOptions := []logging.Option{
 		logging.WithHumanFile(logging.HumanLogPath(logPath), false),
 		logging.WithHumanFileMinLevel(slog.LevelDebug),
+		logging.WithIssueFiles(logBaseDir, false),
+		logging.WithIssueFilesMinLevel(slog.LevelDebug),
 	}
 	if !opts.TUI {
 		logOptions = append(logOptions, logging.WithConsole(opts.Stderr, true))

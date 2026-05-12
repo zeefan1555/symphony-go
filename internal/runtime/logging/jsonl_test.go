@@ -231,6 +231,64 @@ func TestHumanLogWritesIssueSectionHeaders(t *testing.T) {
 	}
 }
 
+func TestLoggerWritesIssueScopedLogs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "logs", "run.jsonl")
+	logger, err := New(path, WithIssueFiles(dir, false), WithIssueFilesMinLevel(slog.LevelDebug))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []Event{
+		{
+			Time:            "2026-05-01T20:00:00Z",
+			IssueIdentifier: "ZEE-136",
+			Event:           "dispatch_started",
+			Message:         "dispatch started",
+		},
+		{
+			Time:            "2026-05-01T20:00:01Z",
+			IssueIdentifier: "ZEE-137",
+			Event:           "dispatch_started",
+			Message:         "dispatch started",
+		},
+		{
+			Time:    "2026-05-01T20:00:02Z",
+			Event:   "config_warning",
+			Message: "no issue",
+		},
+	} {
+		if err := logger.Write(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	zee136 := IssueLogPath(dir, "ZEE-136")
+	zee137 := IssueLogPath(dir, "ZEE-137")
+	for _, path := range []string{zee136, HumanLogPath(zee136), zee137, HumanLogPath(zee137)} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected issue log %s: %v", path, err)
+		}
+	}
+	raw136, err := os.ReadFile(zee136)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw136), `"issue_identifier":"ZEE-136"`) || strings.Contains(string(raw136), "ZEE-137") {
+		t.Fatalf("ZEE-136 issue log = %s", raw136)
+	}
+	human136, err := os.ReadFile(HumanLogPath(zee136))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(human136), "event=issue_section issue=ZEE-136") ||
+		!strings.Contains(string(human136), "event=dispatch_started") {
+		t.Fatalf("ZEE-136 human log = %s", human136)
+	}
+}
+
 func TestHumanLogSummarizesCodexEvents(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "logs", "run.jsonl")
@@ -349,6 +407,20 @@ func TestHumanLogPath(t *testing.T) {
 	want := filepath.Join("logs", "run-20260501-211219.human.log")
 	if got != want {
 		t.Fatalf("HumanLogPath() = %q, want %q", got, want)
+	}
+}
+
+func TestIssueLogPath(t *testing.T) {
+	got := IssueLogPath("/tmp/project", "ZEE-136")
+	want := filepath.Join("/tmp/project", ".symphony", "logs", "ZEE-136.jsonl")
+	if got != want {
+		t.Fatalf("IssueLogPath() = %q, want %q", got, want)
+	}
+
+	got = IssueLogPath("/tmp/project", "../ZEE 136")
+	want = filepath.Join("/tmp/project", ".symphony", "logs", "ZEE-136.jsonl")
+	if got != want {
+		t.Fatalf("IssueLogPath() sanitized = %q, want %q", got, want)
 	}
 }
 

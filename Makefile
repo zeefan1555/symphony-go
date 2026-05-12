@@ -1,6 +1,7 @@
 GO ?= go
 BINARY := bin/symphony-go
 WORKFLOW ?= ./WORKFLOW.md
+BYTECODE_WORKFLOW ?= /Users/bytedance/bytecode/WORKFLOW.md
 ZH_SMOKE_WORKFLOW ?= ./WORKFLOW.zh-smoke.md
 ISSUE ?=
 MERGE_TARGET ?=
@@ -10,13 +11,14 @@ RESULTS ?= ../.codex/skills/zh-smoke-harness/experiments/results.tsv
 RESULTS_MD ?= ../.codex/skills/zh-smoke-harness/experiments/rounds.md
 TEAM ?= Zeefan
 CHANGE_NOTE ?=
+BYTECODE_TRIAGE_PROCESS_PATTERN ?= symphony-go.*run.*/Users/bytedance/bytecode/WORKFLOW.md
 ZH_SMOKE_PROCESS_PATTERN ?= symphony-go.*run.*WORKFLOW.zh-smoke.md
 
 # External link mode keeps macOS binaries dyld-friendly on machines that reject
 # some `go run` temporary executables with a missing LC_UUID load command.
 LDFLAGS := -linkmode=external
 
-.PHONY: build test idl-lint hertz-generate check-generated-hertz-boundary hertz-layout-smoke run run-once zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
+.PHONY: build test idl-lint hertz-generate check-generated-hertz-boundary hertz-layout-smoke run run-once bytecode bytecode-once bytecode-stop bytecode-triage bytecode-triage-once bytecode-triage-stop zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
 
 build:
 	GO=$(GO) SYMPHONY_GO_BUILD_LDFLAGS="$(LDFLAGS)" SYMPHONY_GO_BINARY="$(BINARY)" ./build.sh
@@ -42,6 +44,21 @@ run: build
 # Debug helper for a single poll. Production usage should prefer `make run`.
 run-once: build
 	$(BINARY) run --workflow $(WORKFLOW) --once --no-tui $(if $(ISSUE),--issue $(ISSUE),) $(MERGE_TARGET_FLAG)
+
+bytecode: bytecode-triage
+
+bytecode-once: bytecode-triage-once
+
+bytecode-stop: bytecode-triage-stop
+
+bytecode-triage: build
+	$(BINARY) run --workflow $(BYTECODE_WORKFLOW) --tui $(if $(ISSUE),--issue $(ISSUE),)
+
+bytecode-triage-once: build
+	$(BINARY) run --workflow $(BYTECODE_WORKFLOW) --once --no-tui $(if $(ISSUE),--issue $(ISSUE),)
+
+bytecode-triage-stop:
+	-pkill -f "$(BYTECODE_TRIAGE_PROCESS_PATTERN)"
 
 zh-smoke-run: build
 	$(BINARY) run --workflow $(ZH_SMOKE_WORKFLOW) --tui $(MERGE_TARGET_FLAG)

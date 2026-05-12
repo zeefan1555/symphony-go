@@ -27,6 +27,17 @@ type Logger struct {
 	color        bool
 	min          slog.Level
 	consoleIssue string
+	issueBaseDir string
+	issueColor   bool
+	issueMin     slog.Level
+	issueSinks   map[string]*issueSink
+}
+
+type issueSink struct {
+	file       *os.File
+	encoder    *json.Encoder
+	human      *os.File
+	humanIssue string
 }
 
 type Event struct {
@@ -71,6 +82,20 @@ func WithHumanFileMinLevel(level slog.Level) Option {
 	}
 }
 
+func WithIssueFiles(baseDir string, color bool) Option {
+	return func(l *Logger) {
+		l.issueBaseDir = baseDir
+		l.issueColor = color
+		l.issueMin = slog.LevelInfo
+	}
+}
+
+func WithIssueFilesMinLevel(level slog.Level) Option {
+	return func(l *Logger) {
+		l.issueMin = level
+	}
+}
+
 func New(path string, options ...Option) (*Logger, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
@@ -79,7 +104,7 @@ func New(path string, options ...Option) (*Logger, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger := &Logger{file: file, encoder: json.NewEncoder(file)}
+	logger := &Logger{file: file, encoder: json.NewEncoder(file), issueSinks: map[string]*issueSink{}}
 	for _, option := range options {
 		option(logger)
 	}
@@ -121,6 +146,18 @@ func (l *Logger) Close() error {
 			firstErr = err
 		}
 	}
+	for _, sink := range l.issueSinks {
+		if sink.file != nil {
+			if err := sink.file.Close(); firstErr == nil {
+				firstErr = err
+			}
+		}
+		if sink.human != nil {
+			if err := sink.human.Close(); firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
 	return firstErr
 }
 
@@ -139,6 +176,9 @@ func (l *Logger) Write(event Event) error {
 	if err := l.encoder.Encode(event); err != nil {
 		return err
 	}
+	if err := l.writeIssueFile(event); err != nil {
+		return err
+	}
 	displayEvent, ok := HumanEvent(event)
 	if !ok {
 		return nil
@@ -153,6 +193,71 @@ func (l *Logger) Write(event Event) error {
 		return l.writeDisplay(l.console, displayEvent, l.color, l.min, &l.consoleIssue)
 	}
 	return nil
+}
+
+func (l *Logger) writeIssueFile(event Event) error {
+	issue := displayIssue(event)
+	if issue == "" || l.issueBaseDir == "" {
+		return nil
+	}
+	sink, err := l.issueSink(issue)
+	if err != nil {
+		l.warnSinkFailedLocked("issue_file", IssueLogPath(l.issueBaseDir, issue), err)
+		return nil
+	}
+	if err := sink.encoder.Encode(event); err != nil {
+		return err
+	}
+	displayEvent, ok := HumanEvent(event)
+	if !ok {
+		return nil
+	}
+	level := parseLevel(displayEvent.Level)
+	if sink.human != nil && level >= l.issueMin {
+		return l.writeDisplay(sink.human, displayEvent, l.issueColor, l.issueMin, &sink.humanIssue)
+	}
+	return nil
+}
+
+func (l *Logger) issueSink(issue string) (*issueSink, error) {
+	name := safeLogName(issue)
+	if name == "" {
+		return nil, fmt.Errorf("issue identifier is empty after sanitization")
+	}
+	if sink, ok := l.issueSinks[name]; ok {
+		return sink, nil
+	}
+	path := filepath.Join(l.issueBaseDir, ".symphony", "logs", name+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	humanPath := HumanLogPath(path)
+	human, err := os.OpenFile(humanPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	sink := &issueSink{file: file, encoder: json.NewEncoder(file), human: human}
+	l.issueSinks[name] = sink
+	return sink, nil
+}
+
+func (l *Logger) warnSinkFailedLocked(sink, path string, failure error) {
+	_ = l.encoder.Encode(Event{
+		Time:    time.Now().Format(time.RFC3339Nano),
+		Level:   "warn",
+		Event:   "log_sink_failed",
+		Message: "configured log sink disabled",
+		Fields: map[string]any{
+			"sink":  sink,
+			"path":  path,
+			"error": failure.Error(),
+		},
+	})
 }
 
 func (l *Logger) writeDisplay(writer io.Writer, event Event, color bool, min slog.Level, lastIssue *string) error {
@@ -175,8 +280,36 @@ func LogPath(baseDir string) string {
 	return filepath.Join(baseDir, ".symphony", "logs", name)
 }
 
+func IssueLogPath(baseDir string, issueIdentifier string) string {
+	name := safeLogName(issueIdentifier)
+	if name == "" {
+		return LogPath(baseDir)
+	}
+	return filepath.Join(baseDir, ".symphony", "logs", name+".jsonl")
+}
+
 func HumanLogPath(jsonlPath string) string {
 	return strings.TrimSuffix(jsonlPath, filepath.Ext(jsonlPath)) + ".human.log"
+}
+
+func safeLogName(value string) string {
+	value = strings.TrimSpace(value)
+	var builder strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			builder.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			builder.WriteRune(r)
+		case r >= '0' && r <= '9':
+			builder.WriteRune(r)
+		case r == '-' || r == '_' || r == '.':
+			builder.WriteRune(r)
+		default:
+			builder.WriteRune('-')
+		}
+	}
+	return strings.Trim(builder.String(), "-_.")
 }
 
 func displayIssue(event Event) string {

@@ -373,3 +373,71 @@ rg -n "单个 Linear issue|同一个 issue|多开子代理|单 agent" AGENTS.md 
 ```bash
 rg -n "Merge: PASS|Review: PASS|workpad|comment|Done" WORKFLOW.md internal/service/orchestrator .codex/skills
 ```
+
+## 2026-05-12: 人工启动 workflow 默认保留 TUI
+
+### 用户纠正
+
+- 用户指出：专门启动排查问题 workflow 的 `make` 命令应该能看到 TUI。
+
+### 错误模式
+
+- 这是沟通和技术判断错误：我把长期 listener 的后台可脚本化需求默认套到了人工启动入口上，忽略了用户当前是想手动观察运行过程。
+
+### 防复犯规则
+
+- 面向人工启动、观察和调试的 workflow 入口默认使用 `--tui`。
+- 只有用户明确要求后台运行、非交互 shell、脚本化执行或一次性 smoke 时，才默认使用 `--no-tui`。
+
+### 固定动作
+
+- 新增或调整 workflow `make` 入口时，先按用途区分人工观察和脚本运行：
+
+```bash
+make -n <target>
+```
+
+## 2026-05-12: 高频 Make 入口要短
+
+### 用户纠正
+
+- 用户指出：`bytecode-triage` 作为日常启动命令太长，应该直接用 `make bytecode`。
+
+### 错误模式
+
+- 这是沟通错误：我按语义完整性命名入口，但忽略了高频命令更需要短、好记、低输入成本。
+
+### 防复犯规则
+
+- 面向日常高频使用的 Make target 优先短命名；语义较长的名字可以作为兼容别名或说明，不应成为唯一入口。
+
+### 固定动作
+
+- 新增高频 Make target 后检查 dry-run 是否能用最短命令触发：
+
+```bash
+make -n bytecode
+```
+
+## 2026-05-12: social_pet 验证不要用裸 go test
+
+### 用户纠正
+
+- 用户指出：`social_pet` 仓库裸 `go test` 会缺少很多环境变量，应该用仓库脚本 `.ci/run.sh` / `ci/run.sh`。
+
+### 错误模式
+
+- 这是流程错误：我用通用 Go 验证习惯替代了目标仓库自己的 CI 入口，导致验证方式不符合仓库环境约定。
+
+### 防复犯规则
+
+- 排查或验证 `social_pet` 时，优先使用仓库脚本 `ci/run.sh`；不要把裸 `go test` 作为默认结论。
+- 如果只需要类型检查或窄验证，也应通过 `ci/run.sh <regex>` 这类仓库认可入口运行，并把日志落到任务目录。
+
+### 固定动作
+
+- 在 `social_pet` 仓库验证前先确认脚本入口：
+
+```bash
+find . -maxdepth 3 -path '*/run.sh' -print
+```
