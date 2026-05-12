@@ -47,7 +47,7 @@ func TestRenderSnapshotShowsCoreSections(t *testing.T) {
 		"│ Project: https://linear.app/project/demo-project/issues",
 		"│ Next refresh: 5s",
 		"│ Agents: 1/5",
-		"│ Throughput: 0 tps",
+		"│ Scope: local runtime projection",
 		"│ Runtime: 3m 0s",
 		"│ Tokens: in 100 | out 50 | total 150",
 		"│ Rate Limits: not limited | remaining 3",

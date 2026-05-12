@@ -2,6 +2,9 @@ package observability
 
 import "time"
 
+// Snapshot is the live local runtime projection used by the TUI and control
+// API. Historical metrics, failure rates, and duration distributions belong in
+// OpenTelemetry/SigNoz rather than this in-memory shape.
 type Snapshot struct {
 	GeneratedAt time.Time      `json:"generated_at"`
 	Counts      Counts         `json:"counts"`

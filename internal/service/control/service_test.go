@@ -393,6 +393,9 @@ func TestServiceExposesObservabilitySnapshot(t *testing.T) {
 	if result.Boundary.Name != "observability.snapshot" {
 		t.Fatalf("boundary = %#v, want observability snapshot", result.Boundary)
 	}
+	if !strings.Contains(result.Boundary.Purpose, "SigNoz/OTLP owns historical metrics") {
+		t.Fatalf("boundary purpose = %q, want SigNoz metrics boundary", result.Boundary.Purpose)
+	}
 	if result.State.GeneratedAt != generatedAt || len(result.State.Running) != 1 {
 		t.Fatalf("snapshot = %#v, want projected runtime state", result.State)
 	}

@@ -677,7 +677,7 @@ func OrchestratorBoundary(name, purpose string) CapabilityBoundary {
 func ObservabilityBoundary() CapabilityBoundary {
 	return CapabilityBoundary{
 		Name:               "observability.snapshot",
-		Purpose:            "Expose runtime observability as a stable product control-plane projection.",
+		Purpose:            "Expose live runtime state as a stable control-plane projection; SigNoz/OTLP owns historical metrics and trends.",
 		HandwrittenAdapter: "internal/service/control",
 	}
 }

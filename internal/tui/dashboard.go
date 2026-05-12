@@ -25,7 +25,7 @@ func Render(snapshot observability.Snapshot, opts Options) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "╭─ %s\n", colorize(opts, "SYMPHONY STATUS", ansiBold+ansiCyan))
 	fmt.Fprintf(&b, "│ Agents: %s/%s\n", formatInt(snapshot.Counts.Running), formatInt(maxAgents(opts.MaxAgents)))
-	fmt.Fprintln(&b, "│ Throughput: 0 tps")
+	fmt.Fprintln(&b, "│ Scope: local runtime projection")
 	fmt.Fprintf(&b, "│ Runtime: %s\n", formatRuntimeSeconds(snapshot.TotalRuntimeSeconds(now)))
 	fmt.Fprintf(&b, "│ Tokens: in %s | out %s | total %s\n",
 		formatInt(snapshot.CodexTotals.InputTokens),

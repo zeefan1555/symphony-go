@@ -464,7 +464,8 @@ func TestObservabilitySnapshotRouteReturnsStableProjection(t *testing.T) {
 
 	var body struct {
 		Boundary struct {
-			Name string `json:"name"`
+			Name    string `json:"name"`
+			Purpose string `json:"purpose"`
 		} `json:"boundary"`
 		State struct {
 			GeneratedAt string `json:"generated_at"`
@@ -478,6 +479,9 @@ func TestObservabilitySnapshotRouteReturnsStableProjection(t *testing.T) {
 	}
 	if body.Boundary.Name != "observability.snapshot" {
 		t.Fatalf("boundary = %#v, want observability snapshot", body.Boundary)
+	}
+	if !strings.Contains(body.Boundary.Purpose, "SigNoz/OTLP owns historical metrics") {
+		t.Fatalf("boundary purpose = %q, want SigNoz metrics boundary", body.Boundary.Purpose)
 	}
 	if body.State.GeneratedAt != "2026-05-06T01:02:03Z" || len(body.State.Running) != 1 || body.State.Running[0].IssueIdentifier != "ZEE-101" {
 		t.Fatalf("state = %#v, want ZEE-101 runtime projection", body.State)
