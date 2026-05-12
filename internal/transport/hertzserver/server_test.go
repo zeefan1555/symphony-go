@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -171,6 +172,64 @@ func TestSpecAliasStateRouteReturnsRuntimeState(t *testing.T) {
 	}
 	if body.State.Polling.IntervalMS != 45000 {
 		t.Fatalf("polling.interval_ms = %d, want 45000", body.State.Polling.IntervalMS)
+	}
+}
+
+func TestRootDashboardRouteReturnsHumanReadableRuntimeState(t *testing.T) {
+	generatedAt := time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC)
+	service := control.NewService(snapshotProvider{snapshot: observability.Snapshot{
+		GeneratedAt: generatedAt,
+		Counts:      observability.Counts{Running: 1, Retrying: 1},
+		Running: []observability.RunningEntry{{
+			IssueID:         "issue-id",
+			IssueIdentifier: "ZEE-47",
+			State:           "In Progress",
+			AgentPhase:      "implementer",
+			Stage:           "running_agent",
+			SessionID:       "thread-1-turn-1",
+			PID:             1234,
+			TurnCount:       3,
+			LastEvent:       "turn_completed",
+			Tokens:          observability.TokenUsage{TotalTokens: 15},
+		}},
+		Retrying: []observability.RetryEntry{{
+			IssueID:         "retry-id",
+			IssueIdentifier: "ZEE-48",
+			Attempt:         2,
+			DueAt:           generatedAt.Add(45 * time.Second),
+			Error:           "no available orchestrator slots",
+		}},
+		CodexTotals: observability.CodexTotals{InputTokens: 100, OutputTokens: 50, TotalTokens: 150},
+		Polling:     observability.PollingStatus{IntervalMS: 45000, NextPollInMS: 20000},
+		LastError:   "last error",
+	}})
+	baseURL := startTestServer(t, hertzserver.New(service))
+
+	resp := get(t, baseURL, "/")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if contentType := resp.Header.Get("Content-Type"); !strings.Contains(contentType, "text/plain") {
+		t.Fatalf("content-type = %q, want text/plain", contentType)
+	}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	body := string(bodyBytes)
+	for _, want := range []string{
+		"SYMPHONY STATUS",
+		"Agents: 1 running / 1 retrying",
+		"Tokens: in 100 | out 50 | total 150",
+		"Polling: interval=45000ms",
+		"Last error: last error",
+		"ZEE-47 state=In Progress stage=implementer/running_agent",
+		"ZEE-48 attempt=2",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("dashboard body missing %q:\n%s", want, body)
+		}
 	}
 }
 
