@@ -15,6 +15,7 @@ import (
 
 	runtimeconfig "symphony-go/internal/runtime/config"
 	issuemodel "symphony-go/internal/service/issue"
+	"symphony-go/internal/service/ssh"
 	"symphony-go/internal/service/workspace"
 )
 
@@ -50,14 +51,16 @@ type Event struct {
 }
 
 type Result struct {
-	SessionID string
-	ThreadID  string
-	TurnID    string
-	PID       int
+	SessionID  string
+	ThreadID   string
+	TurnID     string
+	PID        int
+	WorkerHost string
 }
 
 type SessionRequest struct {
 	WorkspacePath string
+	WorkerHost    string
 	Issue         issuemodel.Issue
 	Prompts       []TurnPrompt
 	AfterTurn     func(context.Context, Result, int) (TurnPrompt, bool, error)
@@ -71,10 +74,11 @@ type TurnPrompt struct {
 }
 
 type SessionResult struct {
-	SessionID string
-	ThreadID  string
-	Turns     []Result
-	PID       int
+	SessionID  string
+	ThreadID   string
+	Turns      []Result
+	PID        int
+	WorkerHost string
 }
 
 type Option func(*Runner)
@@ -126,18 +130,19 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 	if len(request.Prompts) == 0 {
 		return SessionResult{}, fmt.Errorf("codex session requires at least one prompt")
 	}
-	session, err := r.startSession(ctx, request.WorkspacePath)
+	session, err := r.startSession(ctx, request.WorkspacePath, request.WorkerHost)
 	if err != nil {
 		return SessionResult{}, err
 	}
 	defer session.Close()
 
 	sessionResult := SessionResult{
-		ThreadID: session.threadID,
-		PID:      session.pid(),
+		ThreadID:   session.threadID,
+		PID:        session.pid(),
+		WorkerHost: session.workerHost,
 	}
 	if onEvent != nil {
-		onEvent(Event{Name: "session_started", Payload: map[string]any{"session_id": sessionResult.ThreadID, "thread_id": sessionResult.ThreadID, "pid": sessionResult.PID}})
+		onEvent(Event{Name: "session_started", Payload: sessionStartedPayload(sessionResult)})
 	}
 	for turnIndex := 0; turnIndex < len(request.Prompts); turnIndex++ {
 		prompt := request.Prompts[turnIndex]
@@ -145,42 +150,51 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 		if prompt.Issue != nil {
 			turnIssue = *prompt.Issue
 		}
-		turnID, err := session.startTurn(turnStartID+turnIndex, request.WorkspacePath, prompt.Text, turnIssue, r.Config.ApprovalPolicy, r.turnSandboxPolicy(request.WorkspacePath, turnIssue))
+		turnID, err := session.startTurn(turnStartID+turnIndex, request.WorkspacePath, prompt.Text, turnIssue, r.Config.ApprovalPolicy, r.turnSandboxPolicy(request.WorkspacePath, turnIssue, request.WorkerHost))
 		if err != nil {
 			return sessionResult, err
 		}
 		result := Result{
-			SessionID: session.threadID + "-" + turnID,
-			ThreadID:  session.threadID,
-			TurnID:    turnID,
-			PID:       session.pid(),
+			SessionID:  session.threadID + "-" + turnID,
+			ThreadID:   session.threadID,
+			TurnID:     turnID,
+			PID:        session.pid(),
+			WorkerHost: session.workerHost,
 		}
 		sessionResult.SessionID = result.SessionID
 		sessionResult.ThreadID = result.ThreadID
 		sessionResult.PID = result.PID
 		sessionResult.Turns = append(sessionResult.Turns, result)
 		if onEvent != nil {
-			onEvent(Event{Name: "turn_started", Payload: map[string]any{
+			payload := map[string]any{
 				"session_id":   result.SessionID,
 				"thread_id":    result.ThreadID,
 				"turn_id":      result.TurnID,
 				"pid":          result.PID,
 				"turn_count":   turnIndex + 1,
 				"continuation": prompt.Continuation,
-			}})
+			}
+			if result.WorkerHost != "" {
+				payload["worker_host"] = result.WorkerHost
+			}
+			onEvent(Event{Name: "turn_started", Payload: payload})
 		}
 		if err := session.awaitTurn(ctx, time.Duration(r.Config.TurnTimeoutMS)*time.Millisecond, onEvent); err != nil {
 			return sessionResult, err
 		}
 		if onEvent != nil {
-			onEvent(Event{Name: "turn_completed", Payload: map[string]any{
+			payload := map[string]any{
 				"session_id":   result.SessionID,
 				"thread_id":    result.ThreadID,
 				"turn_id":      result.TurnID,
 				"pid":          result.PID,
 				"turn_count":   turnIndex + 1,
 				"continuation": prompt.Continuation,
-			}})
+			}
+			if result.WorkerHost != "" {
+				payload["worker_host"] = result.WorkerHost
+			}
+			onEvent(Event{Name: "turn_completed", Payload: payload})
 		}
 		if request.AfterTurn == nil {
 			continue
@@ -197,7 +211,10 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 	return sessionResult, nil
 }
 
-func (r *Runner) startSession(ctx context.Context, workspacePath string) (*session, error) {
+func (r *Runner) startSession(ctx context.Context, workspacePath string, workerHost string) (*session, error) {
+	if strings.TrimSpace(workerHost) != "" {
+		return r.startRemoteSession(ctx, workspacePath, strings.TrimSpace(workerHost))
+	}
 	cmd := exec.CommandContext(ctx, "bash", "-lc", r.Config.Command)
 	cmd.Dir = workspacePath
 	cmd.Env = workspace.UTF8Env(os.Environ())
@@ -241,7 +258,41 @@ func (r *Runner) startSession(ctx context.Context, workspacePath string) (*sessi
 	return s, nil
 }
 
-func (r *Runner) turnSandboxPolicy(workspacePath string, issue issuemodel.Issue) map[string]any {
+func (r *Runner) startRemoteSession(ctx context.Context, workspacePath string, workerHost string) (*session, error) {
+	if err := validateRemoteWorkspacePath(workspacePath); err != nil {
+		return nil, err
+	}
+	port, err := ssh.StartPort(ctx, workerHost, remoteLaunchCommand(workspacePath, r.Config.Command), ssh.StartOptions{
+		Env: workspace.UTF8Env(os.Environ()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	s := &session{
+		cmd:          port.Cmd,
+		stdin:        port.Stdin,
+		scanner:      bufio.NewScanner(port.Stdout),
+		readTimeout:  time.Duration(r.Config.ReadTimeoutMS) * time.Millisecond,
+		lines:        make(chan lineResult),
+		dynamicTools: r.dynamicTools,
+		workerHost:   workerHost,
+	}
+	s.scanner.Buffer(make([]byte, 0, 64*1024), maxAppServerLineBytes)
+	go s.readLines()
+	if err := s.initialize(); err != nil {
+		s.Close()
+		return nil, err
+	}
+	threadID, err := s.startThread(workspacePath, r.Config.ApprovalPolicy, r.Config.ThreadSandbox)
+	if err != nil {
+		s.Close()
+		return nil, err
+	}
+	s.threadID = threadID
+	return s, nil
+}
+
+func (r *Runner) turnSandboxPolicy(workspacePath string, issue issuemodel.Issue, workerHost string) map[string]any {
 	policy := map[string]any{}
 	for key, value := range r.Config.TurnSandboxPolicy {
 		policy[key] = value
@@ -256,8 +307,10 @@ func (r *Runner) turnSandboxPolicy(workspacePath string, issue issuemodel.Issue)
 	if policy["type"] == "workspaceWrite" {
 		roots := toStringSlice(policy["writableRoots"])
 		roots = appendUnique(roots, workspacePath)
-		for _, root := range gitMetadataRoots(workspacePath) {
-			roots = appendUnique(roots, root)
+		if strings.TrimSpace(workerHost) == "" {
+			for _, root := range gitMetadataRoots(workspacePath) {
+				roots = appendUnique(roots, root)
+			}
 		}
 		values := make([]any, 0, len(roots))
 		for _, root := range roots {
@@ -266,6 +319,36 @@ func (r *Runner) turnSandboxPolicy(workspacePath string, issue issuemodel.Issue)
 		policy["writableRoots"] = values
 	}
 	return policy
+}
+
+func sessionStartedPayload(result SessionResult) map[string]any {
+	payload := map[string]any{
+		"session_id": result.ThreadID,
+		"thread_id":  result.ThreadID,
+		"pid":        result.PID,
+	}
+	if result.WorkerHost != "" {
+		payload["worker_host"] = result.WorkerHost
+	}
+	return payload
+}
+
+func remoteLaunchCommand(workspacePath string, command string) string {
+	return "cd " + shellEscape(workspacePath) + " && exec " + command
+}
+
+func validateRemoteWorkspacePath(workspacePath string) error {
+	if strings.TrimSpace(workspacePath) == "" {
+		return fmt.Errorf("remote workspace path is required")
+	}
+	if strings.ContainsAny(workspacePath, "\n\r\x00") {
+		return fmt.Errorf("remote workspace path contains unsafe characters")
+	}
+	return nil
+}
+
+func shellEscape(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 type session struct {
@@ -277,6 +360,7 @@ type session struct {
 	lines        chan lineResult
 	dynamicTools *DynamicToolExecutor
 	mu           sync.Mutex
+	workerHost   string
 }
 
 type lineResult struct {

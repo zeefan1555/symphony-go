@@ -86,6 +86,96 @@ printf '%s\n' '{"method":"turn/completed"}'
 	}
 }
 
+func TestRunnerStartsRemoteAppServerThroughSSH(t *testing.T) {
+	workspacePath := t.TempDir()
+	fakeCodex := filepath.Join(t.TempDir(), "fake-codex")
+	trace := filepath.Join(t.TempDir(), "trace.jsonl")
+	cwdTrace := filepath.Join(t.TempDir(), "cwd.txt")
+	codexScript := `#!/bin/sh
+printf '%s\n' "$PWD" > "$CWD_TRACE"
+trace="$TRACE_FILE"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-ssh"}}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-ssh"}}}'
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fakeCodex, []byte(codexScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeBin := t.TempDir()
+	sshTrace := filepath.Join(t.TempDir(), "ssh.trace")
+	fakeSSH := filepath.Join(fakeBin, "ssh")
+	sshScript := `#!/bin/sh
+printf '%s\n' "$*" > "$SSH_TRACE"
+last=
+for arg do
+	last="$arg"
+done
+eval "$last"
+`
+	if err := os.WriteFile(fakeSSH, []byte(sshScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TRACE_FILE", trace)
+	t.Setenv("CWD_TRACE", cwdTrace)
+	t.Setenv("SSH_TRACE", sshTrace)
+	events := []Event{}
+	runner := New(runtimeconfig.CodexConfig{
+		Command:        fakeCodex,
+		ApprovalPolicy: "never",
+		ThreadSandbox:  "workspace-write",
+		TurnTimeoutMS:  5000,
+		ReadTimeoutMS:  5000,
+	})
+
+	result, err := runner.RunSession(context.Background(), SessionRequest{
+		WorkspacePath: workspacePath,
+		WorkerHost:    "worker.example:2222",
+		Issue:         issuemodel.Issue{Identifier: "ZEE-SSH", Title: "remote"},
+		Prompts:       []TurnPrompt{{Text: "remote prompt"}},
+	}, func(event Event) {
+		events = append(events, event)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.WorkerHost != "worker.example:2222" || result.SessionID != "thread-ssh-turn-ssh" {
+		t.Fatalf("result = %#v", result)
+	}
+	rawSSH, err := os.ReadFile(sshTrace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshText := string(rawSSH)
+	for _, want := range []string{"-T", "-p 2222", "worker.example", fakeCodex} {
+		if !strings.Contains(sshText, want) {
+			t.Fatalf("ssh trace missing %q:\n%s", want, sshText)
+		}
+	}
+	rawCWD, err := os.ReadFile(cwdTrace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(rawCWD)) != workspacePath {
+		t.Fatalf("remote command cwd = %q, want %q", strings.TrimSpace(string(rawCWD)), workspacePath)
+	}
+	if len(events) == 0 || events[0].Payload["worker_host"] != "worker.example:2222" {
+		t.Fatalf("session_started event missing worker_host: %#v", events)
+	}
+	if roots := turnWritableRoots(t, trace); len(roots) != 1 || !containsString(roots[0], workspacePath) {
+		t.Fatalf("remote turn roots = %#v, want workspace only", roots)
+	}
+}
+
 func TestRunnerSendsChinesePromptAndGitWritableRoots(t *testing.T) {
 	workspacePath := t.TempDir()
 	if err := exec.Command("git", "-C", workspacePath, "init").Run(); err != nil {
@@ -155,12 +245,12 @@ func TestMergingTurnSandboxDoesNotIncludeMainCheckoutRoot(t *testing.T) {
 	runner := New(runtimeconfig.CodexConfig{
 		TurnSandboxPolicy: map[string]any{"type": "workspaceWrite"},
 	})
-	implementationRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, issuemodel.Issue{State: "In Progress"})["writableRoots"])
+	implementationRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, issuemodel.Issue{State: "In Progress"}, "")["writableRoots"])
 	if containsString(implementationRoots, canonicalRepoRoot) {
 		t.Fatalf("implementation roots unexpectedly include main checkout root %q: %#v", canonicalRepoRoot, implementationRoots)
 	}
 
-	mergingRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, issuemodel.Issue{State: "Merging"})["writableRoots"])
+	mergingRoots := toStringSlice(runner.turnSandboxPolicy(worktreePath, issuemodel.Issue{State: "Merging"}, "")["writableRoots"])
 	for _, want := range []string{worktreePath, filepath.Join(canonicalRepoRoot, ".git")} {
 		if !containsString(mergingRoots, want) {
 			t.Fatalf("merging roots missing %q: %#v", want, mergingRoots)

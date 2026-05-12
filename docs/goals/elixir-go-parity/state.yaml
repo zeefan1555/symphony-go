@@ -1,0 +1,248 @@
+version: 2
+active_task: null
+goal:
+  title: "Elixir to Go feature parity"
+  slug: "elixir-go-parity"
+  status: active
+  mode: open_ended
+  created_at: "2026-05-12"
+  request: "分析本仓库 Go 语言实现版本与 Elixir 实现的差距，然后把 Elixir 的所有功能都复刻到 Go 语言项目中。"
+  interpreted_outcome: "Map Elixir reference functionality against the current Go implementation, then port required missing features in verified staged slices."
+  proof_type: "source_backed_answer + test + commit"
+  completion_proof: "Final audit maps Elixir feature inventory to Go evidence, verification receipts, and staged commits or explicit blocked/out-of-scope decisions."
+  constraints:
+    - "Do not inspect implementation during goal-prep; execution starts only after /goal."
+    - "Do not blindly copy obsolete, experimental, or non-goal Elixir behavior."
+    - "Use live Go code, Elixir reference code, SPEC.md, AGENTS.md, and repo verification scripts as authority during execution."
+    - "Preserve unrelated dirty work and stage only files for the active Worker slice."
+    - "For Go changes, prefer ./test.sh and ./build.sh."
+  likely_misfire: "Creating a large vague porting plan without verified feature inventory, or implementing Elixir behavior that conflicts with current Go architecture/SPEC."
+visual_board:
+  type: local_live
+  url: "http://127.0.0.1:41737"
+  status: blocked
+  blocked_reason: "Port 41737 is already used by an existing GoalBuddy board for /Users/bytedance/symphony-spec/docs/goals/elixir-to-go-parity."
+agents:
+  scout: bundled_not_installed
+  worker: bundled_not_installed
+  judge: bundled_not_installed
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    objective: "Build a source-backed Elixir feature inventory and map each feature to the current Go implementation status."
+    inputs:
+      - "Elixir reference implementation in this repository or adjacent reference paths"
+      - "Current Go implementation"
+      - "SPEC.md"
+      - "AGENTS.md"
+      - "Existing docs/spec-conformance and parity notes if present"
+      - "git status --short --branch"
+    constraints:
+      - "Read-only task."
+      - "Use file:line evidence for both Elixir and Go when available."
+      - "Classify behavior as required parity, already implemented, intentionally different, obsolete/non-goal, optional extension, or blocked."
+      - "Do not edit code or docs."
+    expected_output:
+      - "Feature inventory grouped by domain"
+      - "Elixir evidence anchors"
+      - "Go evidence anchors"
+      - "Gap classification"
+      - "Risk and verification notes"
+      - "Recommended first safe implementation slice"
+    receipt:
+      note: "Scout mapped Elixir reference features to Go status and identified SSH helper as first safe parity slice."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t001-scout"
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    objective: "Validate the parity map and choose the first safe Go implementation slice."
+    inputs:
+      - "T001 receipt or note"
+      - "Current dirty diff"
+      - "Repo verification scripts"
+    constraints:
+      - "Read-only task."
+      - "Reject broad rewrites, unbounded ports, or behavior that conflicts with SPEC.md/current architecture."
+      - "Require allowed_files, verify commands, and stop_if conditions for the Worker."
+    expected_output:
+      - "Decision"
+      - "Required parity slice to implement first"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Commit boundary recommendation"
+    receipt:
+      note: "Judge approved a bounded SSH helper slice with no orchestrator/config wiring in phase 1."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t002-judge"
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    objective: "Implement the first Judge-approved missing Elixir parity slice in Go."
+    allowed_files:
+      - "internal/service/ssh/ssh.go"
+      - "internal/service/ssh/ssh_test.go"
+    verify:
+      - "./test.sh ./internal/service/ssh"
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Parity behavior is ambiguous or conflicts with SPEC.md."
+      - "Implementation would require a broad rewrite instead of a bounded slice."
+      - "Unrelated dirty work blocks a safe edit or commit."
+      - "Verification fails twice without a clear root cause."
+    receipt:
+      note: "Implemented Go SSH helper parity for run/start_port args, config env, host:port parsing, IPv6 handling, and shell escaping."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t003-worker"
+      verify:
+        - "PASS: ./test.sh ./internal/service/ssh"
+  - id: T004
+    type: judge
+    assignee: Judge
+    status: done
+    objective: "Audit the implemented slice and decide whether to continue with the next parity slice."
+    inputs:
+      - "T001 parity map"
+      - "T002 decision"
+      - "T003 Worker receipt"
+      - "Current verification output"
+      - "Current git status"
+    constraints:
+      - "Read-only task."
+      - "Do not mark full outcome complete while required safe parity slices remain."
+    expected_output:
+      - "slice_complete: true | false"
+      - "full_outcome_complete: true | false"
+      - "missing evidence"
+      - "next Worker slice if not complete"
+    receipt:
+      note: "First SSH helper slice is complete; full parity remains open for worker config, remote runner, scheduler, and other optional/reference deltas."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t004-judge"
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: done
+    objective: "Implement the next Judge-approved Elixir parity slice after the first slice audit."
+    allowed_files:
+      - "internal/runtime/config/types.go"
+      - "internal/runtime/config/config.go"
+      - "internal/runtime/config/config_test.go"
+      - "internal/service/workflow/reloader.go"
+      - "internal/service/workflow/reloader_test.go"
+      - "internal/service/issue/types.go"
+      - "internal/service/orchestrator/eligibility.go"
+      - "internal/service/orchestrator/eligibility_test.go"
+      - "internal/service/orchestrator/orchestrator.go"
+      - "internal/integration/linear/client.go"
+      - "internal/integration/linear/client_test.go"
+    verify:
+      - "./test.sh ./internal/runtime/config ./internal/service/workflow"
+      - "./test.sh ./internal/runtime/config ./internal/integration/linear ./internal/service/orchestrator"
+      - "./build.sh"
+      - "git diff --check"
+    stop_if:
+      - "No Judge-approved next slice exists."
+      - "Need files outside allowed_files."
+      - "Verification, branch safety, or parity scope is unclear."
+    receipt:
+      note: "Implemented worker SSH config parsing and Linear assignee routing as two follow-up parity slices."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t005-worker"
+      commits:
+        - "1afe971 feat: parse SSH worker config"
+        - "e5d7ace feat: honor Linear assignee routing"
+  - id: T006
+    type: worker
+    assignee: Worker
+    status: done
+    objective: "Implement the next low-risk SSH parity slice: Codex app-server stdio launch through an SSH worker host."
+    allowed_files:
+      - "internal/service/codex/runner.go"
+      - "internal/service/codex/runner_test.go"
+      - "docs/goals/elixir-go-parity/state.yaml"
+      - "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md"
+    verify:
+      - "./test.sh ./internal/service/codex"
+      - "git diff --check"
+    stop_if:
+      - "Need orchestrator host scheduling, remote workspace lifecycle, or host retry/failover semantics."
+      - "Need to change existing local Codex runner behavior."
+      - "Verification fails without a clear root cause."
+    receipt:
+      note: "Codex Runner can start an app-server session through ssh.StartPort when SessionRequest.WorkerHost is set; fake-ssh test proves command routing, cwd, worker_host event metadata, and remote sandbox roots."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t006-worker"
+      verify:
+        - "PASS: ./test.sh ./internal/service/codex"
+        - "PASS: git diff --check"
+  - id: T007
+    type: judge
+    assignee: Judge
+    status: done
+    objective: "Classify remaining non-core Elixir parity deltas against live SPEC and Go architecture boundaries."
+    inputs:
+      - "Elixir memory tracker, Phoenix dashboard, Mix task, and SSH extension evidence"
+      - "SPEC.md current required/optional/future boundaries"
+      - "docs/contract-scope.md"
+      - "docs/spec-conformance/conformance-ledger.md"
+    constraints:
+      - "Read-only classification except receipts/ledger updates."
+      - "Do not implement behavior that conflicts with current SPEC or invents an unrequested config/data protocol."
+      - "Keep optional/future features explicit so later runs can reopen them with a PRD."
+    expected_output:
+      - "Equivalent/implemented items"
+      - "Optional/future/out-of-scope items"
+      - "Remaining actionable next slice"
+    receipt:
+      note: "Memory tracker, Phoenix/LiveView shape, and Mix task forms are not required Go parity under current SPEC; Go already covers optional dashboard and hook/build-test equivalents. SSH extension remains partially implemented and is the only substantial optional parity track left open."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t007-judge"
+  - id: T900
+    type: pm
+    assignee: PM
+    status: done
+    objective: "Commit verified parity slices in staged commits while preserving unrelated dirty work."
+    inputs:
+      - "Done Worker receipts"
+      - "Verification output"
+      - "git status --short --branch"
+    constraints:
+      - "Stage only files changed by the verified active slice."
+      - "Do not include GoalBuddy control files unless explicitly useful for handoff and safe to commit."
+      - "Do not push unless explicitly requested."
+    expected_output:
+      - "Commit hashes"
+      - "Staged file list"
+      - "Verification recap"
+    receipt:
+      note: "Created three staged commits on main while preserving unrelated dirty work."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t900-pm"
+      commits:
+        - "0c400c6 feat: add SSH worker helper"
+        - "1afe971 feat: parse SSH worker config"
+        - "e5d7ace feat: honor Linear assignee routing"
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    objective: "Final parity audit: prove whether Elixir required functionality has been replicated in Go for this goal."
+    inputs:
+      - "Complete parity map"
+      - "All done task receipts"
+      - "Final git log and git status"
+      - "Final verification commands"
+    constraints:
+      - "Read-only task."
+      - "Completion requires implementation evidence or explicit blocked/out-of-scope receipts for every required parity item."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Implemented parity features"
+      - "Remaining blocked/out-of-scope features"
+      - "Commits created"
+      - "Verification evidence"
+      - "Next task if not complete"
+    receipt:
+      complete: "not_complete"
+      full_outcome_complete: false
+      note: "Implemented four safe parity slices including SSH stdio app-server launch; non-core memory/Phoenix/Mix deltas are classified optional/out-of-scope under current SPEC. SSH host pool/scheduler/remote workspace lifecycle remains the next open optional parity track."
+      path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t999-final-audit"
