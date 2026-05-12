@@ -21,6 +21,71 @@ func TestRunnerScannerAllowsTenMegabyteAppServerLines(t *testing.T) {
 	}
 }
 
+func TestRunnerEnforcesStartupReadTimeout(t *testing.T) {
+	workspacePath := t.TempDir()
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	script := `#!/bin/sh
+IFS= read -r line
+sleep 5
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := New(runtimeconfig.CodexConfig{
+		Command:        fake,
+		ApprovalPolicy: "never",
+		ThreadSandbox:  "workspace-write",
+		TurnTimeoutMS:  5000,
+		ReadTimeoutMS:  50,
+	})
+
+	start := time.Now()
+	_, err := runner.Run(context.Background(), workspacePath, "prompt", issuemodel.Issue{Identifier: "ZEE-TIMEOUT", Title: "timeout"}, nil)
+	if err == nil {
+		t.Fatal("expected startup read timeout")
+	}
+	if !strings.Contains(err.Error(), "response timeout waiting for id=1") {
+		t.Fatalf("error = %v, want initialize response timeout", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("startup timeout took too long: %s", elapsed)
+	}
+}
+
+func TestRunnerKeepsDiagnosticStderrOutOfProtocolStream(t *testing.T) {
+	workspacePath := t.TempDir()
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	script := `#!/bin/sh
+printf '%s\n' '{"id":1,"error":{"message":"stderr is diagnostic only"}}' >&2
+IFS= read -r line
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+IFS= read -r line
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-stderr"}}}'
+IFS= read -r line
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-stderr"}}}'
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := New(runtimeconfig.CodexConfig{
+		Command:        fake,
+		ApprovalPolicy: "never",
+		ThreadSandbox:  "workspace-write",
+		TurnTimeoutMS:  5000,
+		ReadTimeoutMS:  5000,
+	})
+
+	result, err := runner.Run(context.Background(), workspacePath, "prompt", issuemodel.Issue{Identifier: "ZEE-STDERR", Title: "stderr"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SessionID != "thread-stderr-turn-stderr" {
+		t.Fatalf("session id = %q", result.SessionID)
+	}
+}
+
 func TestRunnerSendsChinesePromptAndGitWritableRoots(t *testing.T) {
 	workspacePath := t.TempDir()
 	if err := exec.Command("git", "-C", workspacePath, "init").Run(); err != nil {
