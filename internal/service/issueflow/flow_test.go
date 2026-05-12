@@ -105,7 +105,8 @@ func TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "steps", State: StateInProgress}
 	tracker := &fakeTracker{issue: issue}
 	runner := &fakeRunner{}
-	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	observer := &fakeObserver{}
+	rt := testRuntime(t, tracker, runner, observer)
 	testTelemetry, recorder := newIssueFlowTestTelemetry()
 	rt.Telemetry = testTelemetry
 
@@ -124,6 +125,13 @@ func TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans(t *testing.T) {
 		"step implementer/after_run_hook",
 		"issue_run",
 	)
+	fields, ok := observer.logFields("turn_completed")
+	if !ok {
+		t.Fatalf("logs = %#v, want turn_completed", observer.logs)
+	}
+	if fields["phase"] != string(PhaseImplementer) || fields["step"] != "codex_turn_completed" {
+		t.Fatalf("turn_completed fields = %#v, want phase/step correlation", fields)
+	}
 }
 
 func TestRunIssueTrunkUsesStaticCWDWithoutIssueWorkspace(t *testing.T) {
@@ -592,7 +600,12 @@ func promptTexts(prompts []codex.TurnPrompt) []string {
 
 type fakeObserver struct {
 	stages []string
-	logs   []string
+	logs   []observedLog
+}
+
+type observedLog struct {
+	event  string
+	fields map[string]any
 }
 
 func (f *fakeObserver) SetRunningStage(issue issuemodel.Issue, attempt int, phase AgentPhase, stage RunStage, message, workspacePath string, turnCount int) {
@@ -602,7 +615,7 @@ func (f *fakeObserver) SetRunningStage(issue issuemodel.Issue, attempt int, phas
 func (f *fakeObserver) RemoveRunning(issueID string) {}
 
 func (f *fakeObserver) LogIssue(ctx context.Context, issue issuemodel.Issue, event, message string, fields map[string]any) {
-	f.logs = append(f.logs, event)
+	f.logs = append(f.logs, observedLog{event: event, fields: fields})
 }
 
 func (f *fakeObserver) UpdateRunningFromEvent(issueID string, event codex.Event) {}
@@ -619,11 +632,20 @@ func (f *fakeObserver) sawStage(phase AgentPhase, stage RunStage) bool {
 
 func (f *fakeObserver) sawLog(event string) bool {
 	for _, got := range f.logs {
-		if got == event {
+		if got.event == event {
 			return true
 		}
 	}
 	return false
+}
+
+func (f *fakeObserver) logFields(event string) (map[string]any, bool) {
+	for _, got := range f.logs {
+		if got.event == event {
+			return got.fields, true
+		}
+	}
+	return nil, false
 }
 
 type issueFlowTestTelemetry struct {

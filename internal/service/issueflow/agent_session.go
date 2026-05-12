@@ -32,7 +32,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 		_, endStep := telemetry.StartStep(stepCtx, rt.Telemetry, string(phase), "after_run_hook", issueFields(issue))
 		if err := rt.Workspace.AfterRun(workspace.WithHookIssue(context.Background(), issue), workspacePath); err != nil {
 			endStep("error", err)
-			logIssue(stepCtx, rt, issue, "after_run_hook_failed", err.Error(), nil)
+			logIssue(stepCtx, rt, issue, "after_run_hook_failed", err.Error(), stepLogFields(phase, "after_run_hook", "error", nil))
 			return
 		}
 		endStep("success", nil)
@@ -80,7 +80,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 				"turn_id":          result.TurnID,
 				"turn_count":       turnCount,
 			}, nil)
-			logIssue(ctx, rt, currentIssue, "turn_completed", "Codex turn completed", map[string]any{"session_id": result.SessionID})
+			logIssue(ctx, rt, currentIssue, "turn_completed", "Codex turn completed", stepLogFields(phase, "codex_turn_completed", "success", map[string]any{"session_id": result.SessionID}))
 			refreshed, err := rt.Tracker.FetchIssue(ctx, currentIssue.ID)
 			if err != nil {
 				attemptResult = Result{Outcome: OutcomeRetryFailure}
@@ -137,13 +137,26 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 			lastAgentMessage = text
 		}
 		updateRunningFromEvent(rt, issue.ID, event)
-		logIssue(ctx, rt, issue, "codex_event", event.Name, event.Payload)
+		logIssue(ctx, rt, issue, "codex_event", event.Name, stepLogFields(phase, "codex_event", "", event.Payload))
 	})
 	removeRunning(rt, issue.ID)
 	if err != nil {
 		return returnRetryOrStop(err)
 	}
 	return attemptResult, nil
+}
+
+func stepLogFields(phase AgentPhase, step, outcome string, fields map[string]any) map[string]any {
+	correlated := make(map[string]any, len(fields)+3)
+	for key, value := range fields {
+		correlated[key] = value
+	}
+	correlated["phase"] = string(phase)
+	correlated["step"] = step
+	if outcome != "" {
+		correlated["outcome"] = outcome
+	}
+	return correlated
 }
 
 func stageMessage(stage RunStage) string {

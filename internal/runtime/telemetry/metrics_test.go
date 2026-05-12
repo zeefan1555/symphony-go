@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -22,6 +23,7 @@ func TestMetricsUseLowCardinalityAttributes(t *testing.T) {
 	stepCtx, endStep := StartStep(transitionCtx, provider, "implementer", "workspace_prepared", highCardinalityFields())
 	endStep("success", nil)
 	RecordStep(stepCtx, provider, "implementer", "codex_turn_completed", "success", highCardinalityFields(), nil)
+	RecordStep(stepCtx, provider, "implementer", "workspace_prepared", "error", highCardinalityFields(), errors.New("boom"))
 	RecordCodexTokens(stepCtx, provider, 1, 2, 3, highCardinalityFields())
 	RecordIssueActive(stepCtx, provider, 1, highCardinalityFields())
 	RecordIssueRetrying(stepCtx, provider, 1, highCardinalityFields())
@@ -37,6 +39,7 @@ func TestMetricsUseLowCardinalityAttributes(t *testing.T) {
 		"symphony_issue_transition_total",
 		"symphony_issue_transition_duration_ms",
 		"symphony_issue_phase_duration_ms",
+		"symphony_issue_step_failure_total",
 		"symphony_codex_turn_total",
 		"symphony_codex_tokens_total",
 		"symphony_issue_active",
