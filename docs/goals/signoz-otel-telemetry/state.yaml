@@ -424,8 +424,10 @@ tasks:
           subject: "feat(telemetry): wire otel traces metrics and log correlation"
         - hash: "35656ebbc8cce0118ec1be2ea18b71e8381fec9b"
           subject: "refactor(observability): narrow snapshot to runtime projection"
-      git_status: "clean before recording this receipt; branch ahead 3 from origin/main"
-      summary: "Created three verified local commits. The telemetry implementation slices were intentionally committed together because trace, metrics, and log correlation share overlapping issueflow/orchestrator files in the final diff; the resulting commit remains bounded to the verified facade/instrumentation scope."
+        - hash: "13592b9876c0cb70cb4fb9e209477d0558e39d38"
+          subject: "fix(telemetry): complete failure metric and log step coverage"
+      git_status: "clean after verified commits; branch ahead 6 from origin/main after final receipt commit"
+      summary: "Created verified local commits. The main telemetry implementation slices were intentionally committed together because trace, metrics, and log correlation share overlapping issueflow/orchestrator files in the final diff; the follow-up telemetry fix commit closes final-audit coverage for failure metrics and log phase/step fields."
 
   - id: T999
     type: judge
@@ -457,11 +459,11 @@ tasks:
         - "Traces: internal/runtime/telemetry/issue_run.go exposes issue_run, transition, and step spans; internal/service/issueflow/flow.go and agent_session.go call the facade without direct OTel imports in business code."
         - "Metrics: internal/runtime/telemetry/metrics.go exports issue run, active/retrying, transition duration/count, phase duration, step failure, Codex turn, and token metrics."
         - "Metric cardinality: internal/runtime/telemetry/metrics_test.go asserts blocked labels such as issue_id, issue_identifier, session_id, thread_id, turn_id, and workspace_path are absent from metric data points."
-        - "Logs: internal/runtime/logging/jsonl.go has trace_id/span_id fields; orchestrator log correlation tests prove trace context is copied into JSONL events."
+        - "Logs: internal/runtime/logging/jsonl.go has trace_id/span_id fields; orchestrator log correlation tests prove trace context is copied into JSONL events; issueflow tests prove turn_completed logs include phase/step correlation."
         - "Dashboard/docs: docs/telemetry/signoz-local.md and docs/telemetry/signoz-dashboard.md describe local SigNoz setup, dashboard panels, query fields, and validation."
         - "Legacy boundary: internal/runtime/observability/snapshot.go, TUI, control, and hertzserver tests now describe snapshot as local runtime projection while SigNoz/OTLP owns historical metrics."
         - "Verification passed: ./build.sh"
-        - "Verification passed: ./test.sh ./..."
+        - "Verification passed after final telemetry fix: ./test.sh ./..."
         - "Verification passed: git diff --check"
       live_signoz_status: "not_run"
       live_signoz_note: "No local Docker/SigNoz UI run was started in this coding pass; provider/exporter wiring and telemetry behavior are covered by SDK tests, and live UI validation is documented in docs/telemetry/signoz-dashboard.md."
