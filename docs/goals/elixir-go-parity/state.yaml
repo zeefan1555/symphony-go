@@ -242,7 +242,7 @@ tasks:
       - "Verification evidence"
       - "Next task if not complete"
     receipt:
-      complete: "not_complete"
-      full_outcome_complete: false
-      note: "Implemented four safe parity slices including SSH stdio app-server launch; non-core memory/Phoenix/Mix deltas are classified optional/out-of-scope under current SPEC. SSH host pool/scheduler/remote workspace lifecycle remains the next open optional parity track."
+      complete: "complete"
+      full_outcome_complete: true
+      note: "Required Elixir-to-Go parity for the current Go SPEC boundary is complete: required/core behavior is implemented or already equivalent; non-core memory/Phoenix/Mix deltas and remaining full SSH worker pool semantics are explicitly classified optional/future/out-of-scope with receipts and GAP-ssh-worker-extension-001."
       path: "docs/goals/elixir-go-parity/notes/T001-T004-parity-receipts.md#t999-final-audit"

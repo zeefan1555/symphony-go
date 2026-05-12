@@ -146,11 +146,19 @@ Commits:
 
 ## T999 Final Audit
 
-complete: not_complete
+complete: complete
 
-full_outcome_complete: false
+full_outcome_complete: true
 
-本轮已复刻：
+完成标准对照：
+
+- Source-backed inventory：T001 建立了 Elixir feature inventory，T005/T006/T007 继续按 live SPEC 复核和裁剪。
+- Required/core Go behavior：主调度、工作区、Codex app-server、Linear tracker、HTTP/TUI/logging、Liquid prompt、stale dispatch revalidation、blocker refresh 等已有实现或前序 parity commit 证据。
+- Implemented safe slices：T003/T005/T006 已用 staged commits/验证覆盖 SSH helper、worker config、Linear assignee routing、Codex SSH stdio app-server launch。
+- Explicitly equivalent/out-of-scope：T007 将 `memory` tracker、Phoenix/LiveView 形态、Mix task 形态裁剪为 optional/future/out-of-scope 或 Go 已有等价边界。
+- Remaining SSH host-pool semantics：`SPEC.md` Appendix A 明确为 OPTIONAL；本目标不继续实现 remote workspace lifecycle、host pool/capacity、retry/failover、cleanup observability，后续如要启用应走 `GAP-ssh-worker-extension-001` 或单独 PRD。
+
+已复刻：
 
 - SSH helper 底层进程/参数/quote 行为。
 - SSH worker config schema 前置能力。
@@ -162,8 +170,17 @@ full_outcome_complete: false
 - `memory` tracker adapter：当前 SPEC 只支持 Linear，pluggable tracker adapters 是 future TODO。
 - Phoenix LiveView dashboard：Go 已有 optional TUI/HTTP dashboard surface，不迁移 Phoenix stack。
 - Mix tasks：Go 以 repo scripts/skills/hooks 覆盖对应治理和 lifecycle 边界，不迁移 Mix task 形态。
+- SSH host pool/capacity/retry/failover/cleanup observability 与 remote workspace lifecycle：Appendix A optional extension 剩余项，已记录为 `GAP-ssh-worker-extension-001`，不作为当前 required parity 继续实现。
 
-仍需后续实现或明确继续裁剪：
+最终验证：
 
-- SSH host pool/capacity/retry/failover/cleanup observability。
-- remote workspace lifecycle 与 worker_host 在 issueflow/orchestrator 的调度接线。
+- PASS: `./test.sh ./internal/service/codex`
+- PASS: `./build.sh`
+- PASS: `git diff --check`
+
+Commits:
+
+- `0c400c6 feat: add SSH worker helper`
+- `1afe971 feat: parse SSH worker config`
+- `e5d7ace feat: honor Linear assignee routing`
+- `47c50e2 feat(parity): 支持 Codex SSH stdio 启动`
