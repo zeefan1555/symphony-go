@@ -18,6 +18,7 @@ import (
 	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/logging"
 	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	controlplane "symphony-go/internal/service/control"
 	"symphony-go/internal/service/orchestrator"
@@ -54,6 +55,7 @@ type Runtime struct {
 	ControlAddress string
 	runner         *codex.Runner
 	Logger         io.Closer
+	Telemetry      telemetry.Facade
 }
 
 const defaultServerHost = "127.0.0.1"
@@ -133,6 +135,11 @@ func NewRuntime(opts Options) (*Runtime, error) {
 			},
 		})
 	}
+	tel, err := telemetry.NewFromEnv(context.Background())
+	if err != nil {
+		_ = log.Close()
+		return nil, err
+	}
 
 	manager := workspace.NewFromConfig(loaded.Config.Workspace, loaded.Config.Hooks)
 	runner := codex.New(loaded.Config.Codex, codex.WithDynamicToolExecutor(codex.NewDynamicToolExecutor(tracker)))
@@ -154,6 +161,7 @@ func NewRuntime(opts Options) (*Runtime, error) {
 			return codex.New(cfg)
 		},
 		Logger:      log,
+		Telemetry:   tel,
 		Reloader:    reloader,
 		Once:        opts.Once,
 		IssueFilter: opts.Issue,
@@ -172,8 +180,9 @@ func NewRuntime(opts Options) (*Runtime, error) {
 			Tracker:   tracker,
 			Config:    loaded.Config,
 		})),
-		runner: runner,
-		Logger: log,
+		runner:    runner,
+		Logger:    log,
+		Telemetry: tel,
 	}, nil
 }
 
@@ -256,10 +265,21 @@ func (r *Runtime) startControlServer() (<-chan error, func(), error) {
 }
 
 func (r *Runtime) Close() error {
-	if r == nil || r.Logger == nil {
+	if r == nil {
 		return nil
 	}
-	return r.Logger.Close()
+	var firstErr error
+	if r.Logger != nil {
+		firstErr = r.Logger.Close()
+	}
+	if r.Telemetry != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), controlShutdownTimeout)
+		defer cancel()
+		if err := r.Telemetry.Shutdown(ctx); firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func MergeTargetOverride(target string, explicit bool) string {

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/logging"
 	"symphony-go/internal/runtime/observability"
@@ -243,6 +244,42 @@ func TestLogIssueWritesStructuredAndLegacyIssueFields(t *testing.T) {
 	}
 	if event.Fields["issue_id"] != issue.ID || event.Fields["issue_identifier"] != issue.Identifier {
 		t.Fatalf("legacy issue fields = %#v", event.Fields)
+	}
+}
+
+func TestLogIssueCorrelatesTraceContext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "logs", "run.jsonl")
+	logger, err := logging.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := New(Options{Logger: logger})
+	traceID := trace.TraceID{1, 2, 3}
+	spanID := trace.SpanID{4, 5, 6}
+	ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  spanID,
+	}))
+
+	issue := issuemodel.Issue{ID: "issue-id", Identifier: "ZEE-TRACE"}
+	o.logIssueWithContext(ctx, issue, "state_changed", "Todo -> In Progress", nil)
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event logging.Event
+	if err := json.Unmarshal(raw, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.TraceID != traceID.String() || event.SpanID != spanID.String() {
+		t.Fatalf("trace fields = %q/%q, want %q/%q", event.TraceID, event.SpanID, traceID.String(), spanID.String())
+	}
+	if event.Fields["trace_id"] != traceID.String() || event.Fields["span_id"] != spanID.String() {
+		t.Fatalf("legacy trace fields = %#v", event.Fields)
 	}
 }
 

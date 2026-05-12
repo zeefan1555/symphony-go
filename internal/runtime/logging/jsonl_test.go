@@ -54,6 +54,35 @@ func TestLoggerWritesChineseJSONL(t *testing.T) {
 	}
 }
 
+func TestLoggerWritesTraceCorrelationFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "logs", "run.jsonl")
+	logger, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := logger.Write(Event{
+		IssueIdentifier: "ZEE-TRACE",
+		TraceID:         "trace-id",
+		SpanID:          "span-id",
+		Event:           "state_changed",
+		Message:         "Todo -> In Progress",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"trace_id":"trace-id"`, `"span_id":"span-id"`} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("json log %s missing %s", raw, want)
+		}
+	}
+}
+
 func TestLoggerWritesColoredConsoleSink(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "logs", "run.jsonl")
 	var console bytes.Buffer

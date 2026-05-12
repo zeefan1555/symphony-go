@@ -12,6 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"symphony-go/internal/runtime/observability"
 	controlplane "symphony-go/internal/service/control"
 	"symphony-go/internal/transport/hertzserver"
@@ -37,6 +41,9 @@ func TestNewRuntimeAssemblesRunDependencies(t *testing.T) {
 	}
 	if runtime.runner == nil || len(runtime.runner.DynamicToolSpecs()) != 1 {
 		t.Fatal("runtime Codex runner is missing Linear GraphQL dynamic tool")
+	}
+	if runtime.Telemetry == nil || runtime.Telemetry.Enabled() {
+		t.Fatal("runtime telemetry should be present and disabled without OTLP endpoint")
 	}
 	if got := runtime.Loaded.Config.Workspace.Root; !filepath.IsAbs(got) {
 		t.Fatalf("workspace root = %q, want absolute path", got)
@@ -221,6 +228,18 @@ func TestRuntimeCloseClosesLogger(t *testing.T) {
 	}
 }
 
+func TestRuntimeCloseShutsDownTelemetry(t *testing.T) {
+	telemetry := &fakeTelemetry{}
+	runtime := Runtime{Telemetry: telemetry}
+
+	if err := runtime.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if !telemetry.closed {
+		t.Fatal("telemetry was not shut down")
+	}
+}
+
 func writeWorkflow(t *testing.T, extraFrontMatter ...string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "WORKFLOW.md")
@@ -281,6 +300,27 @@ type fakeCloser struct {
 }
 
 func (f *fakeCloser) Close() error {
+	f.closed = true
+	return nil
+}
+
+type fakeTelemetry struct {
+	closed bool
+}
+
+func (f *fakeTelemetry) Enabled() bool {
+	return false
+}
+
+func (f *fakeTelemetry) Tracer() trace.Tracer {
+	return nooptrace.NewTracerProvider().Tracer("test")
+}
+
+func (f *fakeTelemetry) Meter() metric.Meter {
+	return noopmetric.NewMeterProvider().Meter("test")
+}
+
+func (f *fakeTelemetry) Shutdown(context.Context) error {
 	f.closed = true
 	return nil
 }

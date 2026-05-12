@@ -9,9 +9,16 @@ import (
 	"testing"
 
 	runtimeconfig "symphony-go/internal/runtime/config"
+	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/workspace"
+
+	"go.opentelemetry.io/otel/metric"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var errFakeTrackerUpdate = errors.New("tracker update failed")
@@ -75,6 +82,48 @@ func TestRunIssueTrunkPromotesTodoAndRunsImplementer(t *testing.T) {
 	if !observer.sawStage(PhaseImplementer, StageRunningAgent) {
 		t.Fatalf("stages = %#v, want implementer running_agent", observer.stages)
 	}
+}
+
+func TestRunIssueTrunkRecordsIssueRunAndTodoTransitionSpans(t *testing.T) {
+	tracker := &fakeTracker{issue: issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "todo", State: StateTodo}}
+	runner := &fakeRunner{}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	testTelemetry, recorder := newIssueFlowTestTelemetry()
+	rt.Telemetry = testTelemetry
+
+	result, err := RunIssueTrunk(context.Background(), rt, tracker.issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	assertEndedSpanNames(t, recorder, "transition Todo -> In Progress", "issue_run")
+}
+
+func TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "steps", State: StateInProgress}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	testTelemetry, recorder := newIssueFlowTestTelemetry()
+	rt.Telemetry = testTelemetry
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	assertEndedSpanNames(t, recorder,
+		"step implementer/workspace_prepared",
+		"step implementer/before_run_hook",
+		"step implementer/prompt_rendered",
+		"step implementer/codex_turn_completed",
+		"step implementer/after_run_hook",
+		"issue_run",
+	)
 }
 
 func TestRunIssueTrunkUsesStaticCWDWithoutIssueWorkspace(t *testing.T) {
@@ -172,6 +221,24 @@ func TestRunIssueTrunkAIReviewPassContinuesToMerging(t *testing.T) {
 	}
 }
 
+func TestRunIssueTrunkRecordsAIReviewToMergingSpan(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "review", State: StateAIReview}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{agentMessage: "Review: PASS\nlooks good"}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	testTelemetry, recorder := newIssueFlowTestTelemetry()
+	rt.Telemetry = testTelemetry
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	assertEndedSpanNames(t, recorder, "transition AI Review -> Merging", "issue_run")
+}
+
 func TestRunIssueTrunkReusesOneSessionForContinuation(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "continue", State: StateInProgress}
 	tracker := &fakeTracker{issue: issue}
@@ -240,6 +307,24 @@ func TestRunIssueTrunkMergePassMarksDone(t *testing.T) {
 	if tracker.updateState != StateDone {
 		t.Fatalf("UpdateIssueState = %q, want Done", tracker.updateState)
 	}
+}
+
+func TestRunIssueTrunkRecordsMergingToDoneSpan(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "merge", State: StateMerging}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{agentMessage: "Merge: PASS\nmerged"}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	testTelemetry, recorder := newIssueFlowTestTelemetry()
+	rt.Telemetry = testTelemetry
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeDone {
+		t.Fatalf("outcome = %q, want done", result.Outcome)
+	}
+	assertEndedSpanNames(t, recorder, "transition Merging -> Done", "issue_run")
 }
 
 func TestRunIssueTrunkReviewPassDoesNotWriteStateWhenExtensionDisabled(t *testing.T) {
@@ -516,7 +601,7 @@ func (f *fakeObserver) SetRunningStage(issue issuemodel.Issue, attempt int, phas
 
 func (f *fakeObserver) RemoveRunning(issueID string) {}
 
-func (f *fakeObserver) LogIssue(issue issuemodel.Issue, event, message string, fields map[string]any) {
+func (f *fakeObserver) LogIssue(ctx context.Context, issue issuemodel.Issue, event, message string, fields map[string]any) {
 	f.logs = append(f.logs, event)
 }
 
@@ -539,6 +624,50 @@ func (f *fakeObserver) sawLog(event string) bool {
 		}
 	}
 	return false
+}
+
+type issueFlowTestTelemetry struct {
+	tracer trace.Tracer
+	meter  metric.Meter
+}
+
+func newIssueFlowTestTelemetry() (telemetry.Facade, *tracetest.SpanRecorder) {
+	recorder := tracetest.NewSpanRecorder()
+	traceProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	return issueFlowTestTelemetry{
+		tracer: traceProvider.Tracer("test"),
+		meter:  noopmetric.NewMeterProvider().Meter("test"),
+	}, recorder
+}
+
+func (p issueFlowTestTelemetry) Enabled() bool {
+	return true
+}
+
+func (p issueFlowTestTelemetry) Tracer() trace.Tracer {
+	return p.tracer
+}
+
+func (p issueFlowTestTelemetry) Meter() metric.Meter {
+	return p.meter
+}
+
+func (p issueFlowTestTelemetry) Shutdown(context.Context) error {
+	return nil
+}
+
+func assertEndedSpanNames(t *testing.T, recorder *tracetest.SpanRecorder, want ...string) {
+	t.Helper()
+	ended := recorder.Ended()
+	names := make(map[string]bool, len(ended))
+	for _, span := range ended {
+		names[span.Name()] = true
+	}
+	for _, name := range want {
+		if !names[name] {
+			t.Fatalf("ended span names = %#v, missing %q", names, name)
+		}
+	}
 }
 
 func testRuntime(t *testing.T, tracker *fakeTracker, runner *fakeRunner, observer *fakeObserver) Runtime {

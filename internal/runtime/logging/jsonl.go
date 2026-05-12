@@ -47,6 +47,8 @@ type Event struct {
 	IssueID         string         `json:"issue_id,omitempty"`
 	IssueIdentifier string         `json:"issue_identifier,omitempty"`
 	SessionID       string         `json:"session_id,omitempty"`
+	TraceID         string         `json:"trace_id,omitempty"`
+	SpanID          string         `json:"span_id,omitempty"`
 	Event           string         `json:"event"`
 	Message         string         `json:"message,omitempty"`
 	Fields          map[string]any `json:"fields,omitempty"`

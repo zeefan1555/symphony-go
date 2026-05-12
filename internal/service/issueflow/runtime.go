@@ -4,6 +4,7 @@ import (
 	"context"
 
 	runtimeconfig "symphony-go/internal/runtime/config"
+	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/workspace"
@@ -21,7 +22,7 @@ type Runner interface {
 type Observer interface {
 	SetRunningStage(issue issuemodel.Issue, attempt int, phase AgentPhase, stage RunStage, message, workspacePath string, turnCount int)
 	RemoveRunning(issueID string)
-	LogIssue(issue issuemodel.Issue, event, message string, fields map[string]any)
+	LogIssue(ctx context.Context, issue issuemodel.Issue, event, message string, fields map[string]any)
 	UpdateRunningFromEvent(issueID string, event codex.Event)
 }
 
@@ -31,6 +32,7 @@ type Runtime struct {
 	Workspace *workspace.Manager
 	Runner    Runner
 	Observer  Observer
+	Telemetry telemetry.Facade
 }
 
 func setRunningStage(rt Runtime, issue issuemodel.Issue, attempt int, phase AgentPhase, stage RunStage, message, workspacePath string, turnCount int) {
@@ -45,9 +47,9 @@ func removeRunning(rt Runtime, issueID string) {
 	}
 }
 
-func logIssue(rt Runtime, issue issuemodel.Issue, event, message string, fields map[string]any) {
+func logIssue(ctx context.Context, rt Runtime, issue issuemodel.Issue, event, message string, fields map[string]any) {
 	if rt.Observer != nil {
-		rt.Observer.LogIssue(issue, event, message, fields)
+		rt.Observer.LogIssue(ctx, issue, event, message, fields)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/workflow"
@@ -19,32 +20,45 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 	}
 	setRunningStage(rt, issue, attempt, phase, StagePreparingWorkspace, "preparing workspace", "", 1)
 	hookCtx := workspace.WithHookIssue(ctx, issue)
+	stepCtx, endStep := telemetry.StartStep(ctx, rt.Telemetry, string(phase), "workspace_prepared", issueFields(issue))
 	workspacePath, _, err := rt.Workspace.Ensure(hookCtx, issue)
 	if err != nil {
+		endStep("error", err)
 		removeRunning(rt, issue.ID)
 		return Result{Outcome: OutcomeRetryFailure}, err
 	}
+	endStep("success", nil)
 	defer func() {
+		_, endStep := telemetry.StartStep(stepCtx, rt.Telemetry, string(phase), "after_run_hook", issueFields(issue))
 		if err := rt.Workspace.AfterRun(workspace.WithHookIssue(context.Background(), issue), workspacePath); err != nil {
-			logIssue(rt, issue, "after_run_hook_failed", err.Error(), nil)
+			endStep("error", err)
+			logIssue(stepCtx, rt, issue, "after_run_hook_failed", err.Error(), nil)
+			return
 		}
+		endStep("success", nil)
 	}()
 	setRunningStage(rt, issue, attempt, phase, StageRunningWorkspaceHooks, "running before_run hook", workspacePath, 1)
+	_, endStep = telemetry.StartStep(ctx, rt.Telemetry, string(phase), "before_run_hook", issueFields(issue))
 	if err := rt.Workspace.BeforeRun(hookCtx, workspacePath); err != nil {
+		endStep("error", err)
 		removeRunning(rt, issue.ID)
 		return Result{Outcome: OutcomeRetryFailure}, err
 	}
+	endStep("success", nil)
 	var renderAttempt *int
 	if attempt > 0 {
 		value := attempt
 		renderAttempt = &value
 	}
 	setRunningStage(rt, issue, attempt, phase, StageRenderingPrompt, "rendering workflow prompt", workspacePath, 1)
+	_, endStep = telemetry.StartStep(ctx, rt.Telemetry, string(phase), "prompt_rendered", issueFields(issue))
 	promptText, err := workflow.Render(rt.Workflow.PromptTemplate, issue, renderAttempt)
 	if err != nil {
+		endStep("error", err)
 		removeRunning(rt, issue.ID)
 		return Result{Outcome: OutcomeRetryFailure}, err
 	}
+	endStep("success", nil)
 	setRunningStage(rt, issue, attempt, phase, nextWorkerStage(issue, 1), stageMessage(nextWorkerStage(issue, 1)), workspacePath, 1)
 	lastAgentMessage := ""
 	attemptResult := Result{Outcome: OutcomeRetryContinuation}
@@ -59,7 +73,14 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 			Issue:        &issue,
 		}},
 		AfterTurn: func(ctx context.Context, result codex.Result, turnCount int) (codex.TurnPrompt, bool, error) {
-			logIssue(rt, currentIssue, "turn_completed", "Codex turn completed", map[string]any{"session_id": result.SessionID})
+			telemetry.RecordStep(ctx, rt.Telemetry, string(phase), "codex_turn_completed", "success", map[string]any{
+				"issue_id":         currentIssue.ID,
+				"issue_identifier": currentIssue.Identifier,
+				"session_id":       result.SessionID,
+				"turn_id":          result.TurnID,
+				"turn_count":       turnCount,
+			}, nil)
+			logIssue(ctx, rt, currentIssue, "turn_completed", "Codex turn completed", map[string]any{"session_id": result.SessionID})
 			refreshed, err := rt.Tracker.FetchIssue(ctx, currentIssue.ID)
 			if err != nil {
 				attemptResult = Result{Outcome: OutcomeRetryFailure}
@@ -116,7 +137,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 			lastAgentMessage = text
 		}
 		updateRunningFromEvent(rt, issue.ID, event)
-		logIssue(rt, issue, "codex_event", event.Name, event.Payload)
+		logIssue(ctx, rt, issue, "codex_event", event.Name, event.Payload)
 	})
 	removeRunning(rt, issue.ID)
 	if err != nil {

@@ -5,25 +5,29 @@ import (
 	"errors"
 	"strings"
 
+	"symphony-go/internal/runtime/telemetry"
 	issuemodel "symphony-go/internal/service/issue"
 )
 
-func RunIssueTrunk(ctx context.Context, rt Runtime, issue issuemodel.Issue, attempt int) (Result, error) {
+func RunIssueTrunk(ctx context.Context, rt Runtime, issue issuemodel.Issue, attempt int) (result Result, err error) {
+	ctx, endIssueRun := telemetry.StartIssueRun(ctx, rt.Telemetry, issueRunFields(issue, attempt))
+	defer func() {
+		endIssueRun(string(result.Outcome), err)
+	}()
 	if result, ok, err := stopIfContextDone(ctx); ok {
 		return result, err
 	}
 	if result, ok := returnIfTerminal(rt, issue); ok {
 		return result, nil
 	}
-	if result, ok := waitIfBlocked(rt, issue); ok {
+	if result, ok := waitIfBlocked(ctx, rt, issue); ok {
 		return result, nil
 	}
-	var err error
 	issue, err = promoteTodoToInProgress(ctx, rt, issue)
 	if err != nil {
 		return Result{Outcome: OutcomeRetryFailure}, err
 	}
-	if result, ok := waitIfHumanReview(rt, issue); ok {
+	if result, ok := waitIfHumanReview(ctx, rt, issue); ok {
 		return result, nil
 	}
 	if !isActive(issue.State, rt.Workflow.Config.Tracker.ActiveStates) {
@@ -46,11 +50,11 @@ func returnIfTerminal(rt Runtime, issue issuemodel.Issue) (Result, bool) {
 	return Result{}, false
 }
 
-func waitIfBlocked(rt Runtime, issue issuemodel.Issue) (Result, bool) {
+func waitIfBlocked(ctx context.Context, rt Runtime, issue issuemodel.Issue) (Result, bool) {
 	if !strings.EqualFold(strings.TrimSpace(issue.State), StateBlocked) {
 		return Result{}, false
 	}
-	logIssue(rt, issue, "blocked", "issue is blocked by non-terminal dependencies", nil)
+	logIssue(ctx, rt, issue, "blocked", "issue is blocked by non-terminal dependencies", nil)
 	return Result{Outcome: OutcomeWaitHuman}, true
 }
 
@@ -58,20 +62,23 @@ func promoteTodoToInProgress(ctx context.Context, rt Runtime, issue issuemodel.I
 	if !strings.EqualFold(strings.TrimSpace(issue.State), StateTodo) {
 		return issue, nil
 	}
+	_, endTransition := telemetry.StartTransition(ctx, rt.Telemetry, StateTodo, StateInProgress, issueFields(issue))
 	if err := rt.Tracker.UpdateIssueState(ctx, issue.ID, StateInProgress); err != nil {
+		endTransition("error", err)
 		return issue, err
 	}
 	issue.State = StateInProgress
-	logIssue(rt, issue, "state_changed", "Todo -> In Progress", nil)
+	endTransition("success", nil)
+	logIssue(ctx, rt, issue, "state_changed", "Todo -> In Progress", nil)
 	return issue, nil
 }
 
-func waitIfHumanReview(rt Runtime, issue issuemodel.Issue) (Result, bool) {
+func waitIfHumanReview(ctx context.Context, rt Runtime, issue issuemodel.Issue) (Result, bool) {
 	state := strings.TrimSpace(issue.State)
 	if !strings.EqualFold(state, StateHumanReview) && !strings.EqualFold(state, "In Review") {
 		return Result{}, false
 	}
-	logIssue(rt, issue, "waiting_for_review", "issue is waiting for human review", nil)
+	logIssue(ctx, rt, issue, "waiting_for_review", "issue is waiting for human review", nil)
 	return Result{Outcome: OutcomeWaitHuman}, true
 }
 
@@ -82,7 +89,7 @@ func decideAfterTurn(ctx context.Context, rt Runtime, issue issuemodel.Issue) (R
 	if result, ok := returnIfTerminal(rt, issue); ok {
 		return result, true, nil
 	}
-	if result, ok := waitIfHumanReview(rt, issue); ok {
+	if result, ok := waitIfHumanReview(ctx, rt, issue); ok {
 		return result, true, nil
 	}
 	if !isActive(issue.State, rt.Workflow.Config.Tracker.ActiveStates) {
@@ -197,19 +204,39 @@ func nextWorkerStage(issue issuemodel.Issue, turn int) RunStage {
 }
 
 func applyReviewPass(ctx context.Context, rt Runtime, issue issuemodel.Issue) (issuemodel.Issue, error) {
+	_, endTransition := telemetry.StartTransition(ctx, rt.Telemetry, StateAIReview, StateMerging, issueFields(issue))
 	if err := rt.Tracker.UpdateIssueState(ctx, issue.ID, StateMerging); err != nil {
+		endTransition("error", err)
 		return issue, err
 	}
 	issue.State = StateMerging
-	logIssue(rt, issue, "state_changed", "AI Review -> Merging", nil)
+	endTransition("success", nil)
+	logIssue(ctx, rt, issue, "state_changed", "AI Review -> Merging", nil)
 	return issue, nil
 }
 
 func applyMergePass(ctx context.Context, rt Runtime, issue issuemodel.Issue) (issuemodel.Issue, error) {
+	_, endTransition := telemetry.StartTransition(ctx, rt.Telemetry, StateMerging, StateDone, issueFields(issue))
 	if err := rt.Tracker.UpdateIssueState(ctx, issue.ID, StateDone); err != nil {
+		endTransition("error", err)
 		return issue, err
 	}
 	issue.State = StateDone
-	logIssue(rt, issue, "state_changed", "Merging -> Done", nil)
+	endTransition("success", nil)
+	logIssue(ctx, rt, issue, "state_changed", "Merging -> Done", nil)
 	return issue, nil
+}
+
+func issueRunFields(issue issuemodel.Issue, attempt int) map[string]any {
+	fields := issueFields(issue)
+	fields["attempt"] = attempt
+	fields["state"] = issue.State
+	return fields
+}
+
+func issueFields(issue issuemodel.Issue) map[string]any {
+	return map[string]any{
+		"issue_id":         issue.ID,
+		"issue_identifier": issue.Identifier,
+	}
 }

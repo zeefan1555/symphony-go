@@ -12,6 +12,7 @@ import (
 	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/logging"
 	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/issueflow"
@@ -49,6 +50,7 @@ type Options struct {
 	RunnerFactoryWithTracker func(runtimeconfig.CodexConfig, Tracker) AgentRunner
 	NewTimer                 func(time.Duration, func()) *time.Timer
 	Logger                   *logging.Logger
+	Telemetry                telemetry.Facade
 	Once                     bool
 	IssueFilter              string
 	RepoRoot                 string
@@ -74,6 +76,7 @@ type runtimeSnapshot struct {
 	tracker     Tracker
 	workspace   *workspace.Manager
 	runner      AgentRunner
+	telemetry   telemetry.Facade
 	repoRoot    string
 	mergeTarget string
 }
@@ -85,6 +88,7 @@ func (rt runtimeSnapshot) issueFlowRuntime(observer issueflow.Observer) issueflo
 		Workspace: rt.workspace,
 		Runner:    rt.runner,
 		Observer:  observer,
+		Telemetry: rt.telemetry,
 	}
 }
 
@@ -541,6 +545,7 @@ func (o *Orchestrator) currentRuntime() runtimeSnapshot {
 		tracker:     o.opts.Tracker,
 		workspace:   o.opts.Workspace,
 		runner:      o.opts.Runner,
+		telemetry:   o.opts.Telemetry,
 		repoRoot:    o.opts.RepoRoot,
 		mergeTarget: effectiveMergeTarget(o.opts),
 	}
@@ -714,6 +719,7 @@ func (o *Orchestrator) dispatchIssueDone(ctx context.Context, issue issuemodel.I
 		tracker:     o.opts.Tracker,
 		workspace:   o.opts.Workspace,
 		runner:      o.opts.Runner,
+		telemetry:   o.opts.Telemetry,
 		repoRoot:    o.opts.RepoRoot,
 		mergeTarget: effectiveMergeTarget(o.opts),
 	}
@@ -976,8 +982,15 @@ func (o *Orchestrator) log(issue, event, message string, fields map[string]any) 
 }
 
 func (o *Orchestrator) logIssue(issue issuemodel.Issue, event, message string, fields map[string]any) {
+	o.logIssueWithContext(context.Background(), issue, event, message, fields)
+}
+
+func (o *Orchestrator) logIssueWithContext(ctx context.Context, issue issuemodel.Issue, event, message string, fields map[string]any) {
 	if o.opts.Logger == nil {
 		return
+	}
+	for key, value := range telemetry.TraceFields(ctx) {
+		fields = withLogField(fields, key, value)
 	}
 	fields = withLogField(fields, "issue_id", issue.ID)
 	fields = withLogField(fields, "issue_identifier", issue.Identifier)
@@ -985,6 +998,8 @@ func (o *Orchestrator) logIssue(issue issuemodel.Issue, event, message string, f
 		Issue:           issue.Identifier,
 		IssueID:         issue.ID,
 		IssueIdentifier: issue.Identifier,
+		TraceID:         stringField(fields, "trace_id"),
+		SpanID:          stringField(fields, "span_id"),
 		Event:           event,
 		Message:         message,
 		Fields:          fields,
@@ -995,8 +1010,8 @@ func (o *Orchestrator) logIssue(issue issuemodel.Issue, event, message string, f
 	_ = o.opts.Logger.Write(logEvent)
 }
 
-func (o *Orchestrator) LogIssue(issue issuemodel.Issue, event, message string, fields map[string]any) {
-	o.logIssue(issue, event, message, fields)
+func (o *Orchestrator) LogIssue(ctx context.Context, issue issuemodel.Issue, event, message string, fields map[string]any) {
+	o.logIssueWithContext(ctx, issue, event, message, fields)
 }
 
 func withLogField(fields map[string]any, key string, value any) map[string]any {
@@ -1010,6 +1025,14 @@ func withLogField(fields map[string]any, key string, value any) map[string]any {
 		fields[key] = value
 	}
 	return fields
+}
+
+func stringField(fields map[string]any, key string) string {
+	if fields == nil {
+		return ""
+	}
+	value, _ := fields[key].(string)
+	return value
 }
 
 func pollingInterval(opts Options) time.Duration {
@@ -1053,6 +1076,7 @@ func (o *Orchestrator) setRunningLocked(entry observability.RunningEntry) {
 		}
 	}
 	o.snapshot.Running = append(o.snapshot.Running, entry)
+	telemetry.RecordIssueActive(context.Background(), o.opts.Telemetry, 1, runningMetricFields(entry))
 }
 
 func (o *Orchestrator) updateRunningFromEvent(issueID string, event codex.Event) {
@@ -1085,6 +1109,10 @@ func (o *Orchestrator) updateRunningFromEvent(issueID string, event codex.Event)
 			o.snapshot.CodexTotals.InputTokens += delta.InputTokens
 			o.snapshot.CodexTotals.OutputTokens += delta.OutputTokens
 			o.snapshot.CodexTotals.TotalTokens += delta.TotalTokens
+			telemetry.RecordCodexTokens(context.Background(), o.opts.Telemetry, delta.InputTokens, delta.OutputTokens, delta.TotalTokens, map[string]any{
+				"phase": entry.AgentPhase,
+				"stage": entry.Stage,
+			})
 		}
 		if rateLimits, ok := observability.ExtractRateLimits(event.Payload); ok {
 			o.snapshot.RateLimits = rateLimits
@@ -1111,6 +1139,7 @@ func (o *Orchestrator) addRetry(entry observability.RetryEntry) {
 		}
 	}
 	o.snapshot.Retrying = append(o.snapshot.Retrying, entry)
+	telemetry.RecordIssueRetrying(context.Background(), o.opts.Telemetry, 1, retryMetricFields(entry))
 }
 
 func (o *Orchestrator) removeRetry(issueID string) {
@@ -1124,7 +1153,9 @@ func (o *Orchestrator) removeRetryLocked(issueID string) {
 	for _, entry := range o.snapshot.Retrying {
 		if entry.IssueID != issueID {
 			retrying = append(retrying, entry)
+			continue
 		}
+		telemetry.RecordIssueRetrying(context.Background(), o.opts.Telemetry, -1, retryMetricFields(entry))
 	}
 	o.snapshot.Retrying = retrying
 }
@@ -1152,6 +1183,7 @@ func (o *Orchestrator) removeRunning(issueID string) {
 			if !entry.StartedAt.IsZero() {
 				o.snapshot.CodexTotals.SecondsRunning += now.Sub(entry.StartedAt).Seconds()
 			}
+			telemetry.RecordIssueActive(context.Background(), o.opts.Telemetry, -1, runningMetricFields(entry))
 			continue
 		}
 		running = append(running, entry)
@@ -1186,6 +1218,24 @@ func positiveDelta(next, previous int) int {
 		return 0
 	}
 	return next - previous
+}
+
+func runningMetricFields(entry observability.RunningEntry) map[string]any {
+	return map[string]any{
+		"state": entry.State,
+		"phase": entry.AgentPhase,
+		"stage": entry.Stage,
+	}
+}
+
+func retryMetricFields(entry observability.RetryEntry) map[string]any {
+	attemptKind := "retry"
+	if entry.Attempt <= 1 {
+		attemptKind = "first"
+	}
+	return map[string]any{
+		"attempt_kind": attemptKind,
+	}
 }
 
 func numericPayloadInt(value any) (int, bool) {

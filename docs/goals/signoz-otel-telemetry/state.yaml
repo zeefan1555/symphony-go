@@ -1,0 +1,450 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "SigNoz OTLP Telemetry Retrofit"
+  slug: "signoz-otel-telemetry"
+  kind: existing_plan
+  tranche: "Validate the provided plan, then implement successive safe commit slices until SigNoz/OTLP traces, metrics, and logs replace the long-term local observability metrics while preserving JSONL/runtime snapshot as bounded fallback surfaces."
+  status: active
+  intake:
+    original_request: "根据已有 SigNoz + OTLP 改造计划，为 symphony-go 按分 commit 落地 Traces、Metrics、Logs，不按 PR 拆。"
+    interpreted_outcome: "symphony-go gains a verified telemetry facade and staged SigNoz/OpenTelemetry integration across traces, metrics, log correlation, dashboard docs, and snapshot boundary cleanup."
+    input_shape: existing_plan
+    audience: "symphony-go local developer"
+    authority: requested
+    proof_type: test
+    completion_proof: "All planned commit slices are either implemented and verified or explicitly blocked with receipts; final audit maps code/docs changes, local tests, build, and SigNoz/fake exporter evidence back to the original telemetry outcome."
+    likely_misfire: "The goal produces planning artifacts or scattered OTel calls without an end-to-end, low-cardinality, verifiable SigNoz telemetry path."
+    blind_spots_considered:
+      - "Local SigNoz/Docker availability may block live UI proof; use fake/exporter tests as local fallback and record live SigNoz blocker separately."
+      - "Trace lifecycle across retry, human wait, and process restart needs an explicit v1 boundary before persistence."
+      - "OTel Logs support and dependency choice must be validated before replacing JSONL behavior."
+      - "Existing dirty files must be preserved and understood before any edits."
+      - "Codex event payload must be whitelisted before entering traces or logs."
+    existing_plan_facts:
+      - "Phase 0 documents and proves local SigNoz OTLP endpoints before business code changes."
+      - "Phase 1 adds an internal telemetry facade with noop behavior when OTEL is not configured."
+      - "Phase 2 traces issueflow trunk transitions and issue run shape first."
+      - "Phase 3 exports low-cardinality issue and Codex metrics."
+      - "Phase 4 correlates logs with trace/span IDs before any full log migration."
+      - "Phase 5 documents a minimal SigNoz dashboard and validation guide."
+      - "Phase 6 narrows snapshot/TUI to runtime projection rather than long-term metrics truth."
+      - "Implementation should land as independent commits, not PR-sized chunks."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+
+agents:
+  scout: bundled_not_installed
+  worker: bundled_not_installed
+  judge: bundled_not_installed
+
+visual_board:
+  selected: unknown
+  local:
+    status: not_requested
+    url: null
+    command: "npx goalbuddy board docs/goals/signoz-otel-telemetry"
+  github_projects:
+    status: not_requested
+    url: null
+    command: "npx goalbuddy extend github-projects"
+    missing: []
+
+active_task: T010
+
+tasks:
+  - id: T001
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Validate the user-provided telemetry plan against the current repo state and choose the first safe commit slice."
+    inputs:
+      - "User-provided Phase 0-6 plan in goal.md"
+      - "Current git status and dirty files"
+      - "Current AGENTS.md and lesson.md repo rules"
+      - "Relevant live code anchors for app startup, issueflow, orchestrator, logging, observability, and tests"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Preserve the existing plan facts unless live code disproves them."
+      - "Do not overwrite or normalize unrelated dirty files."
+    expected_output:
+      - "Decision on whether the plan is executable as written or needs sequencing changes."
+      - "Exact first Worker objective."
+      - "allowed_files for the first Worker."
+      - "verify commands for the first Worker."
+      - "stop_if conditions for the first Worker."
+      - "Any blocker or dirty-worktree caveat."
+    receipt:
+      result: done
+      decision: "Plan is executable as commit-sized slices. Start with docs-only SigNoz local plan because it avoids Go behavior changes and creates the verification contract for later telemetry code."
+      evidence:
+        - "git status --short --branch: only docs/goals/signoz-otel-telemetry/ is currently untracked"
+        - "AGENTS.md requires repo-native verification via git diff --check, ./test.sh, and ./build.sh"
+        - "internal/app/run.go:93 initializes runtime wiring where future telemetry provider can be added"
+        - "internal/service/issueflow/flow.go:57 and :199/:208 cover trunk state transitions"
+        - "internal/service/issueflow/agent_session.go:20 covers workspace/prompt/codex turn stages"
+        - "internal/service/orchestrator/orchestrator.go:1058 tracks Codex event token/rate-limit state"
+        - "internal/runtime/logging/jsonl.go:43 defines structured JSONL Event shape"
+      next_allowed_task: T002
+      worker_objective: "Commit slice 1: add local SigNoz telemetry plan and validation runbook without changing Go behavior."
+      allowed_files:
+        - "docs/telemetry/signoz-local.md"
+        - "docs/telemetry/README.md"
+      verify:
+        - "git diff --check"
+      stop_if:
+        - "Need to change Go behavior."
+        - "Need to overwrite existing docs not listed in allowed_files."
+        - "SigNoz install commands require destructive Docker cleanup or credentials."
+
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Commit slice 1: add local SigNoz telemetry plan and validation runbook without changing Go behavior."
+    allowed_files:
+      - "docs/telemetry/signoz-local.md"
+      - "docs/telemetry/README.md"
+    verify:
+      - "git diff --check"
+    stop_if:
+      - "Need to change Go behavior."
+      - "Need to overwrite existing docs not listed in allowed_files."
+      - "SigNoz install commands require destructive Docker cleanup or credentials."
+    receipt:
+      result: done
+      changed_files:
+        - "docs/telemetry/README.md"
+        - "docs/telemetry/signoz-local.md"
+      commands:
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added docs-only SigNoz/OTLP local retrofit runbook with success criteria, env vars, commit sequence, verification gates, code anchors, and high-cardinality metric label rules."
+
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Commit slice 2: add noop-first telemetry facade and provider wiring with no business instrumentation yet."
+    allowed_files:
+      - "go.mod"
+      - "go.sum"
+      - "internal/runtime/telemetry/provider.go"
+      - "internal/runtime/telemetry/facade.go"
+      - "internal/runtime/telemetry/attrs.go"
+      - "internal/runtime/telemetry/noop.go"
+      - "internal/runtime/telemetry/provider_test.go"
+      - "internal/app/run.go"
+      - "internal/app/run_test.go"
+    verify:
+      - "./test.sh ./internal/runtime/telemetry ./internal/app"
+      - "git diff --check"
+    stop_if:
+      - "OpenTelemetry dependency choice is ambiguous or conflicts with module constraints."
+      - "Need to edit issueflow/orchestrator behavior before facade tests exist."
+      - "Existing dirty changes in internal/app/run.go cannot be separated safely."
+    receipt:
+      result: done
+      changed_files:
+        - "go.mod"
+        - "go.sum"
+        - "internal/runtime/telemetry/attrs.go"
+        - "internal/runtime/telemetry/facade.go"
+        - "internal/runtime/telemetry/noop.go"
+        - "internal/runtime/telemetry/provider.go"
+        - "internal/runtime/telemetry/provider_test.go"
+        - "internal/app/run.go"
+        - "internal/app/run_test.go"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/telemetry ./internal/app"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added a noop-first telemetry facade, OTLP gRPC/HTTP provider initialization behind env detection, low-cardinality metric attr filtering, trace field extraction, and app runtime shutdown wiring. OTel was pinned to v1.35.0 because latest v1.43.0 requires Go 1.25 while this repo currently runs Go 1.22.12."
+
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Commit slice 3: trace issueflow trunk transitions through the telemetry facade."
+    allowed_files:
+      - "internal/runtime/telemetry/issue_run.go"
+      - "internal/runtime/telemetry/issue_run_test.go"
+      - "internal/service/issueflow/runtime.go"
+      - "internal/service/issueflow/flow.go"
+      - "internal/service/issueflow/flow_test.go"
+      - "internal/service/orchestrator/orchestrator.go"
+      - "internal/service/orchestrator/orchestrator_test.go"
+      - "internal/service/orchestrator/run_stage.go"
+    verify:
+      - "./test.sh ./internal/runtime/telemetry ./internal/service/issueflow ./internal/service/orchestrator"
+      - "git diff --check"
+    stop_if:
+      - "Business code would need direct OpenTelemetry imports."
+      - "Trace attributes require high-cardinality metric labels."
+      - "Issue retry/human-wait trace lifecycle needs a product decision before v1 can proceed."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/telemetry/facade.go"
+        - "internal/runtime/telemetry/issue_run.go"
+        - "internal/runtime/telemetry/provider_test.go"
+        - "internal/service/issueflow/runtime.go"
+        - "internal/service/issueflow/flow.go"
+        - "internal/service/issueflow/flow_test.go"
+        - "internal/service/orchestrator/orchestrator.go"
+        - "internal/app/run.go"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/telemetry ./internal/service/issueflow ./internal/service/orchestrator"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Injected telemetry facade into app -> orchestrator -> issueflow runtime, added issue_run root spans and transition spans for Todo -> In Progress, AI Review -> Merging, and Merging -> Done, with in-memory span recorder tests."
+
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Commit slice 4: trace workspace preparation, prompt rendering, and Codex turns with whitelisted event attributes."
+    allowed_files:
+      - "internal/runtime/telemetry/issue_run.go"
+      - "internal/runtime/telemetry/attrs.go"
+      - "internal/runtime/telemetry/issue_run_test.go"
+      - "internal/service/issueflow/agent_session.go"
+      - "internal/service/issueflow/flow_test.go"
+      - "internal/service/orchestrator/orchestrator.go"
+      - "internal/service/orchestrator/orchestrator_test.go"
+    verify:
+      - "./test.sh ./internal/runtime/telemetry ./internal/service/issueflow ./internal/service/orchestrator"
+      - "git diff --check"
+    stop_if:
+      - "Need to export raw Codex payload instead of a whitelist."
+      - "Workspace hook tracing requires broad workspace manager refactor."
+      - "Existing tests reveal behavior changes unrelated to telemetry."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/telemetry/issue_run.go"
+        - "internal/service/issueflow/agent_session.go"
+        - "internal/service/issueflow/flow_test.go"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/telemetry ./internal/service/issueflow ./internal/service/orchestrator"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added step spans under issue_run for workspace preparation, before_run/after_run hooks, prompt rendering, and Codex turn completion using whitelisted trace attributes."
+
+  - id: T006
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Commit slice 5: export core low-cardinality issue and Codex metrics."
+    allowed_files:
+      - "internal/runtime/telemetry/facade.go"
+      - "internal/runtime/telemetry/metrics.go"
+      - "internal/runtime/telemetry/metrics_test.go"
+      - "internal/service/orchestrator/orchestrator.go"
+      - "internal/service/orchestrator/orchestrator_test.go"
+      - "internal/service/issueflow/agent_session.go"
+      - "internal/service/issueflow/flow.go"
+      - "internal/service/issueflow/flow_test.go"
+    verify:
+      - "./test.sh ./internal/runtime/telemetry ./internal/service/issueflow ./internal/service/orchestrator"
+      - "git diff --check"
+    stop_if:
+      - "Any metric label would include issue_id, issue_identifier, session_id, thread_id, or workspace_path."
+      - "Metrics cannot be tested without adding fragile sleeps or external SigNoz dependency."
+      - "Token delta semantics diverge from existing orchestrator behavior."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/telemetry/metrics.go"
+        - "internal/runtime/telemetry/metrics_test.go"
+        - "internal/runtime/telemetry/issue_run.go"
+        - "internal/service/issueflow/flow.go"
+        - "internal/service/orchestrator/orchestrator.go"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/telemetry ./internal/service/issueflow ./internal/service/orchestrator"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added low-cardinality counters/histograms/up-down counters for issue runs, transitions, phase duration, step failures, Codex turns, active/retrying issues, and Codex token deltas. Tests collect SDK metrics and assert blocked labels are absent."
+
+  - id: T007
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Commit slice 6: correlate JSONL logs with trace/span context and optionally emit key OTel logs behind the facade."
+    allowed_files:
+      - "internal/runtime/logging/jsonl.go"
+      - "internal/runtime/logging/jsonl_test.go"
+      - "internal/runtime/telemetry/facade.go"
+      - "internal/runtime/telemetry/logs.go"
+      - "internal/runtime/telemetry/logs_test.go"
+      - "internal/service/issueflow/runtime.go"
+      - "internal/service/issueflow/flow.go"
+      - "internal/service/issueflow/agent_session.go"
+      - "internal/service/issueflow/flow_test.go"
+      - "internal/service/orchestrator/orchestrator.go"
+      - "internal/service/orchestrator/orchestrator_test.go"
+    verify:
+      - "./test.sh ./internal/runtime/logging ./internal/runtime/telemetry ./internal/service/orchestrator"
+      - "git diff --check"
+    stop_if:
+      - "Need to remove or weaken existing JSONL behavior."
+      - "OTel Logs dependency is too unstable or conflicts with facade/noop design."
+      - "Raw Codex payload would be logged without whitelist."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/logging/jsonl.go"
+        - "internal/runtime/logging/jsonl_test.go"
+        - "internal/service/issueflow/runtime.go"
+        - "internal/service/issueflow/flow.go"
+        - "internal/service/issueflow/agent_session.go"
+        - "internal/service/issueflow/flow_test.go"
+        - "internal/service/orchestrator/orchestrator.go"
+        - "internal/service/orchestrator/orchestrator_test.go"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/logging ./internal/runtime/telemetry ./internal/service/issueflow ./internal/service/orchestrator"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Kept JSONL as the local fallback while adding trace_id/span_id top-level fields and automatic trace context correlation through issueflow -> orchestrator logging. Key issue logs now receive trace fields without importing OpenTelemetry into business code."
+
+  - id: T008
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Commit slice 7: add SigNoz dashboard, query, and end-to-end validation guide."
+    allowed_files:
+      - "docs/telemetry/signoz-dashboard.md"
+      - "docs/telemetry/signoz-local.md"
+      - "docs/telemetry/README.md"
+    verify:
+      - "git diff --check"
+    stop_if:
+      - "Need live SigNoz credentials or destructive Docker operations."
+      - "Need to modify Go behavior."
+      - "Dashboard examples would use forbidden high-cardinality metric labels."
+    receipt:
+      result: done
+      changed_files:
+        - "docs/telemetry/README.md"
+        - "docs/telemetry/signoz-dashboard.md"
+      commands:
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Added SigNoz dashboard/query/validation guide covering active and retrying issues, transition throughput/duration, phase duration, failures, Codex turns/tokens, recent failures, trace drilldown by issue_identifier, and log-to-trace correlation without forbidden metric labels."
+
+  - id: T009
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Commit slice 8: narrow snapshot/TUI/control observability wording and tests to runtime projection semantics."
+    allowed_files:
+      - "internal/runtime/observability/snapshot.go"
+      - "internal/runtime/observability/snapshot_test.go"
+      - "internal/tui/dashboard.go"
+      - "internal/tui/dashboard_test.go"
+      - "internal/service/control/service.go"
+      - "internal/service/control/service_test.go"
+      - "internal/transport/hertzserver/server_test.go"
+      - "docs/telemetry/README.md"
+    verify:
+      - "./test.sh ./internal/runtime/observability ./internal/tui ./internal/service/control ./internal/transport/hertzserver"
+      - "git diff --check"
+    stop_if:
+      - "Need to remove snapshot/TUI JSON shape without explicit compatibility decision."
+      - "Control-plane API compatibility breaks unexpectedly."
+      - "Change expands into unrelated Hertz/generated code."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/observability/snapshot.go"
+        - "internal/tui/dashboard.go"
+        - "internal/tui/dashboard_test.go"
+        - "internal/service/control/service.go"
+        - "internal/service/control/service_test.go"
+        - "internal/transport/hertzserver/server_test.go"
+        - "docs/telemetry/README.md"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/observability ./internal/tui ./internal/service/control ./internal/transport/hertzserver"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Kept snapshot/control API compatibility while narrowing the boundary to live local runtime projection. TUI now labels its scope explicitly, and control/hertz tests assert that SigNoz/OTLP owns historical metrics and trends."
+
+  - id: T010
+    type: pm
+    assignee: PM
+    status: active
+    reasoning_hint: default
+    objective: "Create commits for verified slices in order, preserving unrelated dirty work and recording commit hashes in receipts."
+    inputs:
+      - "Done Worker receipts for implementation slices"
+      - "Current git status"
+    constraints:
+      - "Only stage files changed by completed verified slices."
+      - "Do not stage unrelated user changes."
+      - "Use concise conventional commit messages matching the slice objectives."
+    expected_output:
+      - "Commit hashes for each committed slice."
+      - "Any uncommitted unrelated files left untouched."
+    receipt: null
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Final audit: prove the full SigNoz/OTLP telemetry retrofit outcome is complete or identify the next required safe task."
+    inputs:
+      - "All done task receipts"
+      - "Commit hashes from T010"
+      - "Latest git status"
+      - "Latest verification commands"
+      - "SigNoz live proof or documented fallback exporter proof"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if required Worker work is still queued or active."
+      - "Reject completion if only planning/docs are complete."
+      - "Reject completion if metrics use forbidden high-cardinality labels."
+      - "Reject completion if logs cannot correlate to trace context."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Evidence mapped to original outcome."
+      - "Missing evidence or next task if not complete."
+    receipt: null
+
+checks:
+  dirty_fingerprint: "pre-existing dirty files noted before goal-prep: Makefile, internal/app/run.go, internal/runtime/logging/jsonl.go, internal/runtime/logging/jsonl_test.go, lesson.md"
+  last_verification:
+    result: unknown
+    task: null
+    commands: []
