@@ -18,12 +18,18 @@ var unsafeIdentifierChars = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
 
 type Manager struct {
 	Root         string
+	Mode         string
+	CWD          string
 	Hooks        runtimeconfig.HooksConfig
 	hookObserver HookObserver
 }
 
 func New(root string, hooks runtimeconfig.HooksConfig) *Manager {
 	return &Manager{Root: root, Hooks: hooks}
+}
+
+func NewFromConfig(cfg runtimeconfig.WorkspaceConfig, hooks runtimeconfig.HooksConfig) *Manager {
+	return &Manager{Root: cfg.Root, Mode: cfg.Mode, CWD: cfg.CWD, Hooks: hooks}
 }
 
 type HookEvent struct {
@@ -79,6 +85,9 @@ func (m *Manager) RootAbs() (string, error) {
 }
 
 func (m *Manager) PathForIssue(issue issuemodel.Issue) (string, error) {
+	if m.StaticCWD() {
+		return m.CWDAbs()
+	}
 	if issue.Identifier == "" {
 		return "", fmt.Errorf("issue identifier is required")
 	}
@@ -90,6 +99,9 @@ func (m *Manager) PathForIssue(issue issuemodel.Issue) (string, error) {
 }
 
 func (m *Manager) ValidateWorkspacePath(path string) error {
+	if m.StaticCWD() {
+		return m.validateStaticPath(path)
+	}
 	root, abs, err := m.validateWorkspacePathLexical(path)
 	if err != nil {
 		return err
@@ -113,6 +125,34 @@ func (m *Manager) ValidateWorkspacePath(path string) error {
 	}
 	if !pathWithin(realRoot, realExisting) {
 		return fmt.Errorf("workspace path %q escapes workspace root %q", abs, root)
+	}
+	return nil
+}
+
+func (m *Manager) StaticCWD() bool {
+	return strings.EqualFold(strings.TrimSpace(m.Mode), "static_cwd")
+}
+
+func (m *Manager) CWDAbs() (string, error) {
+	cwd, err := filepath.Abs(expandHome(m.CWD))
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(cwd), nil
+}
+
+func (m *Manager) validateStaticPath(path string) error {
+	cwd, err := m.CWDAbs()
+	if err != nil {
+		return err
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	abs = filepath.Clean(abs)
+	if !pathWithin(cwd, abs) {
+		return fmt.Errorf("workspace path %q escapes static cwd %q", abs, cwd)
 	}
 	return nil
 }
@@ -189,6 +229,23 @@ func (m *Manager) AfterRun(ctx context.Context, path string) error {
 }
 
 func (m *Manager) Ensure(ctx context.Context, issue issuemodel.Issue) (string, bool, error) {
+	if m.StaticCWD() {
+		path, err := m.CWDAbs()
+		if err != nil {
+			return "", false, err
+		}
+		if err := m.ValidateWorkspacePath(path); err != nil {
+			return "", false, err
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return "", false, err
+		}
+		if !info.IsDir() {
+			return "", false, fmt.Errorf("static cwd %q is not a directory", path)
+		}
+		return path, false, nil
+	}
 	root, err := m.RootAbs()
 	if err != nil {
 		return "", false, err
@@ -243,6 +300,9 @@ func (m *Manager) Ensure(ctx context.Context, issue issuemodel.Issue) (string, b
 func (m *Manager) Remove(ctx context.Context, path string) error {
 	if path == "" {
 		return nil
+	}
+	if m.StaticCWD() {
+		return m.ValidateWorkspacePath(path)
 	}
 	if _, _, err := m.validateWorkspacePathLexical(path); err != nil {
 		return err

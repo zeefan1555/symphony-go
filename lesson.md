@@ -1,5 +1,36 @@
 # Lessons
 
+## 2026-05-07: social_pet 不要默认推荐 bare direct go test
+
+### 用户纠正
+
+- 用户指出：`social_pet` 的开发内循环里，`go test ./service -run '^TestName$'` 这种 bare direct 形式跑不通，不要再推荐这种默认写法。
+
+### 错误模式
+
+- 这是流程错误：我把 `pet-local-tdd` 中可作为特定对照组的 direct `go test` 示例，误提升成了 `pet-prd-issue-run` 的默认开发内循环。
+- 这是技术判断错误：没有区分 `social_pet` 当前可用的仓库测试入口和理论上的 Go 定向测试命令，导致 skill 会诱导后续 agent 反复跑已知不可用路径。
+
+### 防复犯规则
+
+- 在 `social_pet` PRD/issue 编排里，不要把 bare direct `go test ./service -run '^TestName$'` 作为默认快速回路。
+- direct `go test` 只能在当前仓库、当前分支已确认可跑时作为显式对照组；如果用户或历史经验说明该形式跑不通，就不要再写进默认命令。
+- 默认收口证据优先走 `pet-local-tdd` 中 repo-native 的 `./ci/run.sh` + `CI_RUN_LOG_DIR` 路径；快速验证也必须写成“已确认可用的最小命令”，不要猜裸命令。
+
+### 固定动作
+
+- 修改 `social_pet` 相关 skill 或 runbook 时检查是否重新引入裸 direct `go test` 默认路径：
+
+```bash
+rg -n "go test ./service|-run '\\^TestName\\$'|direct go test" .codex/skills docs lesson.md
+```
+
+- 文档改动后至少运行：
+
+```bash
+git diff --check
+```
+
 ## 2026-05-06: AI Review 后应直接进入 PR skill 快路径
 
 ### 用户纠正

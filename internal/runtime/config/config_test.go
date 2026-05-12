@@ -99,6 +99,41 @@ func TestResolvePreservesExplicitMergeTarget(t *testing.T) {
 	}
 }
 
+func TestResolveStaticCWDWorkspace(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	dir := t.TempDir()
+	resolved, err := Resolve(Config{
+		Tracker: validTracker(),
+		Workspace: WorkspaceConfig{
+			Mode: "static_cwd",
+			CWD:  "target-repo",
+		},
+	}, filepath.Join(dir, "WORKFLOW.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Workspace.Mode != "static_cwd" {
+		t.Fatalf("workspace mode = %q, want static_cwd", resolved.Workspace.Mode)
+	}
+	if want := filepath.Join(dir, "target-repo"); resolved.Workspace.CWD != want {
+		t.Fatalf("workspace cwd = %q, want %q", resolved.Workspace.CWD, want)
+	}
+}
+
+func TestResolveRejectsStaticCWDWithoutCWD(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	_, err := Resolve(Config{
+		Tracker:   validTracker(),
+		Workspace: WorkspaceConfig{Mode: "static_cwd"},
+	}, filepath.Join(t.TempDir(), "WORKFLOW.md"))
+	if err == nil {
+		t.Fatal("expected invalid workspace config")
+	}
+	if Code(err) != ErrInvalidWorkspaceConfig {
+		t.Fatalf("code = %q", Code(err))
+	}
+}
+
 func TestResolveUsesAppConfigMergeTarget(t *testing.T) {
 	t.Setenv("LINEAR_API_KEY", "lin_test")
 	dir := t.TempDir()

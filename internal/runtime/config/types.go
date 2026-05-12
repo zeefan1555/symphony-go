@@ -56,7 +56,9 @@ type PollingConfig struct {
 }
 
 type WorkspaceConfig struct {
+	Mode string `yaml:"mode"`
 	Root string `yaml:"root"`
+	CWD  string `yaml:"cwd"`
 }
 
 type WorkerConfig struct {

@@ -422,6 +422,10 @@ func (o *Orchestrator) cleanupWorkspace(ctx context.Context, manager *workspace.
 		o.logIssue(issue, "workspace_cleanup_failed", err.Error(), map[string]any{"workspace_path": path})
 		return err
 	}
+	if manager.StaticCWD() {
+		o.logIssue(issue, "workspace_retained", "static cwd retained", map[string]any{"workspace_path": path})
+		return nil
+	}
 	o.logIssue(issue, "workspace_cleaned", "workspace removed", map[string]any{"workspace_path": path})
 	return nil
 }

@@ -38,7 +38,7 @@ func TestContractScopeIsDocumentedAndRuntimeAssemblyStaysLayered(t *testing.T) {
 	for _, want := range []string{
 		"workflow.NewReloader(",
 		"linear.New(",
-		"workspace.New(",
+		"workspace.NewFromConfig(",
 		"codex.New(",
 		"orchestrator.New(",
 		"logging.New(",
@@ -74,7 +74,7 @@ func TestRuntimePolicyDocumentsSecurityAndOperationalSafety(t *testing.T) {
 		"must not include API tokens or resolved secret values",
 		"Errors may name the missing configuration field or expected environment variable",
 		"Workspace hooks are trusted shell scripts",
-		"per-issue workspace as cwd",
+		"`workspace.mode: static_cwd`",
 		"configured hook timeout",
 		"shortened previews",
 		"Codex app-server owns the wire protocol schema",

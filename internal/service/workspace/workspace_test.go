@@ -41,6 +41,55 @@ func TestEnsureRunsAfterCreateOnceWithUTF8Env(t *testing.T) {
 	}
 }
 
+func TestStaticCWDEnsureDoesNotCreateIssueWorkspaceOrRunAfterCreate(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "worktrees")
+	target := t.TempDir()
+	manager := NewFromConfig(runtimeconfig.WorkspaceConfig{
+		Mode: "static_cwd",
+		Root: root,
+		CWD:  target,
+	}, runtimeconfig.HooksConfig{
+		AfterCreate: `printf created > hook.txt`,
+		TimeoutMS:   5000,
+	})
+
+	workspacePath, created, err := manager.Ensure(context.Background(), issuemodel.Issue{Identifier: "ZEE-STATIC"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created {
+		t.Fatal("static cwd should not report issue workspace creation")
+	}
+	if workspacePath != target {
+		t.Fatalf("workspace path = %q, want static cwd %q", workspacePath, target)
+	}
+	if _, err := os.Stat(filepath.Join(root, "ZEE-STATIC")); !os.IsNotExist(err) {
+		t.Fatalf("issue workspace stat err = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "hook.txt")); !os.IsNotExist(err) {
+		t.Fatalf("after_create hook file err = %v, want not exist", err)
+	}
+}
+
+func TestStaticCWDRemoveIsNoopForTargetTree(t *testing.T) {
+	target := t.TempDir()
+	keep := filepath.Join(target, "keep.txt")
+	if err := os.WriteFile(keep, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewFromConfig(runtimeconfig.WorkspaceConfig{Mode: "static_cwd", CWD: target}, runtimeconfig.HooksConfig{})
+
+	if err := manager.Remove(context.Background(), target); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("static cwd remove should not delete target contents: %v", err)
+	}
+	if err := manager.Remove(context.Background(), filepath.Dir(target)); err == nil {
+		t.Fatal("static cwd remove should reject paths outside target")
+	}
+}
+
 func TestHookObserverReceivesLifecycleEventsWithIssueContext(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "worktrees")
 	manager := New(root, runtimeconfig.HooksConfig{

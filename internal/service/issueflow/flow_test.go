@@ -3,6 +3,7 @@ package issueflow
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -73,6 +74,35 @@ func TestRunIssueTrunkPromotesTodoAndRunsImplementer(t *testing.T) {
 	}
 	if !observer.sawStage(PhaseImplementer, StageRunningAgent) {
 		t.Fatalf("stages = %#v, want implementer running_agent", observer.stages)
+	}
+}
+
+func TestRunIssueTrunkUsesStaticCWDWithoutIssueWorkspace(t *testing.T) {
+	target := t.TempDir()
+	root := filepath.Join(t.TempDir(), "worktrees")
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-STATIC", Title: "diagnose", State: StateInProgress}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{}
+	observer := &fakeObserver{}
+	rt := testRuntime(t, tracker, runner, observer)
+	rt.Workspace = workspace.NewFromConfig(runtimeconfig.WorkspaceConfig{
+		Mode: "static_cwd",
+		Root: root,
+		CWD:  target,
+	}, runtimeconfig.HooksConfig{})
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	if runner.request.WorkspacePath != target {
+		t.Fatalf("runner workspace path = %q, want static cwd %q", runner.request.WorkspacePath, target)
+	}
+	if _, err := os.Stat(filepath.Join(root, "ZEE-STATIC")); !os.IsNotExist(err) {
+		t.Fatalf("issue workspace stat err = %v, want not exist", err)
 	}
 }
 

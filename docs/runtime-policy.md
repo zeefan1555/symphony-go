@@ -4,9 +4,9 @@ This document records Symphony Go's implementation-defined runtime policy for `S
 
 ## Trust Boundary
 
-Symphony Go is a high-trust local automation runner. It is intended for trusted repositories, trusted workflow files, and issue sources that operators are willing to let a local coding agent execute inside per-issue worktrees.
+Symphony Go is a high-trust local automation runner. It is intended for trusted repositories, trusted workflow files, and issue sources that operators are willing to let a local coding agent execute inside configured repository workspaces.
 
-The service isolates normal implementation work to the issue workspace and git metadata roots needed by local worktrees, but it does not claim to provide a strong security sandbox beyond the configured Codex app-server policy, host OS permissions, and repository workflow rules.
+The service can isolate normal implementation work to a per-issue workspace and git metadata roots needed by local worktrees. Workflows that only need read-only diagnosis can instead set `workspace.mode: static_cwd` and provide `workspace.cwd`, which runs Codex directly in that existing directory without creating an issue workspace. Symphony Go does not claim to provide a strong security sandbox beyond the configured Codex app-server policy, host OS permissions, and repository workflow rules.
 
 ## Approval And Sandbox Policy
 
@@ -32,7 +32,7 @@ Errors may name the missing configuration field or expected environment variable
 
 ## Hook Safety
 
-Workspace hooks are trusted shell scripts from `WORKFLOW.md`. They run with the per-issue workspace as cwd and use the configured hook timeout so a stuck hook does not block the orchestrator indefinitely.
+Workspace hooks are trusted shell scripts from `WORKFLOW.md`. In the default per-issue mode they run with the issue workspace as cwd; in `static_cwd` mode they run with the configured static cwd. Hooks use the configured hook timeout so a stuck hook does not block the orchestrator indefinitely.
 
 Hook command, output, and error strings are logged only as shortened previews. Operators should avoid printing secrets from hooks because even truncated output is still operator-visible.
 

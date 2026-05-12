@@ -20,6 +20,7 @@ const (
 	ErrInvalidMaxRetryBackoff    = "invalid_max_retry_backoff"
 	ErrInvalidPollingInterval    = "invalid_polling_interval"
 	ErrInvalidServerPort         = "invalid_server_port"
+	ErrInvalidWorkspaceConfig    = "invalid_workspace_config"
 	ErrInvalidWorkerConfig       = "invalid_worker_config"
 	ErrInvalidReviewPolicy       = "invalid_review_policy"
 	WarnWorkflowMergeTarget      = "workflow_merge_target_deprecated"
@@ -62,7 +63,7 @@ func Resolve(raw Config, workflowPath string) (Config, error) {
 	normalizeStates(&cfg)
 	normalizeWorker(&cfg)
 	normalizeMerge(&cfg)
-	if err := normalizeWorkspaceRoot(&cfg, workflowPath); err != nil {
+	if err := normalizeWorkspace(&cfg, workflowPath); err != nil {
 		return Config{}, err
 	}
 	if err := validate(cfg); err != nil {
@@ -178,6 +179,7 @@ func resolveEnv(cfg *Config) {
 		cfg.Tracker.Assignee = os.Getenv("LINEAR_ASSIGNEE")
 	}
 	cfg.Workspace.Root = resolveDollar(cfg.Workspace.Root)
+	cfg.Workspace.CWD = resolveDollar(cfg.Workspace.CWD)
 }
 
 func resolveDollar(value string) string {
@@ -212,21 +214,39 @@ func normalizeMerge(cfg *Config) {
 	}
 }
 
-func normalizeWorkspaceRoot(cfg *Config, workflowPath string) error {
-	root := expandHome(cfg.Workspace.Root)
-	if !filepath.IsAbs(root) {
+func normalizeWorkspace(cfg *Config, workflowPath string) error {
+	root, err := normalizeWorkflowPath(cfg.Workspace.Root, workflowPath)
+	if err != nil {
+		return err
+	}
+	cfg.Workspace.Root = root
+	if strings.EqualFold(strings.TrimSpace(cfg.Workspace.Mode), "static_cwd") {
+		cwd, err := normalizeWorkflowPath(cfg.Workspace.CWD, workflowPath)
+		if err != nil {
+			return err
+		}
+		cfg.Workspace.CWD = cwd
+	}
+	return nil
+}
+
+func normalizeWorkflowPath(pathValue string, workflowPath string) (string, error) {
+	pathValue = expandHome(pathValue)
+	if pathValue == "" {
+		return "", nil
+	}
+	if !filepath.IsAbs(pathValue) {
 		base := "."
 		if workflowPath != "" {
 			base = filepath.Dir(workflowPath)
 		}
-		root = filepath.Join(base, root)
+		pathValue = filepath.Join(base, pathValue)
 	}
-	abs, err := filepath.Abs(root)
+	abs, err := filepath.Abs(pathValue)
 	if err != nil {
-		return err
+		return "", err
 	}
-	cfg.Workspace.Root = filepath.Clean(abs)
-	return nil
+	return filepath.Clean(abs), nil
 }
 
 func expandHome(path string) string {
@@ -262,6 +282,9 @@ func validate(cfg Config) error {
 	if cfg.Server.PortSet && cfg.Server.Port < 0 {
 		return &Error{Code: ErrInvalidServerPort, Message: "server.port must be zero or positive"}
 	}
+	if err := validateWorkspace(cfg.Workspace); err != nil {
+		return err
+	}
 	if err := validateWorker(cfg.Worker); err != nil {
 		return err
 	}
@@ -278,6 +301,21 @@ func validate(cfg Config) error {
 		return err
 	}
 	return nil
+}
+
+func validateWorkspace(workspace WorkspaceConfig) error {
+	mode := strings.ToLower(strings.TrimSpace(workspace.Mode))
+	switch mode {
+	case "", "per_issue":
+		return nil
+	case "static_cwd":
+		if strings.TrimSpace(workspace.CWD) == "" {
+			return &Error{Code: ErrInvalidWorkspaceConfig, Message: "workspace.cwd is required when workspace.mode is static_cwd"}
+		}
+		return nil
+	default:
+		return &Error{Code: ErrInvalidWorkspaceConfig, Message: "workspace.mode must be one of per_issue, static_cwd"}
+	}
 }
 
 func validateWorker(worker WorkerConfig) error {

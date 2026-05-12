@@ -1,0 +1,211 @@
+version: 2
+active_task: null
+goal:
+  title: "SPEC gap analysis and staged Go implementation optimization"
+  slug: "spec-gap-code-optimization"
+  status: done
+  mode: specific
+  created_at: "2026-05-12"
+  request: "分析本仓库 Go 语言实现版本与 SPEC.md 的差距，然后优化本仓库的代码，分阶段提交 commit 到 main 分支上。"
+  interpreted_outcome: "Map current Go implementation against SPEC.md, implement safe staged fixes, verify each stage, and commit verified slices to main."
+  proof_type: "test + commit + source_backed_answer"
+  completion_proof: "Final audit maps spec gaps, changed files, verification commands, and staged commits to the original outcome."
+  constraints:
+    - "SPEC.md is the primary behavior contract."
+    - "Do not inspect or change implementation during goal-prep; execution starts only after /goal."
+    - "Use minimal edits tied to verified spec gaps."
+    - "Use repo-native verification such as ./test.sh and ./build.sh for Go changes."
+    - "Preserve unrelated dirty work."
+    - "Only commit after verification passes and the active branch/working tree make committing to main safe."
+  likely_misfire: "Stopping after audit-only findings, or changing code without spec-to-code evidence and staged verification."
+visual_board:
+  type: local_live
+  url: "http://127.0.0.1:41737"
+  status: blocked
+  blocked_reason: "Port 41737 is already used by an existing GoalBuddy board for /Users/bytedance/symphony-spec/docs/goals/elixir-to-go-parity."
+agents:
+  scout: bundled_not_installed
+  worker: bundled_not_installed
+  judge: bundled_not_installed
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    objective: "Map SPEC.md requirements to current Go implementation and existing conformance ledgers without changing files."
+    inputs:
+      - "SPEC.md"
+      - "Current Go implementation"
+      - "docs/spec-conformance if present"
+      - "git status --short --branch"
+    constraints:
+      - "Read-only task."
+      - "Prefer live code and SPEC.md over stale docs."
+      - "Preserve unrelated dirty work."
+    expected_output:
+      - "Spec requirements checked"
+      - "Implementation evidence with file:line anchors"
+      - "Gap list with severity and verification notes"
+      - "Recommended first safe implementation slice"
+    receipt:
+      result: done
+      summary: "Required SPEC conformance rows are currently marked compliant; the clearest safe optimization gap is optional HTTP dashboard root route CHK-013-040-A."
+      evidence:
+        - "git status --short --branch: main...origin/main with pre-existing dirty lesson.md, .codex/skills/*, and docs/goals/"
+        - "SPEC.md:1383-1389 requires a human-readable / dashboard if the optional HTTP dashboard is implemented."
+        - "docs/spec-conformance/conformance-ledger.md:140 records CHK-013-040-A as optional not implemented because HTTP server lacks /."
+        - "internal/transport/hertzserver/server.go:48-77 registers /api/v1/* aliases but no / route."
+        - "internal/tui/dashboard.go:19-89 already has a human-readable runtime surface for terminal output."
+      recommended_first_slice: "Add a minimal GET / plain-text HTTP dashboard backed by current runtime state."
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    objective: "Select the first implementation slice by spec impact, reversibility, branch safety, and verification strength."
+    inputs:
+      - "T001 receipt"
+      - "Current dirty diff"
+      - "Repo verification commands"
+    constraints:
+      - "Read-only task."
+      - "Do not approve broad refactors or speculative features."
+      - "Require allowed_files, verify commands, and stop_if conditions for the Worker."
+    expected_output:
+      - "Decision"
+      - "Exact Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Whether a staged commit to main is safe after verification"
+    receipt:
+      result: done
+      decision: "Implement CHK-013-040-A first because it is a small optional spec-alignment slice, uses existing runtime state, and is directly testable through the HTTP server package."
+      next_allowed_task: T003
+      allowed_files:
+        - "internal/transport/hertzserver/server.go"
+        - "internal/transport/hertzserver/server_test.go"
+        - "docs/spec-conformance/conformance-ledger.md"
+        - "docs/spec-conformance/remediation-log.md"
+        - "docs/goals/spec-gap-code-optimization/state.yaml"
+      verify:
+        - "./test.sh ./internal/transport/hertzserver"
+        - "git diff --check"
+      stop_if:
+        - "Need IDL or generated model changes."
+        - "Root route conflicts with generated Hertz routes."
+        - "Verification fails twice without a clear root cause."
+        - "Unrelated dirty work would be staged for commit."
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    objective: "Implement the first safe SPEC gap slice selected by Judge."
+    allowed_files:
+      - "internal/transport/hertzserver/server.go"
+      - "internal/transport/hertzserver/server_test.go"
+      - "docs/spec-conformance/conformance-ledger.md"
+      - "docs/spec-conformance/remediation-log.md"
+      - "docs/goals/spec-gap-code-optimization/state.yaml"
+    verify:
+      - "./test.sh ./internal/transport/hertzserver"
+      - "git diff --check"
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Spec behavior is ambiguous."
+      - "Unrelated dirty work blocks a safe edit or commit."
+      - "Verification fails twice without a clear root cause."
+      - "Active branch or worktree state makes committing to main unsafe."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/transport/hertzserver/server.go"
+        - "internal/transport/hertzserver/server_test.go"
+        - "docs/spec-conformance/conformance-ledger.md"
+        - "docs/spec-conformance/remediation-log.md"
+      commands:
+        - cmd: "./test.sh ./internal/transport/hertzserver"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      commits:
+        - "29f7199 feat: add HTTP root dashboard"
+        - "7d13490 docs: record HTTP dashboard remediation"
+      summary: "Added GET / plain-text runtime dashboard backed by existing control binding state and recorded CHK-013-040-A as compliant."
+  - id: T004
+    type: judge
+    assignee: Judge
+    status: done
+    objective: "Audit the first implemented slice and decide the next staged spec-gap slice or completion state."
+    inputs:
+      - "T001 receipt"
+      - "T002 receipt"
+      - "T003 receipt"
+      - "Current git status"
+      - "Current verification output"
+    constraints:
+      - "Read-only task."
+      - "Do not mark full outcome complete if safe required Worker slices remain."
+    expected_output:
+      - "slice_complete: true | false"
+      - "full_outcome_complete: true | false"
+      - "missing evidence"
+      - "next task if not complete"
+    receipt:
+      result: done
+      decision: "Current tranche is complete; do not start another Worker without new scope approval."
+      slice_complete: true
+      full_outcome_complete: true
+      summary: "The first safe spec-gap optimization slice is implemented, verified, and committed. Remaining unimplemented ledger rows are optional/future extensions or operational recommendations that are not safe small local code slices for this tranche."
+      evidence:
+        - "git log --oneline -3 shows 7d13490 and 29f7199 on main."
+        - "git status --short --branch shows main ahead 2 with only pre-existing dirty lesson.md/.codex skills plus uncommitted GoalBuddy files."
+        - "rg optional gaps shows remaining rows are non-Linear adapter, deployment hardening, real integration profile, future persistence/settings/tracker-write/pluggable tracker/production/SSH extensions."
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: blocked
+    objective: "Implement the next safe staged SPEC gap slice selected after the first slice audit."
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "No Judge-approved next slice exists."
+      - "Need files outside allowed_files."
+      - "Verification or branch safety is unclear."
+    receipt:
+      result: blocked
+      summary: "No Judge-approved next safe implementation slice remains in the current tranche; remaining gaps require new product scope, credentials, operational policy, or large extension work."
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    objective: "Final audit: prove whether the current tranche satisfies the original request."
+    inputs:
+      - "All completed task receipts"
+      - "Final git log and git status"
+      - "Final verification commands"
+      - "SPEC gap evidence"
+    constraints:
+      - "Read-only task."
+      - "Completion requires implementation and verification evidence, not planning alone."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Spec gaps addressed"
+      - "Commits created"
+      - "Verification evidence"
+      - "Remaining risks or next task"
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      spec_gaps_addressed:
+        - "CHK-013-040-A / GAP-http-root-dashboard-001"
+      commits:
+        - "29f7199 feat: add HTTP root dashboard"
+        - "7d13490 docs: record HTTP dashboard remediation"
+      verification:
+        - "./test.sh ./internal/transport/hertzserver: pass"
+        - "git diff --check: pass"
+      remaining_risks:
+        - "GoalBuddy control files remain uncommitted by design in this run."
+        - "The branch is ahead of origin/main by 2 commits and has unrelated pre-existing dirty files."
