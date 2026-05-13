@@ -25,6 +25,7 @@ var exportedLogEvents = map[string]bool{
 	"dispatch_skipped":         true,
 	"dispatch_started":         true,
 	"issue_error":              true,
+	"merge_pass":               true,
 	"poll_error":               true,
 	"push_pass":                true,
 	"reconcile_error":          true,

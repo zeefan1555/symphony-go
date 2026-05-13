@@ -212,6 +212,7 @@ func TestRecordLogExportsLifecycleEvents(t *testing.T) {
 		"state_changed",
 		"codex_turn_completed",
 		"review_pass",
+		"merge_pass",
 		"push_pass",
 		"blocked",
 		"issue_error",
@@ -229,7 +230,7 @@ func TestRecordLogExportsLifecycleEvents(t *testing.T) {
 		})
 	}
 
-	if len(logger.records) != 7 {
+	if len(logger.records) != 8 {
 		t.Fatalf("records = %d, want lifecycle logs", len(logger.records))
 	}
 	for _, record := range logger.records {

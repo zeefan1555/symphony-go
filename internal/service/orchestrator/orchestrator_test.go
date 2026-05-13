@@ -1687,23 +1687,23 @@ func TestAIReviewStateRunsReviewerAgent(t *testing.T) {
 	}
 }
 
-func TestReviewerAgentContinuesIntoPushing(t *testing.T) {
+func TestReviewerAgentContinuesIntoMerging(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	issue := issuemodel.Issue{
 		ID:         "issue-id",
-		Identifier: "ZEE-REVIEWER-PUSH",
-		Title:      "reviewer to push smoke",
+		Identifier: "ZEE-REVIEWER-MERGE",
+		Title:      "reviewer to merge smoke",
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
-	runner := &reviewThenPushRunner{tracker: tracker}
+	runner := &reviewThenMergeRunner{tracker: tracker}
 	o := New(Options{
 		Workflow: &runtimeconfig.Workflow{
 			Config: runtimeconfig.Config{
 				Tracker: runtimeconfig.TrackerConfig{
-					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Pushing"},
+					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
 				},
 				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 2,
@@ -1731,21 +1731,21 @@ func TestReviewerAgentContinuesIntoPushing(t *testing.T) {
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
 	}
-	if got, want := runner.prompts[0].Text, "work on ZEE-REVIEWER-PUSH in AI Review"; got != want {
+	if got, want := runner.prompts[0].Text, "work on ZEE-REVIEWER-MERGE in AI Review"; got != want {
 		t.Fatalf("first prompt = %q, want %q", got, want)
 	}
-	if got := runner.prompts[1]; got.Text != issueflow.PushingContinuationPromptText || !got.Continuation {
-		t.Fatalf("push continuation prompt = %#v, want continuation push prompt", got)
+	if got := runner.prompts[1]; got.Text != issueflow.MergingContinuationPromptText || !got.Continuation {
+		t.Fatalf("merge continuation prompt = %#v, want continuation merge prompt", got)
 	}
-	if got := runner.prompts[1].Issue; got == nil || got.State != "Pushing" {
-		t.Fatalf("push continuation issue = %#v, want Pushing", got)
+	if got := runner.prompts[1].Issue; got == nil || got.State != "Merging" {
+		t.Fatalf("merge continuation issue = %#v, want Merging", got)
 	}
-	if got, want := tracker.states, []string{"Pushing", "Done"}; !reflect.DeepEqual(got, want) {
+	if got, want := tracker.states, []string{"Merging", "Done"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
 }
 
-func TestReviewerPassFinalPromotesToPushingContinuation(t *testing.T) {
+func TestReviewerPassFinalPromotesToMergingContinuation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -1756,12 +1756,12 @@ func TestReviewerPassFinalPromotesToPushingContinuation(t *testing.T) {
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
-	runner := &reviewPassThenPushRunner{tracker: tracker}
+	runner := &reviewPassThenMergeRunner{tracker: tracker}
 	o := New(Options{
 		Workflow: &runtimeconfig.Workflow{
 			Config: runtimeconfig.Config{
 				Tracker: runtimeconfig.TrackerConfig{
-					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Pushing"},
+					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
 				},
 				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 2,
@@ -1788,34 +1788,34 @@ func TestReviewerPassFinalPromotesToPushingContinuation(t *testing.T) {
 	if got, want := len(runner.prompts), 2; got != want {
 		t.Fatalf("prompts = %d, want %d", got, want)
 	}
-	if got := runner.prompts[1]; got.Text != issueflow.PushingContinuationPromptText || !got.Continuation {
-		t.Fatalf("push continuation prompt = %#v, want continuation push prompt", got)
+	if got := runner.prompts[1]; got.Text != issueflow.MergingContinuationPromptText || !got.Continuation {
+		t.Fatalf("merge continuation prompt = %#v, want continuation merge prompt", got)
 	}
-	if got := runner.prompts[1].Issue; got == nil || got.State != "Pushing" {
-		t.Fatalf("push continuation issue = %#v, want Pushing", got)
+	if got := runner.prompts[1].Issue; got == nil || got.State != "Merging" {
+		t.Fatalf("merge continuation issue = %#v, want Merging", got)
 	}
-	if got, want := tracker.states, []string{"Pushing", "Done"}; !reflect.DeepEqual(got, want) {
+	if got, want := tracker.states, []string{"Merging", "Done"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("state updates = %#v, want %#v", got, want)
 	}
 }
 
-func TestReviewerPushingContinuationRespectsMaxTurns(t *testing.T) {
+func TestReviewerMergingContinuationRespectsMaxTurns(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	issue := issuemodel.Issue{
 		ID:         "issue-id",
-		Identifier: "ZEE-REVIEWER-PUSH-STUCK",
-		Title:      "reviewer push stuck smoke",
+		Identifier: "ZEE-REVIEWER-MERGE-STUCK",
+		Title:      "reviewer merge stuck smoke",
 		State:      "AI Review",
 	}
 	tracker := &recordingTracker{issue: issue}
-	runner := &stuckPushingRunner{tracker: tracker, maxPrompts: 2}
+	runner := &stuckMergingRunner{tracker: tracker, maxPrompts: 2}
 	o := New(Options{
 		Workflow: &runtimeconfig.Workflow{
 			Config: runtimeconfig.Config{
 				Tracker: runtimeconfig.TrackerConfig{
-					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Pushing"},
+					ActiveStates: []string{"Todo", "In Progress", "Rework", "AI Review", "Merging"},
 				},
 				Agent: runtimeconfig.AgentConfig{
 					MaxTurns: 2,
@@ -1835,7 +1835,7 @@ func TestReviewerPushingContinuationRespectsMaxTurns(t *testing.T) {
 		t.Fatalf("prompts = %d, want %d", got, want)
 	}
 	if containsStateUpdate(tracker.states, "Done") {
-		t.Fatalf("state updates = %#v, want no Done without Push: PASS", tracker.states)
+		t.Fatalf("state updates = %#v, want no Done without Merge: PASS", tracker.states)
 	}
 }
 
@@ -3126,24 +3126,24 @@ func (r *observingStateChangingRunner) RunSession(ctx context.Context, request c
 	})
 }
 
-type reviewThenPushRunner struct {
+type reviewThenMergeRunner struct {
 	tracker *recordingTracker
 	calls   int
 	prompts []codex.TurnPrompt
 }
 
-func (r *reviewThenPushRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+func (r *reviewThenMergeRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
 	r.calls++
 	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
 	for turn := 0; turn < len(request.Prompts); turn++ {
 		r.prompts = append(r.prompts, request.Prompts[turn])
 		switch len(r.prompts) {
 		case 1:
-			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Pushing"); err != nil {
+			if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Merging"); err != nil {
 				return result, err
 			}
 		case 2:
-			emitAgentMessage(onEvent, "Push: PASS\n\ntarget: main\npushed_commit: abc123\nvalidation: ok")
+			emitAgentMessage(onEvent, "Merge: PASS\n\nPR: https://github.com/zeefan1555/symphony-go/pull/1\nmerge_commit: abc123\nroot_status: ## main...origin/main")
 		}
 		turnResult := codex.Result{
 			SessionID: fmt.Sprintf("thread-1-turn-%d", turn+1),
@@ -3206,13 +3206,13 @@ func (r *mergeMessageRunner) RunSession(ctx context.Context, request codex.Sessi
 	})
 }
 
-type reviewPassThenPushRunner struct {
+type reviewPassThenMergeRunner struct {
 	tracker *recordingTracker
 	calls   int
 	prompts []codex.TurnPrompt
 }
 
-func (r *reviewPassThenPushRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+func (r *reviewPassThenMergeRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
 	r.calls++
 	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
 	for turn := 0; turn < len(request.Prompts); turn++ {
@@ -3221,7 +3221,7 @@ func (r *reviewPassThenPushRunner) RunSession(ctx context.Context, request codex
 			emitAgentMessage(onEvent, "结论: PASS\n\nFindings:\n- 无阻塞发现。")
 		}
 		if len(r.prompts) == 2 {
-			emitAgentMessage(onEvent, "Push: PASS\n\ntarget: main\npushed_commit: abc123\nvalidation: ok")
+			emitAgentMessage(onEvent, "Merge: PASS\n\nPR: https://github.com/zeefan1555/symphony-go/pull/1\nmerge_commit: abc123\nroot_status: ## main...origin/main")
 		}
 		turnResult := codex.Result{
 			SessionID: fmt.Sprintf("thread-1-turn-%d", turn+1),
@@ -3247,20 +3247,20 @@ func (r *reviewPassThenPushRunner) RunSession(ctx context.Context, request codex
 	return result, nil
 }
 
-type stuckPushingRunner struct {
+type stuckMergingRunner struct {
 	tracker    *recordingTracker
 	maxPrompts int
 	prompts    []codex.TurnPrompt
 }
 
-func (r *stuckPushingRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
+func (r *stuckMergingRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
 	result := codex.SessionResult{ThreadID: "thread-1", PID: 123}
 	for turn := 0; turn < len(request.Prompts); turn++ {
 		if len(r.prompts) >= r.maxPrompts {
 			return result, fmt.Errorf("runner observed prompt %d, want at most %d", len(r.prompts)+1, r.maxPrompts)
 		}
 		r.prompts = append(r.prompts, request.Prompts[turn])
-		if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Pushing"); err != nil {
+		if err := r.tracker.UpdateIssueState(ctx, request.Issue.ID, "Merging"); err != nil {
 			return result, err
 		}
 		turnResult := codex.Result{

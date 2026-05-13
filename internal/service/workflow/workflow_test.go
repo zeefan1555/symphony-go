@@ -241,33 +241,34 @@ func strPtr(value string) *string {
 	return &value
 }
 
-func TestRepoWorkflowUsesLocalTargetBranchPushFlow(t *testing.T) {
+func TestRepoWorkflowUsesMergingFlow(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "workflows", "WORKFLOW-symphony-go.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(raw)
 	for _, want := range []string{
-		"active_states:\n    - Todo\n    - In Progress\n    - AI Review\n    - Pushing\n    - Rework",
+		"active_states:\n    - Todo\n    - In Progress\n    - AI Review\n    - Pushing\n    - Merging\n    - Rework",
 		"workspace:\n  mode: static_cwd\n  cwd: ..",
 		"只在当前 repo root 中工作。不要为 issue 创建 git worktree、scratch checkout、临时 clone 或 PR 分支。",
 		"`merge.target` 是本 workflow 的目标开发分支",
-		"所有实现、验证、commit 和 push 都在配置的目标分支上完成。",
+		"所有实现、验证和 commit 都在配置的目标分支上完成；PR 创建、检查和合并由 `Merging` 阶段统一处理。",
 		"同步目标分支时只做 fast-forward",
-		"`push`：`Pushing` 阶段推送目标分支到远端。",
-		"不要打开或执行 `.codex/skills/pr/SKILL.md`",
-		"默认路径是 `Todo -> In Progress -> AI Review -> Pushing -> Done`。",
+		"`pr`：`Merging` 阶段走 PR skill 快路径，创建或更新 PR、等待检查并完成 merge。",
+		"只有进入 `Merging` 阶段后才打开并遵守 `.codex/skills/pr/SKILL.md`",
+		"默认路径是 `Todo -> In Progress -> AI Review -> Merging -> Done`。",
 		"AI Review`，然后结束当前 turn，等待框架下发 `AI Review` continuation prompt",
-		"review 通过后，不进入 PR 或 Merging 流程；框架将 issue 推进到 `Pushing`",
-		"`Pushing`：AI Review 已通过；同一个 issue agent 推送目标分支、写 push evidence，并以 `Push: PASS` 结束",
+		"review 通过后，框架将 issue 推进到 `Merging`",
+		"`Merging`：AI Review 已通过；同一个 issue agent 走 PR skill 快路径、写 merge evidence，并以 `Merge: PASS` 结束",
+		"`Pushing`：保留给不走 PR 的直接推送收口场景；不是默认路径。",
 		"一个独立逻辑改动对应一个 commit；多类改动要拆成多个清晰 commit。",
-		"## Step 3：AI Review 与 Pushing handling",
-		"如果 review 通过，最终回复以 `Review: PASS` 开头；框架会把 issue 推进到 `Pushing`，并下发下一轮 `Pushing` continuation prompt",
-		"移动到 `AI Review` 的同一个实现 turn 不要输出 `Review: PASS` 或 `Push: PASS`",
-		"执行 `git push origin <target>`，只推送配置的目标分支。",
-		"最终回复以 `Push: PASS` 开头，包含目标分支、pushed commit 和验证摘要；框架会把 issue 移动到 `Done`。",
+		"## Step 3：AI Review 与 Merging handling",
+		"如果 review 通过，最终回复以 `Review: PASS` 开头；框架会把 issue 推进到 `Merging`，并下发下一轮 `Merging` continuation prompt",
+		"移动到 `AI Review` 的同一个实现 turn 不要输出 `Review: PASS` 或 `Merge: PASS`",
+		"使用 PR skill 快路径：确认 `pr_merge_flow.sh` 可执行，准备 PR title/body，运行脚本，等待 checks，并完成 squash merge / repo-root sync。",
+		"最终回复以 `Merge: PASS` 开头，包含 PR URL、merge commit、root status 和验证摘要；框架会把 issue 移动到 `Done`。",
 		"## 移动到 Done 前的完成门槛",
-		"issue 已处于 `Pushing`。",
+		"issue 已处于 `Merging`。",
 		"后续 continuation prompt 只用于阶段续航",
 		"正常简单任务不要为每个小命令更新 workpad",
 		"使用 `commit` skill 提交到当前目标分支",
@@ -291,13 +292,11 @@ func TestRepoWorkflowUsesLocalTargetBranchPushFlow(t *testing.T) {
 		"打开并遵守 `.codex/skills/land/SKILL.md`",
 		"只允许执行 `land` skill",
 		"完成 acceptance、validation、workpad、PR 创建/更新和 PR checks 后，移动到 `AI Review`",
-		"PR checks 绿色，branch 已 push，PR 已链接到 issue",
-		"repo-root sync 完成",
-		"由 PR skill 统一负责 push、PR 创建/更新、feedback sweep、checks、squash merge 和 repo-root sync",
-		"merge 完成后，更新 workpad merge evidence，并移动 issue 到 `Done`",
-		"进入 `Merging`，失败时进入 `Rework`",
-		"`Merging` 阶段走 `pr` skill 快路径",
-		"打开并遵守 `.codex/skills/pr/SKILL.md`",
+		"默认路径是 `Todo -> In Progress -> AI Review -> Pushing -> Done`。",
+		"review 通过后，不进入 PR 或 Merging 流程",
+		"`Pushing`：AI Review 已通过；同一个 issue agent",
+		"## Step 3：AI Review 与 Pushing handling",
+		"issue 已处于 `Pushing`。",
 		"PR metadata 必须完整，包括 `symphony` label",
 		"每一条 actionable reviewer comment",
 		"使用 Linear MCP/app 工具，不要使用 Linear CLI",
@@ -357,8 +356,9 @@ func TestRepoSkillsDocumentFastPullAndMergePassContract(t *testing.T) {
 	runText := string(runRaw)
 	for _, want := range []string{
 		"./bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md --once --no-tui --issue \"$ISSUE\" --merge-target main",
-		"`Todo -> In Progress -> AI Review -> Pushing -> Done`",
-		"Pushing pushes the target branch, records push evidence, and reports `Push: PASS`",
+		"`Todo -> In Progress -> AI Review -> Merging -> Done`",
+		"Merging uses the PR skill fast path, records merge evidence, and reports `Merge: PASS`",
+		"`Pushing` is only for explicitly direct-push issues",
 		"Issue work happens in the repo root on the configured target branch",
 	} {
 		if !strings.Contains(runText, want) {
@@ -369,8 +369,8 @@ func TestRepoSkillsDocumentFastPullAndMergePassContract(t *testing.T) {
 		".codex/skills/land/SKILL.md",
 		"`AI Review` 前必须创建/更新 PR",
 		"Use `run-once` only for diagnosis",
-		"PR creation waits for `Merging`",
-		"Agent reports `Merge: PASS`",
+		"`Todo -> In Progress -> AI Review -> Pushing -> Done`",
+		"Pushing pushes the target branch",
 	} {
 		if strings.Contains(runText, forbidden) {
 			t.Fatalf("symphony issue run skill still contains %q", forbidden)

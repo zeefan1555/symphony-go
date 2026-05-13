@@ -544,3 +544,29 @@ profile:
   permissions: write
   completion: merging
 ```
+
+## 2026-05-13: Pushing 与 Merging 要并存但默认走 Merging
+
+### 用户纠正
+
+- 用户指出：不是删除或禁用 `Pushing`，而是同时保留 `Pushing` 和 `Merging` 两种状态，平时默认先走 `Merging`。
+
+### 错误模式
+
+- 这是需求理解错误：我把“不要为了 Pushing 改测试”理解成全面回退 Pushing 语义，忽略了用户要保留直接 push 收口作为可选路径。
+
+### 防复犯规则
+
+- 调整状态流时必须区分“默认路径”和“保留兼容/可选状态”。
+- `AI Review` 通过后的默认自动推进应按当前 workflow 配置走 `Merging`，但已有或显式进入 `Pushing` 的 issue 仍应能执行 `Push: PASS -> Done`。
+- 文档和测试要同时表达主路径与兼容路径，不能用禁用式断言误伤保留状态。
+
+### 固定动作
+
+- 改状态机前先检查并保留这三类断言：
+
+```text
+default: AI Review -> Merging -> Done
+compat:  Pushing -> Done
+config:  active_states includes both Pushing and Merging when both are supported
+```
