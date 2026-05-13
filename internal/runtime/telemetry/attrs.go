@@ -8,11 +8,23 @@ import (
 )
 
 var metricLabelBlocklist = map[string]bool{
+	"additions":        true,
+	"changed_lines":    true,
 	"completed_at":     true,
+	"command":          true,
+	"cwd":              true,
+	"deletions":        true,
+	"file":             true,
+	"file_count":       true,
+	"file_locations":   true,
+	"files":            true,
+	"message":          true,
 	"continuation":     true,
 	"duration_ms":      true,
 	"issue_id":         true,
 	"issue_identifier": true,
+	"line_end":         true,
+	"line_start":       true,
 	"session_id":       true,
 	"started_at":       true,
 	"thread_id":        true,

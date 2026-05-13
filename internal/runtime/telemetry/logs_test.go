@@ -3,9 +3,12 @@ package telemetry
 import (
 	"context"
 	"testing"
+	"time"
 
+	"go.opentelemetry.io/otel/codes"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/embedded"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"symphony-go/internal/runtime/logging"
 )
@@ -237,6 +240,111 @@ func TestRecordLogExportsLifecycleEvents(t *testing.T) {
 	}
 }
 
+func TestRecordLogCreatesCuratedCodexTraceSpans(t *testing.T) {
+	provider, recorder := newTestProvider()
+	ctx, endRun := StartIssueRun(context.Background(), provider, map[string]any{
+		"issue_id":         "issue-1",
+		"issue_identifier": "ZEE-1",
+	})
+
+	RecordLog(ctx, provider, logging.Event{
+		Time:            "2026-05-13T12:00:00Z",
+		Event:           "codex_event",
+		Message:         "item/completed",
+		IssueID:         "issue-1",
+		IssueIdentifier: "ZEE-1",
+		Fields: map[string]any{
+			"phase": "implementer",
+			"stage": "running_agent",
+			"params": map[string]any{
+				"item": map[string]any{
+					"type":       "commandExecution",
+					"command":    "git diff --check",
+					"cwd":        "/tmp/work/ZEE-1",
+					"durationMs": 25,
+					"exitCode":   0,
+				},
+			},
+		},
+	})
+	RecordLog(ctx, provider, logging.Event{
+		Time:            "2026-05-13T12:00:01Z",
+		Event:           "codex_event",
+		Message:         "item/completed",
+		IssueID:         "issue-1",
+		IssueIdentifier: "ZEE-1",
+		Fields: map[string]any{
+			"phase": "implementer",
+			"stage": "running_agent",
+			"params": map[string]any{
+				"item": map[string]any{
+					"type": "fileChange",
+					"changes": []any{
+						map[string]any{"path": "/tmp/work/ZEE-1/SMOKE.md", "diff": "@@ -3 +3,2 @@\n-old\n+new\n+line\n"},
+					},
+				},
+			},
+		},
+	})
+	RecordLog(ctx, provider, logging.Event{
+		Time:            "2026-05-13T12:00:02Z",
+		Event:           "codex_event",
+		Message:         "item/completed",
+		IssueID:         "issue-1",
+		IssueIdentifier: "ZEE-1",
+		Fields: map[string]any{
+			"phase": "implementer",
+			"params": map[string]any{
+				"item": map[string]any{
+					"type":  "agentMessage",
+					"phase": "final_answer",
+					"text":  "Summary: done.",
+				},
+			},
+		},
+	})
+	endRun("done", nil)
+
+	spans := spansByName(recorder.Ended())
+	command := spans["step implementer/codex_command"]
+	if command == nil {
+		t.Fatalf("missing command span: %#v", spanNames(recorder.Ended()))
+	}
+	if got := command.EndTime().Sub(command.StartTime()); got != 25*time.Millisecond {
+		t.Fatalf("command span duration = %s, want 25ms", got)
+	}
+	commandAttrs := spanAttrs(command)
+	if commandAttrs["command"] != "git diff --check" || commandAttrs["command_status"] != "succeeded" || commandAttrs["outcome"] != "succeeded" {
+		t.Fatalf("command attrs = %#v", commandAttrs)
+	}
+	if command.Status().Code != codes.Ok {
+		t.Fatalf("command status = %v, want OK", command.Status())
+	}
+	file := spans["step implementer/codex_file_change"]
+	if file == nil {
+		t.Fatalf("missing file span: %#v", spanNames(recorder.Ended()))
+	}
+	fileAttrs := spanAttrs(file)
+	if fileAttrs["file_locations"] != "SMOKE.md:3-4" || fileAttrs["outcome"] != "success" {
+		t.Fatalf("file attrs = %#v", fileAttrs)
+	}
+	final := spans["step implementer/codex_final"]
+	if final == nil {
+		t.Fatalf("missing final span: %#v", spanNames(recorder.Ended()))
+	}
+	finalAttrs := spanAttrs(final)
+	if finalAttrs["message"] != "Summary: done." {
+		t.Fatalf("final attrs = %#v, want bounded final message", finalAttrs)
+	}
+	issueRun := spans["issue_run"]
+	if issueRun == nil {
+		t.Fatalf("missing issue_run span: %#v", spanNames(recorder.Ended()))
+	}
+	if command.Parent().SpanID() != issueRun.SpanContext().SpanID() || file.Parent().SpanID() != issueRun.SpanContext().SpanID() || final.Parent().SpanID() != issueRun.SpanContext().SpanID() {
+		t.Fatalf("curated codex spans should be children of issue_run")
+	}
+}
+
 func equalStrings(got, want []string) bool {
 	if len(got) != len(want) {
 		return false
@@ -247,6 +355,22 @@ func equalStrings(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+func spansByName(spans []sdktrace.ReadOnlySpan) map[string]sdktrace.ReadOnlySpan {
+	byName := map[string]sdktrace.ReadOnlySpan{}
+	for _, span := range spans {
+		byName[span.Name()] = span
+	}
+	return byName
+}
+
+func spanNames(spans []sdktrace.ReadOnlySpan) []string {
+	names := make([]string, 0, len(spans))
+	for _, span := range spans {
+		names = append(names, span.Name())
+	}
+	return names
 }
 
 type recordingLogger struct {

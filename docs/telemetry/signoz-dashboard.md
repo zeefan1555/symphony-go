@@ -246,6 +246,9 @@ issue_run
 ├─ step implementer/workspace_prepared
 ├─ step implementer/before_run_hook
 ├─ step implementer/prompt_rendered
+├─ step implementer/codex_command
+├─ step implementer/codex_file_change
+├─ step implementer/codex_final
 ├─ step implementer/codex_turn_completed
 ├─ step implementer/after_run_hook
 ├─ transition AI Review -> Pushing
@@ -261,6 +264,9 @@ SELECT
   duration_nano / 1000000 AS duration_ms,
   attributes_string['phase'] AS phase,
   attributes_string['stage'] AS stage,
+  attributes_string['message'] AS message,
+  attributes_string['command'] AS command,
+  attributes_string['file_locations'] AS file_locations,
   attributes_string['from_state'] AS from_state,
   attributes_string['to_state'] AS to_state,
   attributes_string['outcome'] AS outcome
@@ -275,6 +281,9 @@ ORDER BY timestamp;
 issue_run with full run duration
 transition Todo -> In Progress
 step .../codex_turn_completed with real duration_ms
+step .../codex_command with command duration_ms
+step .../codex_file_change with file_locations and changed_lines
+step .../codex_final with bounded message
 transition AI Review -> Pushing
 transition Pushing -> Done
 ```
