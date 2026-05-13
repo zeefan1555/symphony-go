@@ -120,6 +120,12 @@
 - 旧顶层 `internal/orchestrator`、`internal/workspace`、`internal/codex`、`internal/workflow`、`internal/generated`、`internal/types`、`internal/config`、`internal/logging`、`internal/observability`、`internal/issuetracker` 与 `internal/control/hertz*` 已删除，不得重新引入；新增业务逻辑必须落到上述长期边界。
 - 不使用 `adapter` 或 `platform` 作为长期目录名；如果能力无法归入现有语义根，先更新 PRD 或创建 follow-up，不临时新增顶层目录。
 
+### 控制面接口必须 IDL-first
+
+- 新增对外或模块间稳定控制面接口时，必须先在 `idl/main.proto` 注册 RPC，并在对应平铺领域 IDL 中新增专属 `XxxReq` / `XxxResp` 契约；不要先手写 HTTP 路由、handler、service 方法或临时 JSON 入口。
+- 修改既有接口时，可以直接修改原有 IDL 契约、生成模型和对应手写实现；不要为了一个既有接口的字段或语义调整另起新 RPC。
+- 每个新增接口都要能从 IDL 追溯到所属阶段或模块，方便 review、生成代码和后续管理；如果所属模块不明确，先补 PRD / follow-up 澄清，不临时绕过 IDL。
+
 ### 测试和构建
 
 - 验证本仓 Go 代码时优先使用 `./test.sh` 和 `./build.sh`。

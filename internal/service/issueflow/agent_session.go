@@ -74,14 +74,29 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 		}},
 		AfterTurn: func(ctx context.Context, result codex.Result, turnCount int) (codex.TurnPrompt, bool, error) {
 			turnStartIssue := currentIssue
-			telemetry.RecordStep(ctx, rt.Telemetry, string(phase), "codex_turn_completed", "success", map[string]any{
+			turnPhase := nextWorkerPhase(turnStartIssue)
+			turnStage := nextWorkerStage(turnStartIssue, turnCount)
+			durationMS := result.Duration.Milliseconds()
+			telemetry.RecordStepInterval(ctx, rt.Telemetry, string(turnPhase), "codex_turn_completed", "success", result.StartedAt, result.CompletedAt, map[string]any{
 				"issue_id":         currentIssue.ID,
 				"issue_identifier": currentIssue.Identifier,
 				"session_id":       result.SessionID,
 				"turn_id":          result.TurnID,
 				"turn_count":       turnCount,
+				"continuation":     result.Continuation,
+				"stage":            string(turnStage),
+				"state":            turnStartIssue.State,
+				"duration_ms":      durationMS,
 			}, nil)
-			logIssue(ctx, rt, currentIssue, "codex_turn_completed", "Codex turn completed", stepLogFields(phase, "codex_turn_completed", "success", map[string]any{"session_id": result.SessionID}))
+			logIssue(ctx, rt, currentIssue, "codex_turn_completed", "Codex turn completed", stepLogFields(turnPhase, "codex_turn_completed", "success", map[string]any{
+				"session_id":   result.SessionID,
+				"turn_id":      result.TurnID,
+				"turn_count":   turnCount,
+				"continuation": result.Continuation,
+				"stage":        string(turnStage),
+				"state":        turnStartIssue.State,
+				"duration_ms":  durationMS,
+			}))
 			refreshed, err := rt.Tracker.FetchIssue(ctx, currentIssue.ID)
 			if err != nil {
 				attemptResult = Result{Outcome: OutcomeRetryFailure}

@@ -490,3 +490,57 @@ docker exec signoz-clickhouse clickhouse-client --query "SELECT count() FROM sig
 ```bash
 docker exec signoz-clickhouse clickhouse-client --query "SELECT name, span_id, parent_span_id FROM signoz_traces.signoz_index_v3 WHERE trace_id='<TRACE_ID>' ORDER BY timestamp"
 ```
+
+## 2026-05-13: Workflow 配置先按场景分层
+
+### 用户纠正
+
+- 用户指出：不应该把 PR/Push 抽成全局 delivery 维度；配置应先表达工作场景，例如写代码、排查问题、尝试新东西，再在写代码场景里选择 Pushing 或 Merging 收口方式。
+
+### 错误模式
+
+- 这是技术判断错误：我把“如何交付代码”提前提升为全局主轴，忽略了用户真正要配置的是不同工作场景的执行边界和能力组合。
+
+### 防复犯规则
+
+- 设计 Symphony workflow 配置时，先区分任务场景，再给每个场景定义 workspace、写权限、验证、状态流和收口策略。
+- `Pushing` / `Merging` 只属于写代码场景的收口选项，不应影响只读排查或本地尝新场景。
+- 排查问题场景默认只读、证据优先；尝新场景默认允许本地安装和体验验证，但不自动进入正式 push/merge。
+
+### 固定动作
+
+- 讨论 workflow 配置前先画出场景矩阵：
+
+```text
+coding:   write + commit + review + pushing|merging
+triage:   read-only + evidence + workpad
+try-local: install/run locally + artifact/effect proof + no default push/merge
+```
+
+## 2026-05-13: 场景配置要集中在一个 profile 对象
+
+### 用户纠正
+
+- 用户指出：把 `coding`、`triage`、`try_local` 拆成三个配置块太分散；期望在一个配置里把场景、权限、workspace 和收口方式配好。
+
+### 错误模式
+
+- 这是配置设计错误：我虽然修正了场景优先的维度，但又把每个场景拆成独立顶层块，导致配置入口分散、组合关系不直观。
+
+### 防复犯规则
+
+- 设计 workflow 场景配置时，优先使用单一 `profile` / `scenario` 对象承载当前运行模式。
+- 场景差异应通过同一个对象内的字段表达，例如 `profile.kind`、`profile.workspace`、`profile.permissions`、`profile.completion`。
+- 不要把 mutually exclusive 的场景拆成多个同时存在的顶层配置，除非用户明确要预设库或多 profile registry。
+
+### 固定动作
+
+- 优先提出集中式配置草案：
+
+```yaml
+profile:
+  kind: coding
+  workspace: per_issue
+  permissions: write
+  completion: merging
+```

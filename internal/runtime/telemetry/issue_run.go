@@ -10,9 +10,15 @@ import (
 
 func StartIssueRun(ctx context.Context, provider Facade, fields map[string]any) (context.Context, EndFunc) {
 	provider = activeFacade(provider)
+	fields = cloneFields(fields)
 	ctx, span := provider.Tracer().Start(ctx, "issue_run", trace.WithAttributes(Attrs(fields)...))
-	span.End()
 	return ctx, func(outcome string, err error) {
+		if outcome != "" {
+			fields["outcome"] = outcome
+			span.SetAttributes(Attrs(map[string]any{"outcome": outcome})...)
+		}
+		recordSpanError(span, err)
+		span.End()
 		recordIssueRun(ctx, provider, outcome, fields)
 	}
 }
@@ -63,6 +69,22 @@ func RecordStep(ctx context.Context, provider Facade, phase, step, outcome strin
 	recordSpanError(span, err)
 	span.End()
 	recordStepMetrics(ctx, provider, 0, fields, err)
+}
+
+func RecordStepInterval(ctx context.Context, provider Facade, phase, step, outcome string, startedAt, completedAt time.Time, fields map[string]any, err error) {
+	provider = activeFacade(provider)
+	if startedAt.IsZero() {
+		RecordStep(ctx, provider, phase, step, outcome, fields, err)
+		return
+	}
+	if completedAt.IsZero() || completedAt.Before(startedAt) {
+		completedAt = startedAt
+	}
+	fields = stepFields(phase, step, outcome, fields)
+	_, span := provider.Tracer().Start(ctx, "step "+phase+"/"+step, trace.WithAttributes(Attrs(fields)...), trace.WithTimestamp(startedAt))
+	recordSpanError(span, err)
+	span.End(trace.WithTimestamp(completedAt))
+	recordStepMetrics(ctx, provider, completedAt.Sub(startedAt), fields, err)
 }
 
 func recordSpanError(span trace.Span, err error) {

@@ -51,11 +51,15 @@ type Event struct {
 }
 
 type Result struct {
-	SessionID  string
-	ThreadID   string
-	TurnID     string
-	PID        int
-	WorkerHost string
+	SessionID    string
+	ThreadID     string
+	TurnID       string
+	PID          int
+	WorkerHost   string
+	StartedAt    time.Time
+	CompletedAt  time.Time
+	Duration     time.Duration
+	Continuation bool
 }
 
 type SessionRequest struct {
@@ -150,51 +154,39 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 		if prompt.Issue != nil {
 			turnIssue = *prompt.Issue
 		}
+		startedAt := time.Now()
 		turnID, err := session.startTurn(turnStartID+turnIndex, request.WorkspacePath, prompt.Text, turnIssue, r.Config.ApprovalPolicy, r.turnSandboxPolicy(request.WorkspacePath, turnIssue, request.WorkerHost))
 		if err != nil {
 			return sessionResult, err
 		}
 		result := Result{
-			SessionID:  session.threadID + "-" + turnID,
-			ThreadID:   session.threadID,
-			TurnID:     turnID,
-			PID:        session.pid(),
-			WorkerHost: session.workerHost,
+			SessionID:    session.threadID + "-" + turnID,
+			ThreadID:     session.threadID,
+			TurnID:       turnID,
+			PID:          session.pid(),
+			WorkerHost:   session.workerHost,
+			StartedAt:    startedAt,
+			Continuation: prompt.Continuation,
 		}
 		sessionResult.SessionID = result.SessionID
 		sessionResult.ThreadID = result.ThreadID
 		sessionResult.PID = result.PID
-		sessionResult.Turns = append(sessionResult.Turns, result)
 		if onEvent != nil {
-			payload := map[string]any{
-				"session_id":   result.SessionID,
-				"thread_id":    result.ThreadID,
-				"turn_id":      result.TurnID,
-				"pid":          result.PID,
-				"turn_count":   turnIndex + 1,
-				"continuation": prompt.Continuation,
-			}
-			if result.WorkerHost != "" {
-				payload["worker_host"] = result.WorkerHost
-			}
-			onEvent(Event{Name: "turn_started", Payload: payload})
+			onEvent(Event{Name: "turn_started", Payload: turnPayload(result, turnIndex+1, prompt.Continuation)})
 		}
 		if err := session.awaitTurn(ctx, time.Duration(r.Config.TurnTimeoutMS)*time.Millisecond, onEvent); err != nil {
+			completedAt := time.Now()
+			result.CompletedAt = completedAt
+			result.Duration = completedAt.Sub(result.StartedAt)
+			sessionResult.Turns = append(sessionResult.Turns, result)
 			return sessionResult, err
 		}
+		completedAt := time.Now()
+		result.CompletedAt = completedAt
+		result.Duration = completedAt.Sub(result.StartedAt)
+		sessionResult.Turns = append(sessionResult.Turns, result)
 		if onEvent != nil {
-			payload := map[string]any{
-				"session_id":   result.SessionID,
-				"thread_id":    result.ThreadID,
-				"turn_id":      result.TurnID,
-				"pid":          result.PID,
-				"turn_count":   turnIndex + 1,
-				"continuation": prompt.Continuation,
-			}
-			if result.WorkerHost != "" {
-				payload["worker_host"] = result.WorkerHost
-			}
-			onEvent(Event{Name: "turn_completed", Payload: payload})
+			onEvent(Event{Name: "turn_completed", Payload: turnPayload(result, turnIndex+1, prompt.Continuation)})
 		}
 		if request.AfterTurn == nil {
 			continue
@@ -209,6 +201,28 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 		request.Prompts = append(request.Prompts, nextPrompt)
 	}
 	return sessionResult, nil
+}
+
+func turnPayload(result Result, turnCount int, continuation bool) map[string]any {
+	payload := map[string]any{
+		"session_id":   result.SessionID,
+		"thread_id":    result.ThreadID,
+		"turn_id":      result.TurnID,
+		"pid":          result.PID,
+		"turn_count":   turnCount,
+		"continuation": continuation,
+	}
+	if !result.StartedAt.IsZero() {
+		payload["started_at"] = result.StartedAt.Format(time.RFC3339Nano)
+	}
+	if !result.CompletedAt.IsZero() {
+		payload["completed_at"] = result.CompletedAt.Format(time.RFC3339Nano)
+		payload["duration_ms"] = result.Duration.Milliseconds()
+	}
+	if result.WorkerHost != "" {
+		payload["worker_host"] = result.WorkerHost
+	}
+	return payload
 }
 
 func (r *Runner) startSession(ctx context.Context, workspacePath string, workerHost string) (*session, error) {
