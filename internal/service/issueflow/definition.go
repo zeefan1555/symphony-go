@@ -5,6 +5,7 @@ const (
 	StateTodo        = "Todo"
 	StateInProgress  = "In Progress"
 	StateAIReview    = "AI Review"
+	StatePushing     = "Pushing"
 	StateMerging     = "Merging"
 	StateDone        = "Done"
 	StateRework      = "Rework"
@@ -43,7 +44,7 @@ type Definition struct {
 func DefinitionForTrunk() Definition {
 	return Definition{
 		Name:       "issue-flow-trunk",
-		Purpose:    "Human-readable trunk for the issue lifecycle: manual unblock, agent implementation, AI review, merge, and terminal cleanup.",
+		Purpose:    "Human-readable trunk for the issue lifecycle: manual unblock, agent implementation, AI review, push, and terminal cleanup.",
 		EntryPoint: "issueflow.RunIssueTrunk",
 		Steps: []Step{
 			{
@@ -71,9 +72,9 @@ func DefinitionForTrunk() Definition {
 				CoreInterface: "issueflow.RunIssueTrunk",
 			},
 			{
-				Name:          StateMerging,
+				Name:          StatePushing,
 				Actor:         ActorAgent,
-				Purpose:       "Run the merge protocol after review passes and report merge evidence.",
+				Purpose:       "Push the configured target branch after review passes and report push evidence.",
 				CoreInterface: "issueflow.RunIssueTrunk",
 			},
 			{
@@ -110,19 +111,19 @@ func DefinitionForTrunk() Definition {
 			},
 			{
 				From:            StateAIReview,
-				To:              StateMerging,
+				To:              StatePushing,
 				Actor:           ActorOrchestrator,
 				CoreInterface:   "stateWriteExtensionEnabled + reviewFinalPasses",
 				SuccessSignal:   "Reviewer final message starts with Review: PASS.",
 				FailureHandling: "Reviewer findings move the issue to Rework or Human Review; non-auto review policy leaves the issue for workflow tooling or an operator.",
 			},
 			{
-				From:            StateMerging,
+				From:            StatePushing,
 				To:              StateDone,
 				Actor:           ActorOrchestrator,
-				CoreInterface:   "stateWriteExtensionEnabled + mergeFinalPasses",
-				SuccessSignal:   "Merge final message starts with Merge: PASS.",
-				FailureHandling: "Without Merge: PASS or auto review policy the issue stays active or waits for workflow tooling/operator action.",
+				CoreInterface:   "stateWriteExtensionEnabled + pushFinalPasses",
+				SuccessSignal:   "Push final message starts with Push: PASS.",
+				FailureHandling: "Without Push: PASS or auto review policy the issue stays active or waits for workflow tooling/operator action.",
 			},
 		},
 		FailurePolicy: []string{

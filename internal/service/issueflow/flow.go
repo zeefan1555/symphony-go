@@ -136,6 +136,13 @@ func mergingStage(turn int) RunStage {
 	return StageContinuingMerging
 }
 
+func pushingStage(turn int) RunStage {
+	if turn <= 1 {
+		return StageRunningAgent
+	}
+	return StageContinuingPushing
+}
+
 func isActive(state string, active []string) bool {
 	if len(active) == 0 {
 		return true
@@ -172,9 +179,13 @@ func mergingStatePasses(issue issuemodel.Issue, lastAgentMessage string) bool {
 	return stateNameIn(issue.State, []string{StateMerging}) && mergeFinalPasses(lastAgentMessage)
 }
 
+func pushingStatePasses(issue issuemodel.Issue, lastAgentMessage string) bool {
+	return stateNameIn(issue.State, []string{StatePushing}) && pushFinalPasses(lastAgentMessage)
+}
+
 func nextWorkerPhase(issue issuemodel.Issue) AgentPhase {
 	switch {
-	case stateNameIn(issue.State, []string{StateAIReview, StateMerging}):
+	case stateNameIn(issue.State, []string{StateAIReview, StatePushing, StateMerging}):
 		return PhaseReviewer
 	default:
 		return PhaseImplementer
@@ -185,6 +196,8 @@ func nextWorkerPrompt(issue issuemodel.Issue) string {
 	switch {
 	case stateNameIn(issue.State, []string{StateAIReview}):
 		return AIReviewContinuationPromptText
+	case stateNameIn(issue.State, []string{StatePushing}):
+		return PushingContinuationPromptText
 	case stateNameIn(issue.State, []string{StateMerging}):
 		return MergingContinuationPromptText
 	default:
@@ -196,6 +209,8 @@ func nextWorkerStage(issue issuemodel.Issue, turn int) RunStage {
 	switch {
 	case stateNameIn(issue.State, []string{StateAIReview}):
 		return aiReviewStage(turn)
+	case stateNameIn(issue.State, []string{StatePushing}):
+		return pushingStage(turn)
 	case stateNameIn(issue.State, []string{StateMerging}):
 		return mergingStage(turn)
 	default:
@@ -204,14 +219,26 @@ func nextWorkerStage(issue issuemodel.Issue, turn int) RunStage {
 }
 
 func applyReviewPass(ctx context.Context, rt Runtime, issue issuemodel.Issue) (issuemodel.Issue, error) {
-	_, endTransition := telemetry.StartTransition(ctx, rt.Telemetry, StateAIReview, StateMerging, issueFields(issue))
-	if err := rt.Tracker.UpdateIssueState(ctx, issue.ID, StateMerging); err != nil {
+	_, endTransition := telemetry.StartTransition(ctx, rt.Telemetry, StateAIReview, StatePushing, issueFields(issue))
+	if err := rt.Tracker.UpdateIssueState(ctx, issue.ID, StatePushing); err != nil {
 		endTransition("error", err)
 		return issue, err
 	}
-	issue.State = StateMerging
+	issue.State = StatePushing
 	endTransition("success", nil)
-	logIssue(ctx, rt, issue, "state_changed", "AI Review -> Merging", nil)
+	logIssue(ctx, rt, issue, "state_changed", "AI Review -> Pushing", nil)
+	return issue, nil
+}
+
+func applyPushPass(ctx context.Context, rt Runtime, issue issuemodel.Issue) (issuemodel.Issue, error) {
+	_, endTransition := telemetry.StartTransition(ctx, rt.Telemetry, StatePushing, StateDone, issueFields(issue))
+	if err := rt.Tracker.UpdateIssueState(ctx, issue.ID, StateDone); err != nil {
+		endTransition("error", err)
+		return issue, err
+	}
+	issue.State = StateDone
+	endTransition("success", nil)
+	logIssue(ctx, rt, issue, "state_changed", "Pushing -> Done", nil)
 	return issue, nil
 }
 

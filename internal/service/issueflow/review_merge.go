@@ -26,6 +26,11 @@ func mergeFinalPasses(text string) bool {
 	return strings.HasPrefix(normalized, "merge: pass")
 }
 
+func pushFinalPasses(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	return strings.HasPrefix(normalized, "push: pass")
+}
+
 func CompletedAgentMessageText(event codex.Event) string {
 	if event.Name != "item/completed" {
 		return ""

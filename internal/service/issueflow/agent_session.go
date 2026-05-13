@@ -102,6 +102,19 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 					return codex.TurnPrompt{}, false, err
 				}
 			}
+			if pushingStatePasses(currentIssue, lastAgentMessage) {
+				if !stateWriteExtensionEnabled(rt) {
+					attemptResult = Result{Outcome: OutcomeWaitHuman}
+					return codex.TurnPrompt{}, false, nil
+				}
+				currentIssue, err = applyPushPass(ctx, rt, currentIssue)
+				if err != nil {
+					attemptResult = Result{Outcome: OutcomeRetryFailure}
+					return codex.TurnPrompt{}, false, err
+				}
+				attemptResult = Result{Outcome: OutcomeDone}
+				return codex.TurnPrompt{}, false, nil
+			}
 			if mergingStatePasses(currentIssue, lastAgentMessage) {
 				if !stateWriteExtensionEnabled(rt) {
 					attemptResult = Result{Outcome: OutcomeWaitHuman}
@@ -165,6 +178,8 @@ func stageMessage(stage RunStage) string {
 		return "continuing implementation"
 	case StageContinuingAIReview:
 		return "continuing in AI Review"
+	case StageContinuingPushing:
+		return "continuing in Pushing"
 	case StageContinuingMerging:
 		return "continuing in Merging"
 	default:

@@ -36,7 +36,7 @@ func TestDefinitionForTrunkShowsHumanReadableMainline(t *testing.T) {
 	if def.EntryPoint != "issueflow.RunIssueTrunk" {
 		t.Fatalf("EntryPoint = %q, want issueflow.RunIssueTrunk", def.EntryPoint)
 	}
-	wantSteps := []string{StateBlocked, StateTodo, StateInProgress, StateAIReview, StateMerging, StateDone}
+	wantSteps := []string{StateBlocked, StateTodo, StateInProgress, StateAIReview, StatePushing, StateDone}
 	if len(def.Steps) != len(wantSteps) {
 		t.Fatalf("steps = %#v, want %d trunk steps", def.Steps, len(wantSteps))
 	}
@@ -210,7 +210,7 @@ func TestRunIssueTrunkWaitsForBlockedAndInReview(t *testing.T) {
 	}
 }
 
-func TestRunIssueTrunkAIReviewPassContinuesToMerging(t *testing.T) {
+func TestRunIssueTrunkAIReviewPassContinuesToPushing(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "review", State: StateAIReview}
 	tracker := &fakeTracker{issue: issue}
 	runner := &fakeRunner{agentMessage: "Review: PASS\nlooks good"}
@@ -223,15 +223,15 @@ func TestRunIssueTrunkAIReviewPassContinuesToMerging(t *testing.T) {
 	if result.Outcome != OutcomeRetryContinuation {
 		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
 	}
-	if tracker.updateState != StateMerging {
-		t.Fatalf("UpdateIssueState = %q, want Merging", tracker.updateState)
+	if tracker.updateState != StatePushing {
+		t.Fatalf("UpdateIssueState = %q, want Pushing", tracker.updateState)
 	}
-	if len(runner.prompts) != 2 || runner.prompts[1].Text != MergingContinuationPromptText || !runner.prompts[1].Continuation {
-		t.Fatalf("prompts = %#v, want Merging continuation", runner.prompts)
+	if len(runner.prompts) != 2 || runner.prompts[1].Text != PushingContinuationPromptText || !runner.prompts[1].Continuation {
+		t.Fatalf("prompts = %#v, want Pushing continuation", runner.prompts)
 	}
 }
 
-func TestRunIssueTrunkRecordsAIReviewToMergingSpan(t *testing.T) {
+func TestRunIssueTrunkRecordsAIReviewToPushingSpan(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "review", State: StateAIReview}
 	tracker := &fakeTracker{issue: issue}
 	runner := &fakeRunner{agentMessage: "Review: PASS\nlooks good"}
@@ -246,7 +246,7 @@ func TestRunIssueTrunkRecordsAIReviewToMergingSpan(t *testing.T) {
 	if result.Outcome != OutcomeRetryContinuation {
 		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
 	}
-	assertEndedSpanNames(t, recorder, "transition AI Review -> Merging", "issue_run")
+	assertEndedSpanNames(t, recorder, "transition AI Review -> Pushing", "issue_run")
 }
 
 func TestRunIssueTrunkReusesOneSessionForContinuation(t *testing.T) {
@@ -319,6 +319,24 @@ func TestRunIssueTrunkMergePassMarksDone(t *testing.T) {
 	}
 }
 
+func TestRunIssueTrunkPushPassMarksDone(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "push", State: StatePushing}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{agentMessage: "Push: PASS\npushed"}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeDone {
+		t.Fatalf("outcome = %q, want done", result.Outcome)
+	}
+	if tracker.updateState != StateDone {
+		t.Fatalf("UpdateIssueState = %q, want Done", tracker.updateState)
+	}
+}
+
 func TestRunIssueTrunkRecordsMergingToDoneSpan(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "merge", State: StateMerging}
 	tracker := &fakeTracker{issue: issue}
@@ -335,6 +353,24 @@ func TestRunIssueTrunkRecordsMergingToDoneSpan(t *testing.T) {
 		t.Fatalf("outcome = %q, want done", result.Outcome)
 	}
 	assertEndedSpanNames(t, recorder, "transition Merging -> Done", "issue_run")
+}
+
+func TestRunIssueTrunkRecordsPushingToDoneSpan(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "push", State: StatePushing}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{agentMessage: "Push: PASS\npushed"}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	testTelemetry, recorder := newIssueFlowTestTelemetry()
+	rt.Telemetry = testTelemetry
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeDone {
+		t.Fatalf("outcome = %q, want done", result.Outcome)
+	}
+	assertEndedSpanNames(t, recorder, "transition Pushing -> Done", "issue_run")
 }
 
 func TestRunIssueTrunkReviewPassDoesNotWriteStateWhenExtensionDisabled(t *testing.T) {
@@ -359,6 +395,24 @@ func TestRunIssueTrunkMergePassDoesNotWriteStateWhenExtensionDisabled(t *testing
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "manual merge", State: StateMerging}
 	tracker := &fakeTracker{issue: issue}
 	rt := testRuntime(t, tracker, &fakeRunner{agentMessage: "Merge: PASS"}, &fakeObserver{})
+	rt.Workflow.Config.Agent.ReviewPolicy.Mode = "human"
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeWaitHuman {
+		t.Fatalf("outcome = %q, want human wait", result.Outcome)
+	}
+	if tracker.updateState != "" {
+		t.Fatalf("UpdateIssueState = %q, want no extension state write", tracker.updateState)
+	}
+}
+
+func TestRunIssueTrunkPushPassDoesNotWriteStateWhenExtensionDisabled(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "manual push", State: StatePushing}
+	tracker := &fakeTracker{issue: issue}
+	rt := testRuntime(t, tracker, &fakeRunner{agentMessage: "Push: PASS"}, &fakeObserver{})
 	rt.Workflow.Config.Agent.ReviewPolicy.Mode = "human"
 
 	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
@@ -706,7 +760,7 @@ func testRuntime(t *testing.T, tracker *fakeTracker, runner *fakeRunner, observe
 		Workflow: &runtimeconfig.Workflow{
 			Config: runtimeconfig.Config{
 				Tracker: runtimeconfig.TrackerConfig{
-					ActiveStates:   []string{StateTodo, StateInProgress, StateAIReview, StateMerging, StateHumanReview},
+					ActiveStates:   []string{StateTodo, StateInProgress, StateAIReview, StatePushing, StateMerging, StateHumanReview},
 					TerminalStates: []string{StateDone},
 				},
 				Agent: runtimeconfig.AgentConfig{

@@ -248,23 +248,25 @@ func TestRepoWorkflowUsesLocalTargetBranchPushFlow(t *testing.T) {
 	}
 	text := string(raw)
 	for _, want := range []string{
-		"active_states:\n    - Todo\n    - In Progress\n    - AI Review\n    - Rework",
+		"active_states:\n    - Todo\n    - In Progress\n    - AI Review\n    - Pushing\n    - Rework",
 		"workspace:\n  mode: static_cwd\n  cwd: ..",
 		"只在当前 repo root 中工作。不要为 issue 创建 git worktree、scratch checkout、临时 clone 或 PR 分支。",
 		"`merge.target` 是本 workflow 的目标开发分支",
 		"所有实现、验证、commit 和 push 都在配置的目标分支上完成。",
 		"同步目标分支时只做 fast-forward",
-		"`push`：AI Review 通过后推送目标分支到远端。",
+		"`push`：`Pushing` 阶段推送目标分支到远端。",
 		"不要打开或执行 `.codex/skills/pr/SKILL.md`",
-		"默认路径是 `Todo -> In Progress -> AI Review -> Done`。",
+		"默认路径是 `Todo -> In Progress -> AI Review -> Pushing -> Done`。",
 		"AI Review`，并在同一个 session 中继续审查 issue、workpad、本地 diff、commit range 和验证证据",
-		"review 通过后，不进入 PR 或 Merging 流程；直接推送当前目标分支到远端",
-		"AI Review`：本地 commit 和验证已完成，同一个 issue agent 继续审核；通过后 push 目标分支并进入 `Done`",
+		"review 通过后，不进入 PR 或 Merging 流程；框架将 issue 推进到 `Pushing`",
+		"`Pushing`：AI Review 已通过；同一个 issue agent 推送目标分支、写 push evidence，并以 `Push: PASS` 结束",
 		"一个独立逻辑改动对应一个 commit；多类改动要拆成多个清晰 commit。",
-		"## Step 3：AI Review 与 push handling",
+		"## Step 3：AI Review 与 Pushing handling",
+		"如果 review 通过，最终回复以 `Review: PASS` 开头；框架会把 issue 推进到 `Pushing`",
 		"执行 `git push origin <target>`，只推送配置的目标分支。",
-		"最终回复以 `Push: PASS` 开头",
+		"最终回复以 `Push: PASS` 开头，包含目标分支、pushed commit 和验证摘要；框架会把 issue 移动到 `Done`。",
 		"## 移动到 Done 前的完成门槛",
+		"issue 已处于 `Pushing`。",
 		"后续 continuation prompt 只用于阶段续航",
 		"正常简单任务不要为每个小命令更新 workpad",
 		"使用 `commit` skill 提交到当前目标分支",
@@ -354,8 +356,8 @@ func TestRepoSkillsDocumentFastPullAndMergePassContract(t *testing.T) {
 	runText := string(runRaw)
 	for _, want := range []string{
 		"./bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md --once --no-tui --issue \"$ISSUE\" --merge-target main",
-		"`Todo -> In Progress -> AI Review -> Done`",
-		"Agent reports `Push: PASS` after pushing the target branch and moving the issue to `Done`",
+		"`Todo -> In Progress -> AI Review -> Pushing -> Done`",
+		"Pushing pushes the target branch, records push evidence, and reports `Push: PASS`",
 		"Issue work happens in the repo root on the configured target branch",
 	} {
 		if !strings.Contains(runText, want) {
