@@ -403,6 +403,74 @@ printf '%s\n' '{"method":"turn/completed"}'
 	}
 }
 
+func TestRunnerRecordsTurnDuration(t *testing.T) {
+	workspacePath := t.TempDir()
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	trace := filepath.Join(t.TempDir(), "trace.jsonl")
+	script := `#!/bin/sh
+trace="$TRACE_FILE"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-duration"}}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-duration"}}}'
+sleep 0.02
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TRACE_FILE", trace)
+	runner := New(runtimeconfig.CodexConfig{
+		Command:        fake,
+		ApprovalPolicy: "never",
+		ThreadSandbox:  "workspace-write",
+		TurnTimeoutMS:  5000,
+		ReadTimeoutMS:  5000,
+	})
+	var events []Event
+	result, err := runner.RunSession(context.Background(), SessionRequest{
+		WorkspacePath: workspacePath,
+		Issue:         issuemodel.Issue{Identifier: "ZEE-DURATION", Title: "duration"},
+		Prompts:       []TurnPrompt{{Text: "measure duration"}},
+	}, func(event Event) {
+		events = append(events, event)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Turns) != 1 {
+		t.Fatalf("turns = %d, want 1", len(result.Turns))
+	}
+	turn := result.Turns[0]
+	if turn.StartedAt.IsZero() || turn.CompletedAt.IsZero() || turn.Duration <= 0 {
+		t.Fatalf("turn timing = started %s completed %s duration %s", turn.StartedAt, turn.CompletedAt, turn.Duration)
+	}
+	started := eventPayload(events, "turn_started")
+	completed := eventPayload(events, "turn_completed")
+	if started["started_at"] == "" || completed["completed_at"] == "" {
+		t.Fatalf("events = %#v, want started_at and completed_at", events)
+	}
+	if duration, ok := completed["duration_ms"].(int64); !ok || duration <= 0 {
+		t.Fatalf("turn_completed payload = %#v, want positive duration_ms", completed)
+	}
+}
+
+func eventPayload(events []Event, name string) map[string]any {
+	for _, event := range events {
+		if event.Name == name {
+			return event.Payload
+		}
+	}
+	return nil
+}
+
 func TestRunnerAdvertisesAndHandlesLinearGraphQLDynamicTool(t *testing.T) {
 	workspacePath := t.TempDir()
 	fake := filepath.Join(t.TempDir(), "fake-codex")

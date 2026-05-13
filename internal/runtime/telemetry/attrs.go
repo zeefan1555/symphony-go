@@ -8,10 +8,15 @@ import (
 )
 
 var metricLabelBlocklist = map[string]bool{
+	"completed_at":     true,
+	"continuation":     true,
+	"duration_ms":      true,
 	"issue_id":         true,
 	"issue_identifier": true,
 	"session_id":       true,
+	"started_at":       true,
 	"thread_id":        true,
+	"turn_count":       true,
 	"turn_id":          true,
 	"workspace_path":   true,
 }

@@ -221,9 +221,13 @@ error
 
 用途：从失败日志进入对应 Trace。日志里可以包含 `issue_identifier`，因为 Logs 用于检索和 drilldown，不作为 metric label。
 
-## Trace drilldown
+## Issue Timeline drilldown
 
-### 按 issue 查一次 run
+单个 issue 的耗时分析统一走 Trace 和 Logs，不走 Metrics。查询入口是 `issue_identifier=<ISSUE>`；Metrics 仍只看全局聚合和低基数字段。
+
+### Trace timeline
+
+按 issue 查一次 run：
 
 数据源：Traces
 
@@ -251,7 +255,15 @@ issue_run
 ClickHouse 查询示例：
 
 ```sql
-SELECT name, attributes_string['from_state'], attributes_string['to_state'], attributes_string['outcome']
+SELECT
+  timestamp,
+  name,
+  duration_nano / 1000000 AS duration_ms,
+  attributes_string['phase'] AS phase,
+  attributes_string['stage'] AS stage,
+  attributes_string['from_state'] AS from_state,
+  attributes_string['to_state'] AS to_state,
+  attributes_string['outcome'] AS outcome
 FROM signoz_traces.signoz_index_v3
 WHERE attributes_string['issue_identifier'] = 'ZEE-xxx'
 ORDER BY timestamp;
@@ -260,12 +272,14 @@ ORDER BY timestamp;
 预期至少包含：
 
 ```text
+issue_run with full run duration
 transition Todo -> In Progress
+step .../codex_turn_completed with real duration_ms
 transition AI Review -> Pushing
 transition Pushing -> Done
 ```
 
-## Logs drilldown
+### Logs timeline
 
 SigNoz Logs 是 issue lifecycle 的统一查询入口。本地 `.human.log` / `.jsonl` 只作为本机 fallback/debug，不作为 smoke 主验收事实源。
 
@@ -281,13 +295,46 @@ issue_identifier = ZEE-xxx
 ClickHouse 查询示例：
 
 ```sql
-SELECT body, trace_id
+SELECT
+  timestamp,
+  attributes_string['event'] AS event,
+  body,
+  attributes_number['duration_ms'] AS duration_ms,
+  attributes_string['command'] AS command,
+  attributes_string['command_status'] AS command_status,
+  attributes_string['file_locations'] AS file_locations,
+  attributes_number['changed_lines'] AS changed_lines,
+  trace_id,
+  span_id
 FROM signoz_logs.logs_v2
 WHERE attributes_string['issue_identifier'] = 'ZEE-xxx'
 ORDER BY timestamp;
 ```
 
-预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`state_changed`、`codex_turn_completed`，以及对应收口阶段的 `review_pass` / `push_pass`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
+预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`codex_turn_started`、`codex_turn_completed`、`state_changed`，以及对应收口阶段的 `review_pass` / `push_pass` 和 `codex_final`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
+
+精选 Codex 执行日志按生产排障风格保留关键字段：
+
+- `codex_command`：`body` 是人类可读命令结果，字段包含 `command`、`command_status`、`cwd`、`exit_code`、`duration_ms`；不导出长 output。
+- `codex_file_change`：`body` 是人类可读变更摘要，字段包含 `file`、`files`、`file_locations`、`line_start`、`line_end`、`changed_lines`、`additions`、`deletions`、`summary`。
+- `codex_final`：`body` 只保留截断后的最终摘要，不导出 token delta 或原始 payload。
+
+### Metrics boundary
+
+单 issue 耗时不要按 `issue_identifier` 查 Metrics。Metrics 只回答全局聚合，例如阶段耗时分布、状态流转耗时分布和 Codex turn 总数。
+
+```sql
+SELECT metric_name, attrs
+FROM signoz_metrics.time_series_v4
+WHERE metric_name IN (
+  'symphony_issue_phase_duration_ms',
+  'symphony_issue_transition_duration_ms',
+  'symphony_codex_turn_total'
+)
+LIMIT 20;
+```
+
+预期低基数字段包括 `from_state`、`to_state`、`phase`、`stage`、`step`、`outcome`。不应出现 `issue_identifier`、`issue_id`、`session_id`、`turn_id`、`turn_count` 或 `duration_ms` 作为 metric label。
 
 ### 从日志跳回 Trace
 
@@ -325,10 +372,10 @@ WHERE metric_name LIKE 'symphony_%'
 LIMIT 20;
 ```
 
-验收点是存在 `symphony_issue_transition_total`，并能看到 `from_state` / `to_state` / `outcome` 等低基数字段；不要求、也不允许要求 `issue_identifier`。
+验收点是存在 `symphony_issue_transition_total` 和 duration histograms，并能看到 `from_state` / `to_state` / `phase` / `stage` / `step` / `outcome` 等低基数字段；不要求、也不允许要求 `issue_identifier`。
 
 ## 禁止项
 
-- Metric label 不允许使用 `issue_id`、`issue_identifier`、`session_id`、`thread_id`、`turn_id`、`workspace_path`。
+- Metric label 不允许使用 `issue_id`、`issue_identifier`、`session_id`、`thread_id`、`turn_id`、`turn_count`、`duration_ms`、`started_at`、`completed_at`、`workspace_path`。
 - 不把原始 Codex event payload 直接写入 Trace、Metric 或 Log。
 - 不删除 JSONL 本地兜底；SigNoz 是长期查询入口，JSONL 是离线排障和本地兜底。

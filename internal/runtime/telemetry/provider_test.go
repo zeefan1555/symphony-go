@@ -61,12 +61,19 @@ func TestStartIssueRunAndRecordTransitionCreateSpans(t *testing.T) {
 		t.Fatalf("ended spans = %d, want 2", len(ended))
 	}
 	names := []string{ended[0].Name(), ended[1].Name()}
-	want := []string{"issue_run", "transition Todo -> In Progress"}
+	want := []string{"transition Todo -> In Progress", "issue_run"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("span names = %#v, want %#v", names, want)
 	}
-	if ended[1].Parent().SpanID() != ended[0].SpanContext().SpanID() {
-		t.Fatalf("transition parent = %s, want issue_run span %s", ended[1].Parent().SpanID(), ended[0].SpanContext().SpanID())
+	if ended[0].Parent().SpanID() != ended[1].SpanContext().SpanID() {
+		t.Fatalf("transition parent = %s, want issue_run span %s", ended[0].Parent().SpanID(), ended[1].SpanContext().SpanID())
+	}
+	if ended[1].EndTime().Before(ended[0].EndTime()) {
+		t.Fatalf("issue_run ended at %s before child transition ended at %s", ended[1].EndTime(), ended[0].EndTime())
+	}
+	attrs := spanAttrs(ended[1])
+	if attrs["outcome"] != "done" {
+		t.Fatalf("issue_run attrs = %#v, want final outcome", attrs)
 	}
 }
 
@@ -89,6 +96,14 @@ func TestMetricAttrsDropsHighCardinalityLabels(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("MetricAttrs() = %#v, want %#v", got, want)
 	}
+}
+
+func spanAttrs(span sdktrace.ReadOnlySpan) map[string]string {
+	attrs := map[string]string{}
+	for _, attr := range span.Attributes() {
+		attrs[string(attr.Key)] = attr.Value.AsString()
+	}
+	return attrs
 }
 
 type testFacade struct {

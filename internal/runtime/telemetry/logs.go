@@ -13,6 +13,10 @@ import (
 
 var exportedLogEvents = map[string]bool{
 	"after_run_hook_failed":    true,
+	"codex_command":            true,
+	"codex_file_change":        true,
+	"codex_final":              true,
+	"codex_turn_started":       true,
 	"ai_review_failed":         true,
 	"blocked":                  true,
 	"codex_turn_completed":     true,
@@ -36,11 +40,26 @@ var exportedLogEvents = map[string]bool{
 
 var logFieldAllowlist = map[string]bool{
 	"attempt_kind":      true,
+	"additions":         true,
+	"changed_lines":     true,
+	"command":           true,
+	"command_status":    true,
+	"continuation":      true,
+	"cwd":               true,
+	"deletions":         true,
+	"duration_ms":       true,
 	"error":             true,
 	"error_type":        true,
+	"exit_code":         true,
+	"file":              true,
+	"file_count":        true,
+	"file_locations":    true,
+	"files":             true,
 	"from_state":        true,
 	"issue_id":          true,
 	"issue_identifier":  true,
+	"line_end":          true,
+	"line_start":        true,
 	"outcome":           true,
 	"phase":             true,
 	"session_id":        true,
@@ -52,12 +71,18 @@ var logFieldAllowlist = map[string]bool{
 	"trace_id":          true,
 	"transition_from":   true,
 	"transition_to":     true,
+	"turn_count":        true,
+	"turn_id":           true,
 	"workflow_mode":     true,
 	"workspace_cleanup": true,
 }
 
 func RecordLog(ctx context.Context, provider Facade, event logging.Event) {
 	provider = activeFacade(provider)
+	event, ok := curatedLogEvent(event)
+	if !ok {
+		return
+	}
 	if !provider.Enabled() || !exportedLogEvents[event.Event] {
 		return
 	}
@@ -90,6 +115,57 @@ func RecordLog(ctx context.Context, provider Facade, event logging.Event) {
 	record.SetBody(otellog.StringValue(body))
 	record.AddAttributes(logAttributes(event)...)
 	logger.Emit(ctx, record)
+}
+
+func curatedLogEvent(event logging.Event) (logging.Event, bool) {
+	display, ok := logging.HumanEvent(event)
+	if !ok {
+		return logging.Event{}, false
+	}
+	if event.Event != "codex_event" {
+		return display, true
+	}
+	if display.Event == "codex_turn_completed" {
+		return logging.Event{}, false
+	}
+	display.TraceID = event.TraceID
+	display.SpanID = event.SpanID
+	display.IssueID = firstNonEmpty(display.IssueID, event.IssueID)
+	display.IssueIdentifier = firstNonEmpty(display.IssueIdentifier, event.IssueIdentifier)
+	display.SessionID = firstNonEmpty(display.SessionID, event.SessionID)
+	display.Fields = mergeCodexLogFields(display.Fields, event.Fields)
+	return display, true
+}
+
+func mergeCodexLogFields(displayFields map[string]any, rawFields map[string]any) map[string]any {
+	fields := make(map[string]any, len(displayFields)+8)
+	for key, value := range displayFields {
+		fields[key] = value
+	}
+	for _, key := range []string{
+		"session_id",
+		"turn_id",
+		"turn_count",
+		"continuation",
+		"duration_ms",
+		"phase",
+		"stage",
+		"state",
+	} {
+		if value, ok := rawFields[key]; ok {
+			fields[key] = value
+		}
+	}
+	return fields
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func logSeverity(level slog.Level) otellog.Severity {

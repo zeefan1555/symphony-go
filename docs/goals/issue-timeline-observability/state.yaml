@@ -1,0 +1,448 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Issue Timeline Observability"
+  slug: "issue-timeline-observability"
+  kind: existing_plan
+  tranche: "Validate the provided telemetry plan, then complete successive safe implementation, docs, and smoke slices until single-issue Trace/Logs timeline drilldown is proven and Metrics remain low-cardinality."
+  status: done
+  intake:
+    original_request: "Issue Timeline Observability 优化计划"
+    interpreted_outcome: "A single issue can be inspected as a complete Trace/Logs timeline by issue_identifier, while Metrics stay global and low-cardinality."
+    input_shape: existing_plan
+    audience: "Symphony Go developers and operators using SigNoz for issue-run observability."
+    authority: requested
+    proof_type: test
+    completion_proof: "Targeted tests, workflow tests, build, diff check, and a real issue smoke prove the trace/log timeline and metrics cardinality behavior described in the user plan."
+    likely_misfire: "Adding more events without real parent span/turn durations, or making single-issue Metrics labels high-cardinality."
+    blind_spots_considered:
+      - "Current telemetry and issueflow code must be mapped before editing."
+      - "Real SigNoz smoke may require collector credentials, live issue state transitions, and non-destructive external writes."
+      - "Log exports must stay curated and avoid raw payloads, token deltas, message deltas, and long command output."
+      - "Existing feat_zff workflow reasoning effort changes must be preserved."
+    existing_plan_facts:
+      - "issue_run span should open at RunIssueTrunk start and close at run end."
+      - "issue_run span keeps issue_identifier, issue_id, attempt, state, and outcome."
+      - "codex.Runner records per-turn started_at, completed_at, and duration_ms."
+      - "codex.Result exposes timing so AfterTurn can use it."
+      - "codex_turn_completed becomes a duration-bearing trace span and metric sample."
+      - "AfterTurn computes phase/stage from turnStartIssue.State for continuation turns."
+      - "turn span/log includes turn_count, continuation, phase, stage, state, duration_ms, session_id, and turn_id."
+      - "OTel logs export curated codex_turn_started, codex_final, codex_command, and codex_file_change."
+      - "codex_command logs command, cwd, exit_code, and duration_ms only."
+      - "codex_final logs only a truncated summary."
+      - "Raw codex_event stream, message delta, full shell output, token delta, and raw payloads remain excluded."
+      - "Metrics labels must exclude issue_id, issue_identifier, session_id, and turn_id."
+      - "symphony_issue_phase_duration_ms and symphony_issue_transition_duration_ms remain global aggregates."
+      - "SigNoz docs need Issue Timeline drilldown query examples for traces, logs, and metrics boundaries."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+visual_board:
+  selected: none
+  local:
+    status: not_requested
+    url: null
+    command: "npx goalbuddy board /Users/bytedance/symphony-go/docs/goals/issue-timeline-observability"
+  github_projects:
+    status: not_requested
+    url: null
+    command: "npx goalbuddy extend github-projects"
+    missing: []
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    reasoning_hint: medium
+    objective: "Map the current issue timeline telemetry code paths and validate the user-provided plan against repo truth."
+    inputs:
+      - "User-provided Issue Timeline Observability plan"
+      - "AGENTS.md"
+      - "Current repo files related to codex runner, issueflow, telemetry, workflow docs, and tests"
+    constraints:
+      - "Read-only."
+      - "Do not edit implementation files."
+      - "Use concrete file:line evidence."
+      - "Preserve existing feat_zff workflow reasoning effort changes."
+    expected_output:
+      - "Current code anchors for issue_run spans, Codex turn events, AfterTurn state handling, telemetry logs, metrics label filtering, and SigNoz docs."
+      - "Plan gaps, risks, and any simpler implementation route."
+      - "Recommended first Worker slice with allowed_files, verify commands, and stop_if conditions."
+    receipt:
+      result: done
+      note: "notes/T001-repo-map.md"
+      summary: "Mapped issue_run, codex turn timing, AfterTurn fields, curated logs, metrics cardinality, and SigNoz docs. First safe Worker is T003 because StartIssueRun closes issue_run immediately despite RunIssueTrunk already deferring endIssueRun."
+      evidence:
+        - "internal/runtime/telemetry/issue_run.go:11"
+        - "internal/service/issueflow/flow.go:12"
+        - "internal/service/issueflow/agent_session.go:77"
+        - "internal/service/codex/runner.go:53"
+        - "internal/runtime/telemetry/logs.go:14"
+        - "internal/runtime/telemetry/attrs.go:10"
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Review T001 findings and convert the existing plan into the smallest safe implementation sequence."
+    inputs:
+      - "T001 receipt or note"
+      - "User-provided plan facts in goal intake"
+    constraints:
+      - "Do not implement."
+      - "Reject any slice that expands metrics cardinality."
+      - "Reject any slice that logs raw Codex payloads, token deltas, message deltas, or long command output."
+    expected_output:
+      - "Decision on implementation order."
+      - "Exact next Worker objective."
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred or blocked items."
+    receipt:
+      result: done
+      decision: "Execute T003 first. It is the smallest root-cause slice: RunIssueTrunk already defers endIssueRun, but StartIssueRun ends the span immediately, so fixing the facade creates the full parent span without broader orchestration changes."
+      next_allowed_task: T003
+      allowed_files:
+        - "internal/runtime/telemetry/issue_run.go"
+        - "internal/runtime/telemetry/provider_test.go"
+        - "internal/service/issueflow/flow_test.go"
+        - "docs/goals/issue-timeline-observability/state.yaml"
+      verify:
+        - "./test.sh ./internal/runtime/telemetry -run 'TestStartIssueRunAndRecordTransitionCreateSpans|TestIssueRunSpanEndsAfterChildTransition'"
+        - "./test.sh ./internal/service/issueflow -run 'TestRunIssueTrunkRecordsIssueRunAndTodoTransitionSpans|TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans'"
+        - "git diff --check"
+      stop_if:
+        - "Need to rewrite issueflow orchestration."
+        - "Any metric label would add issue_id, issue_identifier, session_id, or turn_id."
+        - "Span parent/child ordering cannot be proven with the in-memory span recorder."
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement the issue_run parent span lifecycle so it covers the full RunIssueTrunk execution and records final outcome attributes."
+    allowed_files:
+      - "internal/runtime/telemetry/issue_run.go"
+      - "internal/runtime/telemetry/provider_test.go"
+      - "internal/service/issueflow/flow_test.go"
+      - "docs/goals/issue-timeline-observability/state.yaml"
+    verify:
+      - "./test.sh ./internal/runtime/telemetry -run 'TestStartIssueRunAndRecordTransitionCreateSpans|TestIssueRunSpanEndsAfterChildTransition'"
+      - "./test.sh ./internal/service/issueflow -run 'TestRunIssueTrunkRecordsIssueRunAndTodoTransitionSpans|TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans'"
+      - "git diff --check"
+    stop_if:
+      - "Need files outside Judge-approved allowed_files."
+      - "The issue_run lifecycle owner is ambiguous after Scout mapping."
+      - "The change would rewrite unrelated orchestration flow."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/telemetry/issue_run.go"
+        - "internal/runtime/telemetry/provider_test.go"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/telemetry -run 'TestStartIssueRunAndRecordTransitionCreateSpans|TestIssueRunSpanEndsAfterChildTransition'"
+          status: pass
+        - cmd: "./test.sh ./internal/service/issueflow -run 'TestRunIssueTrunkRecordsIssueRunAndTodoTransitionSpans|TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans'"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "StartIssueRun now keeps issue_run open until endIssueRun, sets final outcome/status, ends the parent after child spans, and then records the issue-run metric. Provider test now proves transition remains child of issue_run and issue_run ends last with outcome=done."
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Add real Codex turn timing to Runner results and emit duration-bearing turn_completed telemetry."
+    allowed_files:
+      - "internal/service/codex/runner.go"
+      - "internal/service/codex/runner_test.go"
+      - "internal/runtime/telemetry/issue_run.go"
+      - "internal/service/issueflow/agent_session.go"
+      - "internal/service/issueflow/flow_test.go"
+      - "docs/goals/issue-timeline-observability/state.yaml"
+    verify:
+      - "./test.sh ./internal/service/codex -run 'TestRunner.*Turn.*Duration|TestRunnerKeepsOneThreadForContinuationTurns'"
+      - "./test.sh ./internal/service/issueflow -run 'TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans'"
+      - "git diff --check"
+    stop_if:
+      - "Need files outside Judge-approved allowed_files."
+      - "codex.Result compatibility impact is unclear."
+      - "Tests cannot prove started_at/completed_at/duration_ms."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/telemetry/issue_run.go"
+        - "internal/service/codex/runner.go"
+        - "internal/service/codex/runner_test.go"
+        - "internal/service/issueflow/agent_session.go"
+        - "internal/service/issueflow/flow_test.go"
+      commands:
+        - cmd: "./test.sh ./internal/service/codex -run 'TestRunner.*Turn.*Duration|TestRunnerKeepsOneThreadForContinuationTurns'"
+          status: pass
+        - cmd: "./test.sh ./internal/service/issueflow -run 'TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans'"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "codex.Result now carries StartedAt, CompletedAt, and Duration. Runner turn_started/turn_completed payloads include started_at/completed_at/duration_ms, and issueflow records codex_turn_completed with a duration-bearing trace span plus duration_ms log field."
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Correct turn timeline phase/stage/state fields for continuation turns and include the requested turn attributes in spans/logs."
+    allowed_files:
+      - "internal/service/codex/runner.go"
+      - "internal/service/codex/runner_test.go"
+      - "internal/service/issueflow/agent_session.go"
+      - "internal/service/issueflow/flow_test.go"
+      - "docs/goals/issue-timeline-observability/state.yaml"
+    verify:
+      - "./test.sh ./internal/service/codex -run 'TestRunnerRecordsTurnDuration'"
+      - "./test.sh ./internal/service/issueflow -run 'TestRunIssueTrunkAIReviewPassContinuesToPushing|TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans'"
+      - "git diff --check"
+    stop_if:
+      - "Need files outside Judge-approved allowed_files."
+      - "Phase/stage derivation from turnStartIssue.State conflicts with existing workflow semantics."
+      - "Required tests would need external services."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/service/codex/runner.go"
+        - "internal/service/issueflow/agent_session.go"
+        - "internal/service/issueflow/flow_test.go"
+      commands:
+        - cmd: "./test.sh ./internal/service/codex -run 'TestRunnerRecordsTurnDuration'"
+          status: pass
+        - cmd: "./test.sh ./internal/service/issueflow -run 'TestRunIssueTrunkAIReviewPassContinuesToPushing|TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans'"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "codex.Result now carries Continuation, and issueflow turn timeline fields are derived from the turn-start issue state. Tests prove implementation and AI Review/Pushing continuation logs include phase, stage, state, continuation, turn IDs/count, and duration_ms."
+  - id: T006
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Expand curated OTel logs to include codex_turn_started, codex_final, codex_command, and codex_file_change while preserving redaction and output limits."
+    allowed_files:
+      - "internal/runtime/telemetry/logs.go"
+      - "internal/runtime/telemetry/logs_test.go"
+      - "docs/goals/issue-timeline-observability/state.yaml"
+    verify:
+      - "./test.sh ./internal/runtime/telemetry -run 'TestRecordLogExportsCuratedCodexEvents|TestRecordLogSkipsRawCodexPayload|TestRecordLogExportsLifecycleEvents'"
+      - "git diff --check"
+    stop_if:
+      - "Need files outside Judge-approved allowed_files."
+      - "A requested event would require exporting raw payloads or long output."
+      - "Allowlist tests cannot distinguish curated fields from raw Codex streams."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/telemetry/logs.go"
+        - "internal/runtime/telemetry/logs_test.go"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/telemetry -run 'TestRecordLogExportsCuratedCodexEvents|TestRecordLogSkipsRawCodexPayload|TestRecordLogExportsLifecycleEvents'"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "OTel logs now normalize raw codex_event into curated codex_turn_started, codex_final, codex_command, and codex_file_change records only. Raw codex_event, token_delta, payload, and command output remain excluded from exported log attributes."
+  - id: T007
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Strengthen metrics low-cardinality guards and global duration samples without issue/session/turn identifiers in labels."
+    allowed_files:
+      - "internal/runtime/telemetry/attrs.go"
+      - "internal/runtime/telemetry/metrics_test.go"
+      - "docs/goals/issue-timeline-observability/state.yaml"
+    verify:
+      - "./test.sh ./internal/runtime/telemetry -run 'TestMetricsUseLowCardinalityAttributes'"
+      - "git diff --check"
+    stop_if:
+      - "Need files outside Judge-approved allowed_files."
+      - "Any implementation path requires issue_identifier, issue_id, session_id, or turn_id in metric labels."
+      - "Metric tests cannot prove forbidden labels are filtered."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/runtime/telemetry/attrs.go"
+        - "internal/runtime/telemetry/metrics_test.go"
+      commands:
+        - cmd: "./test.sh ./internal/runtime/telemetry -run 'TestMetricsUseLowCardinalityAttributes'"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "MetricAttrs now also filters timeline-only fields such as started_at, completed_at, duration_ms, turn_count, and continuation, so turn timing enriches traces/logs without creating metric label cardinality."
+  - id: T008
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: low
+    objective: "Update SigNoz documentation with Issue Timeline drilldown examples and clarify Trace/Logs versus Metrics responsibilities."
+    allowed_files:
+      - "docs/telemetry/signoz-dashboard.md"
+      - "docs/telemetry/smoke-results/zee-178-issue-timeline-observability-20260513.md"
+      - "docs/goals/issue-timeline-observability/state.yaml"
+    verify:
+      - "git diff --check"
+    stop_if:
+      - "Need files outside Judge-approved allowed_files."
+      - "Docs path or existing SigNoz docs are unclear."
+      - "Documentation would claim smoke evidence that has not been run."
+    receipt:
+      result: done
+      changed_files:
+        - "docs/telemetry/signoz-dashboard.md"
+      commands:
+        - cmd: "git diff --check"
+          status: pass
+      summary: "SigNoz docs now describe Issue Timeline drilldown: Trace query includes duration_ms, Logs query includes timestamp/event/body/duration_ms/trace_id/span_id, and Metrics are documented as global low-cardinality aggregates only."
+  - id: T009
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Run the local verification suite for the implemented slices and record exact pass/fail evidence."
+    allowed_files:
+      - "docs/goals/issue-timeline-observability/state.yaml"
+    verify:
+      - "./test.sh ./internal/service/codex ./internal/service/issueflow ./internal/runtime/telemetry"
+      - "./test.sh ./internal/service/workflow"
+      - "./build.sh"
+      - "git diff --check"
+    stop_if:
+      - "Verification fails twice with the same root cause and needs a new implementation slice."
+      - "Failure is an environment or credential blocker that cannot be solved locally."
+      - "The diff includes unrelated user changes that make verification attribution unsafe."
+    receipt:
+      result: done
+      changed_files:
+        - "docs/goals/issue-timeline-observability/state.yaml"
+      commands:
+        - cmd: "./test.sh ./internal/service/codex ./internal/service/issueflow ./internal/runtime/telemetry"
+          status: pass
+        - cmd: "./test.sh ./internal/service/workflow"
+          status: pass
+        - cmd: "./build.sh"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "All requested local validation gates passed for codex, issueflow, telemetry, workflow, build, and whitespace."
+  - id: T010
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: high
+    objective: "Run or prepare a real issue smoke proving the SigNoz Trace/Logs timeline and Metrics low-cardinality queries."
+    allowed_files:
+      - "docs/telemetry/signoz-dashboard.md"
+      - "docs/telemetry/smoke-results/zee-178-issue-timeline-observability-20260513.md"
+      - "docs/goals/issue-timeline-observability/state.yaml"
+    verify:
+      - "Trace query by issue_identifier shows issue_run duration, transitions, duration-bearing codex_turn_completed, AI Review -> Pushing, and Pushing -> Done."
+      - "Logs query by issue_identifier shows dispatch_started, codex_turn_started, codex_turn_completed with duration_ms, state_changed, review_pass, push_pass, and codex_final."
+      - "Metrics query excludes issue_identifier and confirms only low-cardinality labels such as from_state, to_state, phase, stage, step, and outcome."
+    stop_if:
+      - "No safe real issue is available."
+      - "SigNoz or OTLP backend credentials are unavailable."
+      - "External state transition requires owner approval not already granted."
+      - "Smoke would mutate unrelated production data."
+    receipt:
+      result: done
+      changed_files:
+        - "docs/telemetry/signoz-dashboard.md"
+        - "docs/telemetry/smoke-results/zee-178-issue-timeline-observability-20260513.md"
+      commands:
+        - cmd: "created Linear smoke issue ZEE-178"
+          status: pass
+        - cmd: "OTEL_SERVICE_NAME=symphony-go OTEL_EXPORTER_OTLP_PROTOCOL=grpc OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 OTEL_EXPORTER_OTLP_INSECURE=true make run-once ISSUE=ZEE-178 MERGE_TARGET=feat_zff"
+          status: pass
+        - cmd: "SigNoz trace/log/metrics ClickHouse queries for ZEE-178"
+          status: pass
+        - cmd: "git push origin feat_zff"
+          status: pass
+      summary: "Real Linear smoke ZEE-178 reached Done through Todo -> In Progress -> AI Review -> Rework -> AI Review -> Pushing -> Done. Trace query shows issue_run duration 841494ms, duration-bearing codex_turn_completed spans, AI Review -> Pushing, and Pushing -> Done. Logs show dispatch_started, codex_turn_started, codex_turn_completed with duration_ms, state_changed, review_pass, push_pass, codex_final, codex_command, and codex_file_change. Recent metrics samples after the smoke had zero forbidden labels for issue_identifier, issue_id, session_id, turn_id, turn_count, and duration_ms."
+  - id: T011
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: default
+    objective: "Wait for operator direction for the real issue smoke: provide or approve a safe issue ID, or explicitly skip external smoke for this goal run."
+    inputs:
+      - "T010 blocker receipt"
+      - "Current dirty diff"
+      - "SigNoz environment probe"
+    constraints:
+      - "Do not run externally visible Linear state changes without explicit smoke issue approval."
+      - "Do not treat old ZEE-177/ZEE-170 traces as proof of the new code path."
+    expected_output:
+      - "Approved issue ID and smoke command, or explicit skip decision."
+    receipt:
+      result: done
+      summary: "Operator approved creating and running a fresh real Linear smoke. PM created ZEE-178 and activated the smoke path."
+      evidence:
+        - "ZEE-178"
+        - "https://linear.app/zeefan/issue/ZEE-178/issue-timeline-observability-live-smoke-20260513t121930z"
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the full Issue Timeline Observability outcome is complete."
+    inputs:
+      - "All done task receipts"
+      - "Last verification"
+      - "Current dirty diff"
+      - "Smoke evidence or blocker receipt"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if any required Worker task is still queued or active."
+      - "Reject completion if traces/logs lack real durations or if metrics gained high-cardinality labels."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "missing evidence"
+      - "next task if not complete"
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      summary: "Full Issue Timeline Observability outcome is complete. Local tests/build passed, ZEE-178 real smoke reached Done, traces/logs prove single-issue timeline drilldown with real durations, and recent metrics samples prove low-cardinality labels only."
+      evidence:
+        - "Linear ZEE-178 state: Done"
+        - "Trace issue_run duration_ms: 841494.805875"
+        - "Trace transitions: Todo -> In Progress, AI Review -> Pushing, Pushing -> Done"
+        - "Logs include codex_turn_started, codex_turn_completed duration_ms, codex_final, codex_command, codex_file_change, review_pass, push_pass"
+        - "Recent metrics forbidden-label count: 0"
+
+checks:
+  dirty_fingerprint: "## feat_zff...origin/feat_zff"
+  last_verification:
+    result: unknown
+    task: null
+    commands: []

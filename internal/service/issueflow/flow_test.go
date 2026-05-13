@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/telemetry"
@@ -134,6 +135,19 @@ func TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans(t *testing.T) {
 	if fields["phase"] != string(PhaseImplementer) || fields["step"] != "codex_turn_completed" {
 		t.Fatalf("turn_completed fields = %#v, want phase/step correlation", fields)
 	}
+	if fields["duration_ms"] != int64(1500) {
+		t.Fatalf("turn_completed fields = %#v, want duration_ms=1500", fields)
+	}
+	if fields["stage"] != string(StageRunningAgent) || fields["state"] != StateInProgress || fields["continuation"] != false {
+		t.Fatalf("turn_completed fields = %#v, want stage/state/continuation", fields)
+	}
+	turnSpan, ok := endedSpan(recorder, "step implementer/codex_turn_completed")
+	if !ok {
+		t.Fatalf("ended spans = %#v, want codex_turn_completed", recorder.Ended())
+	}
+	if got := turnSpan.EndTime().Sub(turnSpan.StartTime()); got != 1500*time.Millisecond {
+		t.Fatalf("codex turn span duration = %s, want 1.5s", got)
+	}
 }
 
 func TestRunIssueTrunkUsesStaticCWDWithoutIssueWorkspace(t *testing.T) {
@@ -214,7 +228,8 @@ func TestRunIssueTrunkAIReviewPassContinuesToPushing(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "review", State: StateAIReview}
 	tracker := &fakeTracker{issue: issue}
 	runner := &fakeRunner{agentMessage: "Review: PASS\nlooks good"}
-	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	observer := &fakeObserver{}
+	rt := testRuntime(t, tracker, runner, observer)
 
 	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
 	if err != nil {
@@ -228,6 +243,18 @@ func TestRunIssueTrunkAIReviewPassContinuesToPushing(t *testing.T) {
 	}
 	if len(runner.prompts) != 2 || runner.prompts[1].Text != PushingContinuationPromptText || !runner.prompts[1].Continuation {
 		t.Fatalf("prompts = %#v, want Pushing continuation", runner.prompts)
+	}
+	turnLogs := observer.logFieldsList("codex_turn_completed")
+	if len(turnLogs) != 2 {
+		t.Fatalf("turn logs = %#v, want two codex_turn_completed logs", observer.logs)
+	}
+	first := turnLogs[0]
+	if first["phase"] != string(PhaseReviewer) || first["stage"] != string(StageRunningAgent) || first["state"] != StateAIReview || first["continuation"] != false {
+		t.Fatalf("first turn fields = %#v, want AI Review reviewer running_agent", first)
+	}
+	second := turnLogs[1]
+	if second["phase"] != string(PhaseReviewer) || second["stage"] != string(StageContinuingPushing) || second["state"] != StatePushing || second["continuation"] != true {
+		t.Fatalf("second turn fields = %#v, want Pushing reviewer continuing_pushing", second)
 	}
 }
 
@@ -645,7 +672,16 @@ func (f *fakeRunner) RunSession(ctx context.Context, request codex.SessionReques
 	result := codex.SessionResult{SessionID: "session-1", ThreadID: "thread-1"}
 	for turnIndex := 0; turnIndex < len(request.Prompts); turnIndex++ {
 		f.prompts = append(f.prompts, request.Prompts[turnIndex])
-		turnResult := codex.Result{SessionID: "session-1", ThreadID: "thread-1", TurnID: "turn-1"}
+		startedAt := time.Unix(100, int64(turnIndex))
+		turnResult := codex.Result{
+			SessionID:    "session-1",
+			ThreadID:     "thread-1",
+			TurnID:       "turn-1",
+			StartedAt:    startedAt,
+			CompletedAt:  startedAt.Add(1500 * time.Millisecond),
+			Duration:     1500 * time.Millisecond,
+			Continuation: request.Prompts[turnIndex].Continuation,
+		}
 		result.Turns = append(result.Turns, turnResult)
 		agentMessage := f.agentMessage
 		if turnIndex < len(f.agentMessages) {
@@ -733,6 +769,16 @@ func (f *fakeObserver) logFields(event string) (map[string]any, bool) {
 	return nil, false
 }
 
+func (f *fakeObserver) logFieldsList(event string) []map[string]any {
+	var fields []map[string]any
+	for _, got := range f.logs {
+		if got.event == event {
+			fields = append(fields, got.fields)
+		}
+	}
+	return fields
+}
+
 type issueFlowTestTelemetry struct {
 	tracer trace.Tracer
 	meter  metric.Meter
@@ -781,6 +827,15 @@ func assertEndedSpanNames(t *testing.T, recorder *tracetest.SpanRecorder, want .
 			t.Fatalf("ended span names = %#v, missing %q", names, name)
 		}
 	}
+}
+
+func endedSpan(recorder *tracetest.SpanRecorder, name string) (sdktrace.ReadOnlySpan, bool) {
+	for _, span := range recorder.Ended() {
+		if span.Name() == name {
+			return span, true
+		}
+	}
+	return nil, false
 }
 
 func testRuntime(t *testing.T, tracker *fakeTracker, runner *fakeRunner, observer *fakeObserver) Runtime {

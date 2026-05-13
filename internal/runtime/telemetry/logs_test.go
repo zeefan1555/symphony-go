@@ -71,6 +71,130 @@ func TestRecordLogSkipsRawCodexPayload(t *testing.T) {
 	}
 }
 
+func TestRecordLogExportsCuratedCodexEvents(t *testing.T) {
+	logger := &recordingLogger{}
+	provider, _ := newTestProvider()
+	provider = testFacade{
+		tracer: provider.Tracer(),
+		meter:  provider.Meter(),
+		logger: logger,
+	}
+
+	RecordLog(context.Background(), provider, logging.Event{
+		Event:           "codex_event",
+		Message:         "turn_started",
+		IssueID:         "issue-1",
+		IssueIdentifier: "ZEE-1",
+		SessionID:       "session-1",
+		Fields: map[string]any{
+			"session_id":   "session-1",
+			"turn_id":      "turn-1",
+			"turn_count":   1,
+			"continuation": false,
+			"payload":      "raw payload must not export",
+		},
+	})
+	RecordLog(context.Background(), provider, logging.Event{
+		Event:           "codex_event",
+		Message:         "item/completed",
+		IssueID:         "issue-1",
+		IssueIdentifier: "ZEE-1",
+		Fields: map[string]any{
+			"params": map[string]any{
+				"item": map[string]any{
+					"type":  "agentMessage",
+					"phase": "final_answer",
+					"text":  "Final answer summary that should be exported as a bounded log body.",
+				},
+			},
+			"token_delta": "do not export",
+		},
+	})
+	RecordLog(context.Background(), provider, logging.Event{
+		Event:           "codex_event",
+		Message:         "item/completed",
+		IssueID:         "issue-1",
+		IssueIdentifier: "ZEE-1",
+		Fields: map[string]any{
+			"params": map[string]any{
+				"item": map[string]any{
+					"type":             "commandExecution",
+					"command":          "git status --short",
+					"cwd":              "/tmp/work/ZEE-1",
+					"exitCode":         0,
+					"durationMs":       25,
+					"aggregatedOutput": "this output should stay out of OTel logs",
+				},
+			},
+		},
+	})
+	RecordLog(context.Background(), provider, logging.Event{
+		Event:           "codex_event",
+		Message:         "item/completed",
+		IssueID:         "issue-1",
+		IssueIdentifier: "ZEE-1",
+		Fields: map[string]any{
+			"params": map[string]any{
+				"item": map[string]any{
+					"type": "fileChange",
+					"changes": []any{
+						map[string]any{"path": "/tmp/work/ZEE-1/SMOKE.md", "diff": "@@ -0,0 +1 @@\n+done\n"},
+					},
+				},
+			},
+		},
+	})
+	RecordLog(context.Background(), provider, logging.Event{
+		Event:   "codex_event",
+		Message: "turn_completed",
+		Fields:  map[string]any{"duration_ms": 25},
+	})
+
+	if len(logger.records) != 4 {
+		t.Fatalf("records = %d, want four curated codex records", len(logger.records))
+	}
+	names := []string{}
+	for _, record := range logger.records {
+		names = append(names, record.EventName())
+		attrs := logRecordAttrs(record)
+		if _, ok := attrs["payload"]; ok {
+			t.Fatalf("payload should not be exported: %#v", attrs)
+		}
+		if _, ok := attrs["token_delta"]; ok {
+			t.Fatalf("token_delta should not be exported: %#v", attrs)
+		}
+		if _, ok := attrs["output"]; ok {
+			t.Fatalf("output should not be exported: %#v", attrs)
+		}
+	}
+	wantNames := []string{"codex_turn_started", "codex_final", "codex_command", "codex_file_change"}
+	if !equalStrings(names, wantNames) {
+		t.Fatalf("event names = %#v, want %#v", names, wantNames)
+	}
+	commandAttrs := logRecordAttrs(logger.records[2])
+	if commandAttrs["command"] != "git status --short" || commandAttrs["command_status"] != "succeeded" || commandAttrs["cwd"] != "ZEE-1" {
+		t.Fatalf("command attrs = %#v", commandAttrs)
+	}
+	if logger.records[2].Body().AsString() != "Command succeeded: git status --short (25ms)" {
+		t.Fatalf("command body = %q", logger.records[2].Body().AsString())
+	}
+	commandInts := logRecordIntAttrs(logger.records[2])
+	if commandInts["exit_code"] != 0 || commandInts["duration_ms"] != 25 {
+		t.Fatalf("command int attrs = %#v, want exit_code and duration_ms", commandInts)
+	}
+	fileAttrs := logRecordAttrs(logger.records[3])
+	if fileAttrs["file"] != "SMOKE.md" || fileAttrs["files"] != "SMOKE.md" || fileAttrs["file_locations"] != "SMOKE.md:1" {
+		t.Fatalf("file attrs = %#v, want SMOKE.md location", fileAttrs)
+	}
+	if logger.records[3].Body().AsString() != "Changed SMOKE.md:1 (+1/-0)" {
+		t.Fatalf("file body = %q", logger.records[3].Body().AsString())
+	}
+	fileInts := logRecordIntAttrs(logger.records[3])
+	if fileInts["file_count"] != 1 || fileInts["line_start"] != 1 || fileInts["line_end"] != 1 || fileInts["changed_lines"] != 1 || fileInts["additions"] != 1 || fileInts["deletions"] != 0 {
+		t.Fatalf("file int attrs = %#v, want file count and line metadata", fileInts)
+	}
+}
+
 func TestRecordLogExportsLifecycleEvents(t *testing.T) {
 	logger := &recordingLogger{}
 	provider, _ := newTestProvider()
@@ -113,6 +237,18 @@ func TestRecordLogExportsLifecycleEvents(t *testing.T) {
 	}
 }
 
+func equalStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
 type recordingLogger struct {
 	embedded.Logger
 	records []otellog.Record
@@ -130,6 +266,17 @@ func logRecordAttrs(record otellog.Record) map[string]string {
 	attrs := map[string]string{}
 	record.WalkAttributes(func(attr otellog.KeyValue) bool {
 		attrs[attr.Key] = attr.Value.AsString()
+		return true
+	})
+	return attrs
+}
+
+func logRecordIntAttrs(record otellog.Record) map[string]int64 {
+	attrs := map[string]int64{}
+	record.WalkAttributes(func(attr otellog.KeyValue) bool {
+		if attr.Value.Kind() == otellog.KindInt64 {
+			attrs[attr.Key] = attr.Value.AsInt64()
+		}
 		return true
 	})
 	return attrs

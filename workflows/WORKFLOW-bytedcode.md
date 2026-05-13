@@ -26,7 +26,7 @@ agent:
     allow_manual_ai_review: false
     on_ai_fail: hold
 codex:
-  command: codex --config shell_environment_policy.inherit=all --config 'model="gpt-5.5"' --config model_reasoning_effort=high app-server
+  command: codex --config shell_environment_policy.inherit=all --config 'model="gpt-5.5"' --config model_reasoning_effort=medium app-server
   read_timeout_ms: 60000
   approval_policy: never
   thread_sandbox: workspace-write
