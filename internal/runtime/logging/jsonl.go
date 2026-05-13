@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -470,7 +471,8 @@ func humanCompletedItem(_ Event, display Event, params map[string]any) (Event, b
 	itemType := stringField(item, "type")
 	switch itemType {
 	case "agentMessage":
-		text := previewText(stringField(item, "text"), 220)
+		rawText := stringField(item, "text")
+		text := previewText(rawText, 220)
 		if text == "" {
 			return Event{}, false
 		}
@@ -482,7 +484,11 @@ func humanCompletedItem(_ Event, display Event, params map[string]any) (Event, b
 			display.Event = "codex_final"
 			display.Level = "info"
 		}
-		display.Fields = compactMap(map[string]any{"phase": phase})
+		fields := compactMap(map[string]any{"phase": phase})
+		for key, value := range evidenceFieldsFromText(rawText) {
+			fields[key] = value
+		}
+		display.Fields = fields
 		return display, true
 	case "commandExecution":
 		exitCode := intField(item, "exitCode")
@@ -499,6 +505,7 @@ func humanCompletedItem(_ Event, display Event, params map[string]any) (Event, b
 		}
 		display.Fields = compactMap(map[string]any{
 			"command":        command,
+			"command_kind":   commandKind(command),
 			"command_status": commandStatus(exitCode),
 			"cwd":            basePath(cwd),
 			"duration_ms":    durationMS,
@@ -581,16 +588,19 @@ func fileChangeFields(item map[string]any) map[string]any {
 		}
 	}
 	return compactMap(map[string]any{
-		"additions":      added,
-		"changed_lines":  added + removed,
-		"deletions":      removed,
-		"file":           firstString(paths),
-		"file_count":     intIfPositive(len(paths)),
-		"file_locations": strings.Join(locations, ","),
-		"files":          strings.Join(paths, ","),
-		"line_end":       intIfPositive(lineEnd),
-		"line_start":     intIfPositive(lineStart),
-		"summary":        diffSummary(added, removed),
+		"additions":          added,
+		"changed_lines":      added + removed,
+		"deletions":          removed,
+		"evidence_file":      firstString(paths),
+		"evidence_line":      intIfPositive(lineStart),
+		"evidence_locations": strings.Join(locations, ","),
+		"file":               firstString(paths),
+		"file_count":         intIfPositive(len(paths)),
+		"file_locations":     strings.Join(locations, ","),
+		"files":              strings.Join(paths, ","),
+		"line_end":           intIfPositive(lineEnd),
+		"line_start":         intIfPositive(lineStart),
+		"summary":            diffSummary(added, removed),
 	})
 }
 
@@ -765,6 +775,72 @@ func commandMessage(command string, exitCode, durationMS *int) string {
 		return fmt.Sprintf("Command %s: %s (%s)", status, command, detail)
 	}
 	return fmt.Sprintf("Command %s: %s", status, command)
+}
+
+func commandKind(command string) string {
+	command = strings.TrimSpace(stripShellWrapper(command))
+	switch {
+	case strings.HasPrefix(command, "rg ") || command == "rg" ||
+		strings.HasPrefix(command, "grep ") || command == "grep" ||
+		strings.HasPrefix(command, "find ") || command == "find":
+		return "search"
+	case strings.HasPrefix(command, "sed ") || command == "sed" ||
+		strings.HasPrefix(command, "cat ") || command == "cat" ||
+		strings.HasPrefix(command, "nl ") || command == "nl" ||
+		strings.HasPrefix(command, "head ") || command == "head" ||
+		strings.HasPrefix(command, "tail ") || command == "tail" ||
+		strings.HasPrefix(command, "ls ") || command == "ls":
+		return "read"
+	case strings.HasPrefix(command, "./test.sh") ||
+		strings.HasPrefix(command, "go test") ||
+		strings.HasPrefix(command, "npm test") ||
+		strings.HasPrefix(command, "pytest"):
+		return "test"
+	case strings.HasPrefix(command, "./build.sh") ||
+		strings.HasPrefix(command, "go build") ||
+		strings.HasPrefix(command, "npm run build"):
+		return "build"
+	case strings.HasPrefix(command, "git ") || command == "git":
+		return "git"
+	default:
+		return "other"
+	}
+}
+
+var evidenceLocationPattern = regexp.MustCompile(`([A-Za-z0-9_./-]+\.[A-Za-z0-9_]+):([0-9]+)(?:-([0-9]+))?`)
+
+func evidenceFieldsFromText(text string) map[string]any {
+	matches := evidenceLocationPattern.FindAllStringSubmatch(text, 5)
+	if len(matches) == 0 {
+		return nil
+	}
+	locations := make([]string, 0, len(matches))
+	firstFile := ""
+	firstLine := 0
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		file := match[1]
+		line, err := strconv.Atoi(match[2])
+		if err != nil || line <= 0 {
+			continue
+		}
+		location := file + ":" + match[2]
+		if len(match) > 3 && match[3] != "" {
+			location += "-" + match[3]
+		}
+		locations = append(locations, location)
+		if firstFile == "" {
+			firstFile = file
+			firstLine = line
+		}
+	}
+	return compactMap(map[string]any{
+		"evidence_file":      firstFile,
+		"evidence_line":      intIfPositive(firstLine),
+		"evidence_locations": strings.Join(locations, ","),
+	})
 }
 
 func fileChangeMessage(fields map[string]any) string {

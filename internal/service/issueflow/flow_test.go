@@ -125,6 +125,7 @@ func TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans(t *testing.T) {
 		"step implementer/before_run_hook",
 		"step implementer/prompt_rendered",
 		"step implementer/codex_turn_completed",
+		"step implementer/codex_turn_activity_summary",
 		"step implementer/after_run_hook",
 		"issue_run",
 	)
@@ -153,6 +154,53 @@ func TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans(t *testing.T) {
 	}
 	if got := turnSpan.EndTime().Sub(turnSpan.StartTime()); got != 1500*time.Millisecond {
 		t.Fatalf("codex turn span duration = %s, want 1.5s", got)
+	}
+	activityFields, ok := observer.logFields("codex_turn_activity_summary")
+	if !ok {
+		t.Fatalf("logs = %#v, want codex_turn_activity_summary", observer.logs)
+	}
+	if activityFields["command_count"] != 2 || activityFields["failed_command_count"] != 1 || activityFields["command_duration_ms"] != int64(125) || activityFields["dominant_command_kind"] != "search" {
+		t.Fatalf("activity fields = %#v, want command activity summary", activityFields)
+	}
+	if activityFields["stage"] != string(StageRunningAgent) || activityFields["state"] != StateInProgress {
+		t.Fatalf("activity fields = %#v, want stage/state", activityFields)
+	}
+	activitySpan, ok := endedSpan(recorder, "step implementer/codex_turn_activity_summary")
+	if !ok {
+		t.Fatalf("ended spans = %#v, want codex_turn_activity_summary", recorder.Ended())
+	}
+	attrs := stringSpanAttrs(activitySpan)
+	if attrs["issue_identifier"] != "ZEE-TRACE" || attrs["issue_id"] != "issue-1" {
+		t.Fatalf("activity span attrs = %#v, want issue identity", attrs)
+	}
+	if observer.sawLog("codex_slow_turn") {
+		t.Fatalf("logs = %#v, did not expect slow turn below threshold", observer.logs)
+	}
+}
+
+func TestRunIssueTrunkLogsSlowTurn(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-SLOW", Title: "slow", State: StateInProgress}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{duration: slowCodexTurnThreshold + time.Second}
+	observer := &fakeObserver{}
+	rt := testRuntime(t, tracker, runner, observer)
+	testTelemetry, recorder := newIssueFlowTestTelemetry()
+	rt.Telemetry = testTelemetry
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	assertEndedSpanNames(t, recorder, "step implementer/codex_slow_turn")
+	fields, ok := observer.logFields("codex_slow_turn")
+	if !ok {
+		t.Fatalf("logs = %#v, want codex_slow_turn", observer.logs)
+	}
+	if fields["threshold_ms"] != slowCodexTurnThreshold.Milliseconds() || fields["non_command_duration_ms"] == nil {
+		t.Fatalf("slow turn fields = %#v, want threshold and non-command duration", fields)
 	}
 }
 
@@ -666,6 +714,8 @@ type fakeRunner struct {
 	prompts       []codex.TurnPrompt
 	agentMessage  string
 	agentMessages []string
+	duration      time.Duration
+	stats         codex.TurnStats
 	err           error
 }
 
@@ -679,14 +729,31 @@ func (f *fakeRunner) RunSession(ctx context.Context, request codex.SessionReques
 	for turnIndex := 0; turnIndex < len(request.Prompts); turnIndex++ {
 		f.prompts = append(f.prompts, request.Prompts[turnIndex])
 		startedAt := time.Unix(100, int64(turnIndex))
+		duration := f.duration
+		if duration <= 0 {
+			duration = 1500 * time.Millisecond
+		}
+		stats := f.stats
+		if stats.CommandCount == 0 {
+			stats = codex.TurnStats{
+				CommandCount:             2,
+				FailedCommandCount:       1,
+				CommandDurationMS:        125,
+				SlowestCommandDurationMS: 100,
+				SearchCommandCount:       1,
+				ReadCommandCount:         1,
+				FinalMessagePresent:      true,
+			}
+		}
 		turnResult := codex.Result{
 			SessionID:    "session-1",
 			ThreadID:     "thread-1",
 			TurnID:       "turn-1",
 			StartedAt:    startedAt,
-			CompletedAt:  startedAt.Add(1500 * time.Millisecond),
-			Duration:     1500 * time.Millisecond,
+			CompletedAt:  startedAt.Add(duration),
+			Duration:     duration,
 			Continuation: request.Prompts[turnIndex].Continuation,
+			Stats:        stats,
 		}
 		result.Turns = append(result.Turns, turnResult)
 		agentMessage := f.agentMessage
@@ -842,6 +909,14 @@ func endedSpan(recorder *tracetest.SpanRecorder, name string) (sdktrace.ReadOnly
 		}
 	}
 	return nil, false
+}
+
+func stringSpanAttrs(span sdktrace.ReadOnlySpan) map[string]string {
+	attrs := map[string]string{}
+	for _, attr := range span.Attributes() {
+		attrs[string(attr.Key)] = attr.Value.AsString()
+	}
+	return attrs
 }
 
 func testRuntime(t *testing.T, tracker *fakeTracker, runner *fakeRunner, observer *fakeObserver) Runtime {

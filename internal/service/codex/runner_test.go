@@ -462,6 +462,83 @@ printf '%s\n' '{"method":"turn/completed"}'
 	}
 }
 
+func TestRunnerRecordsTurnStats(t *testing.T) {
+	workspacePath := t.TempDir()
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	script := `#!/bin/sh
+IFS= read -r line
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+IFS= read -r line
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-stats"}}}'
+IFS= read -r line
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-stats"}}}'
+printf '%s\n' '{"method":"item/completed","params":{"item":{"type":"commandExecution","command":"rg -n drop_reward service","exitCode":0,"durationMs":40,"aggregatedOutput":"do not store"}}}'
+printf '%s\n' '{"method":"item/completed","params":{"item":{"type":"commandExecution","command":"sed -n '\''1,20p'\'' service/drop_reward.go","exitCode":0,"durationMs":15}}}'
+printf '%s\n' '{"method":"item/completed","params":{"item":{"type":"commandExecution","command":"./test.sh ./internal/service/codex","exitCode":1,"durationMs":200}}}'
+printf '%s\n' '{"method":"item/completed","params":{"item":{"type":"fileChange","changes":[{"path":"/tmp/work/a.go","diff":"@@ -1 +1 @@\n-old\n+new\n"},{"path":"/tmp/work/b.go","diff":"@@ -1 +1 @@\n-old\n+new\n"}]}}}'
+printf '%s\n' '{"method":"item/completed","params":{"item":{"type":"agentMessage","phase":"final_answer","text":"done"}}}'
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := New(runtimeconfig.CodexConfig{
+		Command:        fake,
+		ApprovalPolicy: "never",
+		ThreadSandbox:  "workspace-write",
+		TurnTimeoutMS:  5000,
+		ReadTimeoutMS:  5000,
+	})
+	var events []Event
+	result, err := runner.RunSession(context.Background(), SessionRequest{
+		WorkspacePath: workspacePath,
+		Issue:         issuemodel.Issue{Identifier: "ZEE-STATS", Title: "stats"},
+		Prompts:       []TurnPrompt{{Text: "collect stats"}},
+	}, func(event Event) {
+		events = append(events, event)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats := result.Turns[0].Stats
+	if stats.CommandCount != 3 || stats.FailedCommandCount != 1 || stats.CommandDurationMS != 255 || stats.SlowestCommandDurationMS != 200 {
+		t.Fatalf("stats = %#v, want command counts and durations", stats)
+	}
+	if stats.SearchCommandCount != 1 || stats.ReadCommandCount != 1 || stats.TestCommandCount != 1 || stats.DominantCommandKind() != "search" {
+		t.Fatalf("stats = %#v, want command kind counts", stats)
+	}
+	if stats.FileChangeCount != 1 || stats.ChangedFileCount != 2 || !stats.FinalMessagePresent {
+		t.Fatalf("stats = %#v, want file/final summary", stats)
+	}
+	completed := eventPayload(events, "turn_completed")
+	if completed["command_count"] != 3 || completed["failed_command_count"] != 1 || completed["final_message_present"] != true {
+		t.Fatalf("turn_completed payload = %#v, want stats", completed)
+	}
+	if _, ok := completed["output"]; ok {
+		t.Fatalf("turn stats payload should not contain output: %#v", completed)
+	}
+}
+
+func TestCommandKind(t *testing.T) {
+	tests := map[string]string{
+		"rg -n foo .":            "search",
+		"bash -lc 'grep -R foo'": "search",
+		"sed -n '1,20p' a.go":    "read",
+		"./test.sh ./internal":   "test",
+		"go test ./...":          "test",
+		"./build.sh":             "build",
+		"npm run build":          "build",
+		"git status --short":     "git",
+		"docker ps":              "other",
+	}
+	for command, want := range tests {
+		if got := CommandKind(command); got != want {
+			t.Fatalf("CommandKind(%q) = %q, want %q", command, got, want)
+		}
+	}
+}
+
 func eventPayload(events []Event, name string) map[string]any {
 	for _, event := range events {
 		if event.Name == name {

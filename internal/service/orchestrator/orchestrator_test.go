@@ -935,7 +935,7 @@ func TestConcurrentRetryTimersHonorGlobalSlots(t *testing.T) {
 	close(runner.release)
 }
 
-func TestReconcileTerminalStateCancelsWorkerAndCleansWorkspace(t *testing.T) {
+func TestReconcileCanceledStateCancelsWorkerAndCleansWorkspace(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -947,14 +947,14 @@ func TestReconcileTerminalStateCancelsWorkerAndCleansWorkspace(t *testing.T) {
 	}
 	workspaceManager := workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook())
 	tracker := &reconciliationTracker{
-		stateIssues: []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}},
+		stateIssues: []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Canceled"}},
 	}
 	o := New(Options{
 		Workflow: &runtimeconfig.Workflow{
 			Config: runtimeconfig.Config{
 				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
-					TerminalStates: []string{"Done"},
+					TerminalStates: []string{"Done", "Canceled"},
 				},
 				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
 			},
@@ -1009,6 +1009,79 @@ func TestReconcileTerminalStateCancelsWorkerAndCleansWorkspace(t *testing.T) {
 	}
 }
 
+func TestReconcileDoneStateLetsWorkerFinishAndCleansWorkspace(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-DONE", Title: "done", State: "In Progress"}
+	runner := &blockingRunner{
+		started: make(chan string, 1),
+		release: make(chan struct{}),
+	}
+	workspaceManager := workspace.New(filepath.Join(t.TempDir(), "worktrees"), gitSeedHook())
+	tracker := &reconciliationTracker{
+		stateIssues: []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}},
+	}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates:   []string{"In Progress"},
+					TerminalStates: []string{"Done"},
+				},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspaceManager,
+		Runner:    runner,
+	})
+
+	done, ok := o.dispatchIssueDone(ctx, issue, 0)
+	if !ok {
+		t.Fatal("dispatchIssue returned false, want dispatch")
+	}
+	select {
+	case <-runner.started:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for worker start: %v", ctx.Err())
+	}
+	workspacePath, err := workspaceManager.PathForIssue(issue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(workspacePath); err != nil {
+		t.Fatalf("workspace should exist before reconciliation: %v", err)
+	}
+
+	if err := o.poll(ctx); err != nil {
+		t.Fatalf("poll returned error: %v", err)
+	}
+
+	select {
+	case <-done:
+		t.Fatal("worker exited before release; Done reconciliation should not cancel the active turn")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if _, err := os.Stat(workspacePath); err != nil {
+		t.Fatalf("workspace should remain until worker exits: %v", err)
+	}
+	close(runner.release)
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for worker exit: %v", ctx.Err())
+	}
+	if _, err := os.Stat(workspacePath); !os.IsNotExist(err) {
+		t.Fatalf("workspace after Done worker exit err = %v, want removed", err)
+	}
+	if calls := tracker.calls(); strings.Join(calls, ",") != "FetchIssueStatesByIDs,FetchActiveIssues" {
+		t.Fatalf("tracker calls = %v, want state refresh before active fetch", calls)
+	}
+}
+
 func TestReconcileTerminalCleanupUsesWorkerWorkspaceAfterReload(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1022,14 +1095,14 @@ func TestReconcileTerminalCleanupUsesWorkerWorkspaceAfterReload(t *testing.T) {
 		release:        make(chan struct{}),
 	}
 	tracker := &reconciliationTracker{
-		stateIssues: []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Done"}},
+		stateIssues: []issuemodel.Issue{{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title, State: "Canceled"}},
 	}
 	reloader := &sequenceReloader{
 		current: &runtimeconfig.Workflow{
 			Config: runtimeconfig.Config{
 				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
-					TerminalStates: []string{"Done"},
+					TerminalStates: []string{"Done", "Canceled"},
 				},
 				Polling:   runtimeconfig.PollingConfig{IntervalMS: 50},
 				Workspace: runtimeconfig.WorkspaceConfig{Root: newRoot},
@@ -1045,7 +1118,7 @@ func TestReconcileTerminalCleanupUsesWorkerWorkspaceAfterReload(t *testing.T) {
 			Config: runtimeconfig.Config{
 				Tracker: runtimeconfig.TrackerConfig{
 					ActiveStates:   []string{"In Progress"},
-					TerminalStates: []string{"Done"},
+					TerminalStates: []string{"Done", "Canceled"},
 				},
 				Polling: runtimeconfig.PollingConfig{IntervalMS: 50},
 				Agent:   runtimeconfig.AgentConfig{MaxTurns: 1},

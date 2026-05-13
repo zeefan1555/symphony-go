@@ -60,6 +60,23 @@ type Result struct {
 	CompletedAt  time.Time
 	Duration     time.Duration
 	Continuation bool
+	Stats        TurnStats
+}
+
+type TurnStats struct {
+	CommandCount             int
+	FailedCommandCount       int
+	CommandDurationMS        int64
+	SlowestCommandDurationMS int64
+	SearchCommandCount       int
+	ReadCommandCount         int
+	TestCommandCount         int
+	BuildCommandCount        int
+	GitCommandCount          int
+	OtherCommandCount        int
+	FileChangeCount          int
+	ChangedFileCount         int
+	FinalMessagePresent      bool
 }
 
 type SessionRequest struct {
@@ -174,7 +191,7 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 		if onEvent != nil {
 			onEvent(Event{Name: "turn_started", Payload: turnPayload(result, turnIndex+1, prompt.Continuation)})
 		}
-		if err := session.awaitTurn(ctx, time.Duration(r.Config.TurnTimeoutMS)*time.Millisecond, onEvent); err != nil {
+		if err := session.awaitTurn(ctx, time.Duration(r.Config.TurnTimeoutMS)*time.Millisecond, onEvent, &result.Stats); err != nil {
 			completedAt := time.Now()
 			result.CompletedAt = completedAt
 			result.Duration = completedAt.Sub(result.StartedAt)
@@ -219,10 +236,200 @@ func turnPayload(result Result, turnCount int, continuation bool) map[string]any
 		payload["completed_at"] = result.CompletedAt.Format(time.RFC3339Nano)
 		payload["duration_ms"] = result.Duration.Milliseconds()
 	}
+	for key, value := range result.Stats.fields() {
+		payload[key] = value
+	}
 	if result.WorkerHost != "" {
 		payload["worker_host"] = result.WorkerHost
 	}
 	return payload
+}
+
+func (s *TurnStats) observe(method string, payload map[string]any) {
+	if method != "item/completed" {
+		return
+	}
+	params := mapFromAny(payload["params"])
+	item := mapFromAny(params["item"])
+	switch stringField(item, "type") {
+	case "commandExecution":
+		s.observeCommand(item)
+	case "fileChange":
+		s.FileChangeCount++
+		s.ChangedFileCount += changedFileCount(item)
+	case "agentMessage":
+		if stringField(item, "phase") == "final_answer" {
+			s.FinalMessagePresent = true
+		}
+	}
+}
+
+func (s *TurnStats) observeCommand(item map[string]any) {
+	command := commandText(item)
+	kind := CommandKind(command)
+	s.CommandCount++
+	switch kind {
+	case "search":
+		s.SearchCommandCount++
+	case "read":
+		s.ReadCommandCount++
+	case "test":
+		s.TestCommandCount++
+	case "build":
+		s.BuildCommandCount++
+	case "git":
+		s.GitCommandCount++
+	default:
+		s.OtherCommandCount++
+	}
+	if exitCode, ok := intValue(item["exitCode"]); ok && exitCode != 0 {
+		s.FailedCommandCount++
+	}
+	if durationMS, ok := intValue(item["durationMs"]); ok && durationMS > 0 {
+		value := int64(durationMS)
+		s.CommandDurationMS += value
+		if value > s.SlowestCommandDurationMS {
+			s.SlowestCommandDurationMS = value
+		}
+	}
+}
+
+func (s TurnStats) DominantCommandKind() string {
+	kinds := []struct {
+		name  string
+		count int
+	}{
+		{"search", s.SearchCommandCount},
+		{"read", s.ReadCommandCount},
+		{"test", s.TestCommandCount},
+		{"build", s.BuildCommandCount},
+		{"git", s.GitCommandCount},
+		{"other", s.OtherCommandCount},
+	}
+	dominant := "none"
+	maxCount := 0
+	for _, kind := range kinds {
+		if kind.count > maxCount {
+			dominant = kind.name
+			maxCount = kind.count
+		}
+	}
+	return dominant
+}
+
+func (s TurnStats) fields() map[string]any {
+	return map[string]any{
+		"command_count":               s.CommandCount,
+		"failed_command_count":        s.FailedCommandCount,
+		"command_duration_ms":         s.CommandDurationMS,
+		"slowest_command_duration_ms": s.SlowestCommandDurationMS,
+		"search_command_count":        s.SearchCommandCount,
+		"read_command_count":          s.ReadCommandCount,
+		"test_command_count":          s.TestCommandCount,
+		"build_command_count":         s.BuildCommandCount,
+		"git_command_count":           s.GitCommandCount,
+		"other_command_count":         s.OtherCommandCount,
+		"file_change_count":           s.FileChangeCount,
+		"changed_file_count":          s.ChangedFileCount,
+		"final_message_present":       s.FinalMessagePresent,
+		"dominant_command_kind":       s.DominantCommandKind(),
+	}
+}
+
+func CommandKind(command string) string {
+	command = strings.TrimSpace(stripShellWrapper(command))
+	switch {
+	case strings.HasPrefix(command, "rg ") || command == "rg" ||
+		strings.HasPrefix(command, "grep ") || command == "grep" ||
+		strings.HasPrefix(command, "find ") || command == "find":
+		return "search"
+	case strings.HasPrefix(command, "sed ") || command == "sed" ||
+		strings.HasPrefix(command, "cat ") || command == "cat" ||
+		strings.HasPrefix(command, "nl ") || command == "nl" ||
+		strings.HasPrefix(command, "head ") || command == "head" ||
+		strings.HasPrefix(command, "tail ") || command == "tail" ||
+		strings.HasPrefix(command, "ls ") || command == "ls":
+		return "read"
+	case strings.HasPrefix(command, "./test.sh") ||
+		strings.HasPrefix(command, "go test") ||
+		strings.HasPrefix(command, "npm test") ||
+		strings.HasPrefix(command, "pytest"):
+		return "test"
+	case strings.HasPrefix(command, "./build.sh") ||
+		strings.HasPrefix(command, "go build") ||
+		strings.HasPrefix(command, "npm run build"):
+		return "build"
+	case strings.HasPrefix(command, "git ") || command == "git":
+		return "git"
+	default:
+		return "other"
+	}
+}
+
+func commandText(item map[string]any) string {
+	actions, _ := item["commandActions"].([]any)
+	for _, action := range actions {
+		if command := stringField(mapFromAny(action), "command"); command != "" {
+			return command
+		}
+	}
+	return stringField(item, "command")
+}
+
+func changedFileCount(item map[string]any) int {
+	changes, _ := item["changes"].([]any)
+	seen := map[string]bool{}
+	for _, change := range changes {
+		path := stringField(mapFromAny(change), "path")
+		if path != "" {
+			seen[path] = true
+		}
+	}
+	return len(seen)
+}
+
+func mapFromAny(value any) map[string]any {
+	if typed, ok := value.(map[string]any); ok {
+		return typed
+	}
+	return nil
+}
+
+func stringField(fields map[string]any, key string) string {
+	if fields == nil {
+		return ""
+	}
+	value, _ := fields[key].(string)
+	return value
+}
+
+func intValue(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int64:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	default:
+		return 0, false
+	}
+}
+
+func stripShellWrapper(command string) string {
+	command = strings.TrimSpace(command)
+	for _, prefix := range []string{"/bin/zsh -lc ", "bash -lc ", "/bin/bash -lc "} {
+		if strings.HasPrefix(command, prefix) {
+			command = strings.TrimSpace(strings.TrimPrefix(command, prefix))
+			break
+		}
+	}
+	if len(command) >= 2 {
+		if (command[0] == '\'' && command[len(command)-1] == '\'') || (command[0] == '"' && command[len(command)-1] == '"') {
+			command = command[1 : len(command)-1]
+		}
+	}
+	return command
 }
 
 func (r *Runner) startSession(ctx context.Context, workspacePath string, workerHost string) (*session, error) {
@@ -479,7 +686,7 @@ func (s *session) startTurn(id int, cwd string, prompt string, issue issuemodel.
 	return turnID, nil
 }
 
-func (s *session) awaitTurn(ctx context.Context, timeout time.Duration, onEvent func(Event)) error {
+func (s *session) awaitTurn(ctx context.Context, timeout time.Duration, onEvent func(Event), stats *TurnStats) error {
 	if timeout <= 0 {
 		timeout = time.Hour
 	}
@@ -503,6 +710,9 @@ func (s *session) awaitTurn(ctx context.Context, timeout time.Duration, onEvent 
 			method, _ := payload["method"].(string)
 			if onEvent != nil {
 				onEvent(Event{Name: method, Payload: payload, Raw: line})
+			}
+			if stats != nil {
+				stats.observe(method, payload)
 			}
 			switch method {
 			case "turn/completed":

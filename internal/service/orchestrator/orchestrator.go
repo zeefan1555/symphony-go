@@ -298,7 +298,11 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) error {
 		}
 		if isTerminal(issue.State, rt.workflow.Config.Tracker.TerminalStates) {
 			o.markPendingTerminalCleanup(issue, entry)
-			o.cancelRunning(issue.ID)
+			if shouldCancelRunningForTerminalState(issue.State) {
+				o.cancelRunning(issue.ID)
+			} else {
+				o.updateRunningState(issue.ID, issue.State)
+			}
 			continue
 		}
 		if issue.AssignedToWorker != nil && !*issue.AssignedToWorker {
@@ -960,6 +964,10 @@ func isActive(state string, active []string) bool {
 
 func isTerminal(state string, terminal []string) bool {
 	return stateNameIn(state, terminal)
+}
+
+func shouldCancelRunningForTerminalState(state string) bool {
+	return !strings.EqualFold(strings.TrimSpace(state), "Done")
 }
 
 func (o *Orchestrator) log(issue, event, message string, fields map[string]any) {

@@ -64,6 +64,16 @@ func recordStepMetrics(ctx context.Context, provider Facade, elapsed time.Durati
 		if counterErr == nil {
 			counter.Add(ctx, 1, metric.WithAttributes(MetricAttrs(fields)...))
 		}
+		turnHistogram, turnHistogramErr := meter.Float64Histogram("symphony_codex_turn_duration_ms")
+		if turnHistogramErr == nil {
+			turnHistogram.Record(ctx, durationMS(elapsed), metric.WithAttributes(MetricAttrs(fields)...))
+		}
+	}
+	if fields["step"] == "codex_slow_turn" {
+		counter, counterErr := meter.Int64Counter("symphony_codex_slow_turn_total")
+		if counterErr == nil {
+			counter.Add(ctx, 1, metric.WithAttributes(MetricAttrs(selectFields(fields, "phase", "stage", "state", "outcome"))...))
+		}
 	}
 	if err != nil {
 		failureFields := cloneFields(fields)
@@ -71,6 +81,21 @@ func recordStepMetrics(ctx context.Context, provider Facade, elapsed time.Durati
 		counter, counterErr := meter.Int64Counter("symphony_issue_step_failure_total")
 		if counterErr == nil {
 			counter.Add(ctx, 1, metric.WithAttributes(MetricAttrs(failureFields)...))
+		}
+	}
+}
+
+func recordCodexCommandMetrics(ctx context.Context, provider Facade, fields map[string]any) {
+	meter := activeFacade(provider).Meter()
+	metricFields := selectFields(fields, "phase", "stage", "command_kind", "command_status")
+	counter, counterErr := meter.Int64Counter("symphony_codex_command_total")
+	if counterErr == nil {
+		counter.Add(ctx, 1, metric.WithAttributes(MetricAttrs(metricFields)...))
+	}
+	if duration, ok := numericDurationMS(fields["duration_ms"]); ok {
+		histogram, histogramErr := meter.Float64Histogram("symphony_codex_command_duration_ms")
+		if histogramErr == nil {
+			histogram.Record(ctx, duration, metric.WithAttributes(MetricAttrs(metricFields)...))
 		}
 	}
 }
@@ -86,6 +111,29 @@ func recordTokenDelta(ctx context.Context, counter metric.Int64Counter, tokenTyp
 
 func durationMS(elapsed time.Duration) float64 {
 	return float64(elapsed) / float64(time.Millisecond)
+}
+
+func numericDurationMS(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case float64:
+		return typed, true
+	default:
+		return 0, false
+	}
+}
+
+func selectFields(fields map[string]any, keys ...string) map[string]any {
+	selected := make(map[string]any, len(keys))
+	for _, key := range keys {
+		if value, ok := fields[key]; ok {
+			selected[key] = value
+		}
+	}
+	return selected
 }
 
 func errorType(err error) string {

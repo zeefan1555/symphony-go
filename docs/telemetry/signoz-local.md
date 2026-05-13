@@ -125,10 +125,14 @@ symphony_issue_transition_duration_ms
 symphony_issue_phase_duration_ms
 symphony_issue_step_failure_total
 symphony_codex_turn_total
+symphony_codex_turn_duration_ms
+symphony_codex_command_total
+symphony_codex_command_duration_ms
+symphony_codex_slow_turn_total
 symphony_codex_tokens_total
 ```
 
-Metric label 只能使用低基数字段。`issue_id`、`issue_identifier`、`session_id`、`thread_id`、`turn_id`、`workspace_path` 只能作为 trace/log attributes。
+Metric label 只能使用低基数字段。`issue_id`、`issue_identifier`、`session_id`、`thread_id`、`turn_id`、`turn_count`、`command`、`cwd`、`source_file`、`evidence_locations`、`workspace_path` 只能作为 trace/log attributes。
 
 预期提交：
 
@@ -227,4 +231,3 @@ git diff --check
 - 不删除 JSONL / human log 本地兜底。
 - 不绕过 `./test.sh` / `./build.sh`。
 - 不在未理解当前脏区前 stage 或提交。
-

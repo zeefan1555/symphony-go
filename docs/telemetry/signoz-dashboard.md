@@ -22,10 +22,22 @@ export OTEL_EXPORTER_OTLP_INSECURE=true
 - trace span: `step`
 - metrics: `symphony_issue_run_total`
 - metrics: `symphony_issue_transition_total`
+- metrics: `symphony_codex_turn_duration_ms`
+- metrics: `symphony_codex_command_total`
+- metrics: `symphony_codex_command_duration_ms`
 - logs fields: `trace_id`、`span_id`
-- lifecycle logs: `dispatch_started`、`state_changed`、`codex_turn_completed`、`review_pass`、`merge_pass`、`push_pass`、`blocked` 或 `issue_error`
+- lifecycle logs: `dispatch_started`、`state_changed`、`codex_turn_completed`、`codex_turn_activity_summary`、`review_pass`、`merge_pass`、`push_pass`、`blocked` 或 `issue_error`
 
 ## Dashboard 面板
+
+面板定义的 repo-local 源头是 [signoz-dashboard-panels.yaml](signoz-dashboard-panels.yaml)。维护 SigNoz UI 时优先按该文件创建或更新面板，不要在 smoke 或排障时临时手写 SQL 再遗忘。
+
+使用约定：
+
+- Metrics 面板使用 SigNoz Query Builder，避免绑定 ClickHouse histogram 存储细节。
+- Logs / Traces drilldown 面板使用 ClickHouse 查询，因为它们需要展示 `body`、`trace_id`、`span_id`、`evidence_locations` 等明细字段。
+- 单 issue 变量统一命名为 `issue_identifier`，只用于 Logs / Traces 面板。
+- `Metric Cardinality Guard` 面板预期为空；出现任何行都代表 metric label 策略回归。
 
 ### 1. Active issues
 
@@ -165,19 +177,65 @@ error_type
 
 ```text
 symphony_codex_turn_total
+symphony_codex_turn_duration_ms
 ```
 
 分组字段：
 
 ```text
 phase
-step
+stage
+state
+outcome
+continuation
+```
+
+用途：观察 Codex turn 数量、耗时分布和慢 turn 是否集中在某个阶段。不要按 `turn_id` 或 `issue_identifier` 分组。
+
+### 8. Codex commands
+
+数据源：Metrics
+
+指标：
+
+```text
+symphony_codex_command_total
+symphony_codex_command_duration_ms
+```
+
+分组字段：
+
+```text
+phase
+stage
+command_kind
+command_status
+```
+
+用途：观察命令类型耗时和失败率。`command_kind` 只允许 `search/read/test/build/git/other`，不使用完整 `command` 作为 label。
+
+### 9. Slow turns
+
+数据源：Metrics
+
+指标：
+
+```text
+symphony_codex_slow_turn_total
+```
+
+分组字段：
+
+```text
+phase
+stage
+state
 outcome
 ```
 
-用途：观察 Codex turn 数量和成功/失败分布。
+用途：观察超过默认阈值 `120000ms` 的 turn 是否集中在某个状态或阶段。
 
-### 8. Codex tokens
+### 10. Codex tokens
 
 数据源：Metrics
 
@@ -195,7 +253,7 @@ token_type
 
 用途：观察 input/output/total token 增量。token 口径来自 orchestrator 的 Codex event delta 逻辑。
 
-### 9. Recent failures
+### 11. Recent failures
 
 数据源：Logs
 
@@ -250,6 +308,8 @@ issue_run
 ├─ step implementer/codex_file_change
 ├─ step implementer/codex_final
 ├─ step implementer/codex_turn_completed
+├─ step implementer/codex_turn_activity_summary
+├─ step implementer/codex_slow_turn
 ├─ step implementer/after_run_hook
 ├─ transition AI Review -> Merging
 └─ transition Merging -> Done
@@ -266,7 +326,15 @@ SELECT
   attributes_string['stage'] AS stage,
   attributes_string['message'] AS message,
   attributes_string['command'] AS command,
+  attributes_string['command_kind'] AS command_kind,
+  attributes_string['command_status'] AS command_status,
+  attributes_number['command_duration_ms'] AS command_duration_ms,
+  attributes_number['non_command_duration_ms'] AS non_command_duration_ms,
+  attributes_number['command_count'] AS command_count,
+  attributes_number['failed_command_count'] AS failed_command_count,
+  attributes_string['dominant_command_kind'] AS dominant_command_kind,
   attributes_string['file_locations'] AS file_locations,
+  attributes_string['evidence_locations'] AS evidence_locations,
   attributes_string['source_file'] AS source_file,
   attributes_number['source_line'] AS source_line,
   attributes_string['source_function'] AS source_function,
@@ -284,6 +352,8 @@ ORDER BY timestamp;
 issue_run with full run duration
 transition Todo -> In Progress
 step .../codex_turn_completed with real duration_ms
+step .../codex_turn_activity_summary with command_count and command_duration_ms
+step .../codex_slow_turn when a turn exceeds 120000ms
 step .../codex_command with command duration_ms
 step .../codex_file_change with file_locations and changed_lines
 step .../codex_final with bounded message
@@ -313,8 +383,15 @@ SELECT
   body,
   attributes_number['duration_ms'] AS duration_ms,
   attributes_string['command'] AS command,
+  attributes_string['command_kind'] AS command_kind,
   attributes_string['command_status'] AS command_status,
+  attributes_number['command_duration_ms'] AS command_duration_ms,
+  attributes_number['non_command_duration_ms'] AS non_command_duration_ms,
+  attributes_number['command_count'] AS command_count,
+  attributes_number['failed_command_count'] AS failed_command_count,
+  attributes_string['dominant_command_kind'] AS dominant_command_kind,
   attributes_string['file_locations'] AS file_locations,
+  attributes_string['evidence_locations'] AS evidence_locations,
   attributes_number['changed_lines'] AS changed_lines,
   attributes_string['source_file'] AS source_file,
   attributes_number['source_line'] AS source_line,
@@ -326,15 +403,17 @@ WHERE attributes_string['issue_identifier'] = 'ZEE-xxx'
 ORDER BY timestamp;
 ```
 
-预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`codex_turn_started`、`codex_turn_completed`、`state_changed`，以及对应收口阶段的 `review_pass` / `merge_pass`；直接推送收口场景还应包含 `push_pass`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
+预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`codex_turn_started`、`codex_turn_completed`、`codex_turn_activity_summary`、`state_changed`，以及对应收口阶段的 `review_pass` / `merge_pass`；直接推送收口场景还应包含 `push_pass`。若 turn 超过 `120000ms`，应能查到 `codex_slow_turn`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
 
-每条 lifecycle / Codex 精选日志都应保留生产排障所需的打点来源字段：`source_file`、`source_line`、`source_function`。这些字段表示 Symphony 代码里哪一行打出了这条日志；`file_locations` 表示 agent 修改了目标仓库文件的哪几行，两者语义不同。
+每条 lifecycle / Codex 精选日志都应保留生产排障所需的打点来源字段：`source_file`、`source_line`、`source_function`。这些字段表示 Symphony 代码里哪一行打出了这条日志；`file_locations` 表示 agent 修改了目标仓库文件的哪几行；`evidence_locations` 表示 agent 摘要或文件变更里提取到的业务代码锚点，三者语义不同。
 
 精选 Codex 执行日志按生产排障风格保留关键字段：
 
-- `codex_command`：`body` 是人类可读命令结果，字段包含 `command`、`command_status`、`cwd`、`exit_code`、`duration_ms`；不导出长 output。
-- `codex_file_change`：`body` 是人类可读变更摘要，字段包含 `file`、`files`、`file_locations`、`line_start`、`line_end`、`changed_lines`、`additions`、`deletions`、`summary`。
-- `codex_final`：`body` 只保留截断后的最终摘要，不导出 token delta 或原始 payload。
+- `codex_command`：`body` 是人类可读命令结果，字段包含 `command`、`command_kind`、`command_status`、`cwd`、`exit_code`、`duration_ms`；不导出长 output。
+- `codex_turn_activity_summary`：`body` 是人类可读 turn 摘要，字段包含 `duration_ms`、`command_duration_ms`、`non_command_duration_ms`、`command_count`、`failed_command_count`、`dominant_command_kind`。
+- `codex_slow_turn`：只在 turn 超过 `120000ms` 时出现，用于解释慢 turn 的命令耗时和非命令耗时。
+- `codex_file_change`：`body` 是人类可读变更摘要，字段包含 `file`、`files`、`file_locations`、`evidence_locations`、`line_start`、`line_end`、`changed_lines`、`additions`、`deletions`、`summary`。
+- `codex_final`：`body` 只保留截断后的最终摘要，可提取最多 5 个 `file:line` 形式的 `evidence_locations`，不导出 token delta 或原始 payload。
 
 ### Metrics boundary
 
@@ -346,12 +425,16 @@ FROM signoz_metrics.time_series_v4
 WHERE metric_name IN (
   'symphony_issue_phase_duration_ms',
   'symphony_issue_transition_duration_ms',
-  'symphony_codex_turn_total'
+  'symphony_codex_turn_total',
+  'symphony_codex_turn_duration_ms',
+  'symphony_codex_command_total',
+  'symphony_codex_command_duration_ms',
+  'symphony_codex_slow_turn_total'
 )
 LIMIT 20;
 ```
 
-预期低基数字段包括 `from_state`、`to_state`、`phase`、`stage`、`step`、`outcome`。不应出现 `issue_identifier`、`issue_id`、`session_id`、`turn_id`、`turn_count` 或 `duration_ms` 作为 metric label。
+预期低基数字段包括 `from_state`、`to_state`、`phase`、`stage`、`step`、`outcome`、`continuation`、`command_kind`、`command_status`。不应出现 `issue_identifier`、`issue_id`、`session_id`、`turn_id`、`turn_count`、`duration_ms`、`command`、`source_file`、`evidence_locations` 作为 metric label。
 
 ### 从日志跳回 Trace
 
@@ -389,10 +472,10 @@ WHERE metric_name LIKE 'symphony_%'
 LIMIT 20;
 ```
 
-验收点是存在 `symphony_issue_transition_total` 和 duration histograms，并能看到 `from_state` / `to_state` / `phase` / `stage` / `step` / `outcome` 等低基数字段；不要求、也不允许要求 `issue_identifier`。
+验收点是存在 `symphony_issue_transition_total`、turn duration、command duration 和 slow turn 指标，并能看到 `from_state` / `to_state` / `phase` / `stage` / `step` / `outcome` / `command_kind` / `command_status` 等低基数字段；不要求、也不允许要求 `issue_identifier`。
 
 ## 禁止项
 
-- Metric label 不允许使用 `issue_id`、`issue_identifier`、`session_id`、`thread_id`、`turn_id`、`turn_count`、`duration_ms`、`started_at`、`completed_at`、`workspace_path`。
+- Metric label 不允许使用 `issue_id`、`issue_identifier`、`session_id`、`thread_id`、`turn_id`、`turn_count`、`duration_ms`、`started_at`、`completed_at`、`workspace_path`、`command`、`cwd`、`source_file`、`source_line`、`source_function`、`evidence_file`、`evidence_line`、`evidence_locations`。
 - 不把原始 Codex event payload 直接写入 Trace、Metric 或 Log。
 - 不删除 JSONL 本地兜底；SigNoz 是长期查询入口，JSONL 是离线排障和本地兜底。

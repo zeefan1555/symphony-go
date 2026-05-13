@@ -114,7 +114,7 @@ func TestRecordLogExportsCuratedCodexEvents(t *testing.T) {
 				"item": map[string]any{
 					"type":  "agentMessage",
 					"phase": "final_answer",
-					"text":  "Final answer summary that should be exported as a bounded log body.",
+					"text":  "Final answer summary references service/drop_reward.go:264 and handler.go:1145.",
 				},
 			},
 			"token_delta": "do not export",
@@ -126,6 +126,9 @@ func TestRecordLogExportsCuratedCodexEvents(t *testing.T) {
 		IssueID:         "issue-1",
 		IssueIdentifier: "ZEE-1",
 		Fields: map[string]any{
+			"source_file":     "internal/service/issueflow/agent_session.go",
+			"source_function": "internal/service/issueflow.runWorkerAttempt.func3",
+			"source_line":     180,
 			"params": map[string]any{
 				"item": map[string]any{
 					"type":             "commandExecution",
@@ -182,18 +185,21 @@ func TestRecordLogExportsCuratedCodexEvents(t *testing.T) {
 		t.Fatalf("event names = %#v, want %#v", names, wantNames)
 	}
 	commandAttrs := logRecordAttrs(logger.records[2])
-	if commandAttrs["command"] != "git status --short" || commandAttrs["command_status"] != "succeeded" || commandAttrs["cwd"] != "ZEE-1" {
+	if commandAttrs["command"] != "git status --short" || commandAttrs["command_kind"] != "git" || commandAttrs["command_status"] != "succeeded" || commandAttrs["cwd"] != "ZEE-1" {
 		t.Fatalf("command attrs = %#v", commandAttrs)
+	}
+	if commandAttrs["source_file"] != "internal/service/issueflow/agent_session.go" || commandAttrs["source_function"] != "internal/service/issueflow.runWorkerAttempt.func3" {
+		t.Fatalf("command source attrs = %#v", commandAttrs)
 	}
 	if logger.records[2].Body().AsString() != "Command succeeded: git status --short (25ms)" {
 		t.Fatalf("command body = %q", logger.records[2].Body().AsString())
 	}
 	commandInts := logRecordIntAttrs(logger.records[2])
-	if commandInts["exit_code"] != 0 || commandInts["duration_ms"] != 25 {
-		t.Fatalf("command int attrs = %#v, want exit_code and duration_ms", commandInts)
+	if commandInts["exit_code"] != 0 || commandInts["duration_ms"] != 25 || commandInts["source_line"] != 180 {
+		t.Fatalf("command int attrs = %#v, want exit_code, duration_ms, and source_line", commandInts)
 	}
 	fileAttrs := logRecordAttrs(logger.records[3])
-	if fileAttrs["file"] != "SMOKE.md" || fileAttrs["files"] != "SMOKE.md" || fileAttrs["file_locations"] != "SMOKE.md:1" {
+	if fileAttrs["file"] != "SMOKE.md" || fileAttrs["files"] != "SMOKE.md" || fileAttrs["file_locations"] != "SMOKE.md:1" || fileAttrs["evidence_locations"] != "SMOKE.md:1" {
 		t.Fatalf("file attrs = %#v, want SMOKE.md location", fileAttrs)
 	}
 	if logger.records[3].Body().AsString() != "Changed SMOKE.md:1 (+1/-0)" {
@@ -202,6 +208,14 @@ func TestRecordLogExportsCuratedCodexEvents(t *testing.T) {
 	fileInts := logRecordIntAttrs(logger.records[3])
 	if fileInts["file_count"] != 1 || fileInts["line_start"] != 1 || fileInts["line_end"] != 1 || fileInts["changed_lines"] != 1 || fileInts["additions"] != 1 || fileInts["deletions"] != 0 {
 		t.Fatalf("file int attrs = %#v, want file count and line metadata", fileInts)
+	}
+	finalAttrs := logRecordAttrs(logger.records[1])
+	if finalAttrs["evidence_file"] != "service/drop_reward.go" || finalAttrs["evidence_locations"] != "service/drop_reward.go:264,handler.go:1145" {
+		t.Fatalf("final attrs = %#v, want evidence locations", finalAttrs)
+	}
+	finalInts := logRecordIntAttrs(logger.records[1])
+	if finalInts["evidence_line"] != 264 {
+		t.Fatalf("final int attrs = %#v, want evidence_line", finalInts)
 	}
 }
 
@@ -218,6 +232,8 @@ func TestRecordLogExportsLifecycleEvents(t *testing.T) {
 		"dispatch_started",
 		"state_changed",
 		"codex_turn_completed",
+		"codex_turn_activity_summary",
+		"codex_slow_turn",
 		"review_pass",
 		"merge_pass",
 		"push_pass",
@@ -237,7 +253,7 @@ func TestRecordLogExportsLifecycleEvents(t *testing.T) {
 		})
 	}
 
-	if len(logger.records) != 8 {
+	if len(logger.records) != 10 {
 		t.Fatalf("records = %d, want lifecycle logs", len(logger.records))
 	}
 	for _, record := range logger.records {

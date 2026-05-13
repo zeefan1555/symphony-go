@@ -25,8 +25,10 @@ func TestMetricsUseLowCardinalityAttributes(t *testing.T) {
 	stepCtx, endStep := StartStep(transitionCtx, provider, "implementer", "workspace_prepared", highCardinalityFields())
 	endStep("success", nil)
 	RecordStep(stepCtx, provider, "implementer", "codex_turn_completed", "success", highCardinalityFields(), nil)
+	RecordStep(stepCtx, provider, "implementer", "codex_slow_turn", "success", highCardinalityFields(), nil)
 	RecordStep(stepCtx, provider, "implementer", "workspace_prepared", "error", highCardinalityFields(), errors.New("boom"))
 	RecordCodexTokens(stepCtx, provider, 1, 2, 3, highCardinalityFields())
+	recordCodexCommandMetrics(stepCtx, provider, highCardinalityFields())
 	RecordIssueActive(stepCtx, provider, 1, highCardinalityFields())
 	RecordIssueRetrying(stepCtx, provider, 1, highCardinalityFields())
 	endRun("done", nil)
@@ -43,6 +45,10 @@ func TestMetricsUseLowCardinalityAttributes(t *testing.T) {
 		"symphony_issue_phase_duration_ms",
 		"symphony_issue_step_failure_total",
 		"symphony_codex_turn_total",
+		"symphony_codex_turn_duration_ms",
+		"symphony_codex_command_total",
+		"symphony_codex_command_duration_ms",
+		"symphony_codex_slow_turn_total",
 		"symphony_codex_tokens_total",
 		"symphony_issue_active",
 		"symphony_issue_retrying",
@@ -56,20 +62,35 @@ func TestMetricsUseLowCardinalityAttributes(t *testing.T) {
 
 func highCardinalityFields() map[string]any {
 	return map[string]any{
-		"issue_id":         "issue-1",
-		"issue_identifier": "ZEE-1",
-		"session_id":       "session-1",
-		"started_at":       "2026-05-13T12:00:00Z",
-		"thread_id":        "thread-1",
-		"turn_id":          "turn-1",
-		"turn_count":       9,
-		"continuation":     true,
-		"completed_at":     "2026-05-13T12:00:01Z",
-		"duration_ms":      1000,
-		"workspace_path":   "/tmp/ZEE-1",
-		"phase":            "implementer",
-		"stage":            "running_agent",
-		"outcome":          "success",
+		"issue_id":                    "issue-1",
+		"issue_identifier":            "ZEE-1",
+		"session_id":                  "session-1",
+		"started_at":                  "2026-05-13T12:00:00Z",
+		"thread_id":                   "thread-1",
+		"turn_id":                     "turn-1",
+		"turn_count":                  9,
+		"continuation":                true,
+		"completed_at":                "2026-05-13T12:00:01Z",
+		"duration_ms":                 1000,
+		"workspace_path":              "/tmp/ZEE-1",
+		"command":                     "git status --short",
+		"command_kind":                "git",
+		"command_status":              "succeeded",
+		"command_count":               4,
+		"failed_command_count":        1,
+		"command_duration_ms":         100,
+		"slowest_command_duration_ms": 80,
+		"non_command_duration_ms":     900,
+		"dominant_command_kind":       "search",
+		"file_change_count":           1,
+		"changed_file_count":          2,
+		"final_message_present":       true,
+		"evidence_file":               "service/drop_reward.go",
+		"evidence_line":               264,
+		"evidence_locations":          "service/drop_reward.go:264",
+		"phase":                       "implementer",
+		"stage":                       "running_agent",
+		"outcome":                     "success",
 	}
 }
 

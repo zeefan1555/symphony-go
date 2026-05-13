@@ -1,0 +1,265 @@
+# Symphony Go SigNoz dashboard panel source.
+#
+# This file is intentionally repo-local and text-reviewable. SigNoz UI/import
+# formats can drift across versions; keep this file as the stable source of
+# panel names, intent, grouping, and queries.
+#
+# Metrics panels use SigNoz Query Builder semantics rather than raw
+# ClickHouse, so they do not depend on histogram storage table internals.
+# Logs/Traces drilldown and cardinality guard panels use ClickHouse SQL.
+#
+# Variables used by panels:
+# - service_name: default "symphony-go"
+# - issue_identifier: optional drilldown value such as "ZEE-183"
+
+version: 1
+dashboard:
+  name: Symphony Go Observability
+  description: Issue lifecycle, Codex turn readability, and low-cardinality global health.
+  variables:
+    service_name:
+      default: symphony-go
+      description: OTel service.name.
+    issue_identifier:
+      default: ""
+      description: Optional single issue drilldown. Use only for Trace and Logs panels.
+
+panels:
+  - id: issue-run-throughput
+    title: Issue Runs by Outcome
+    source: metrics
+    visualization: timeseries
+    purpose: Track successful, failed, and stopped issue runs globally.
+    metric: symphony_issue_run_total
+    group_by:
+      - outcome
+    query_builder:
+      metric: symphony_issue_run_total
+      aggregate: rate_sum
+      step: 5m
+      group_by:
+        - outcome
+    read_as: Spikes in non-success outcomes mean issueflow or integration failures need drilldown.
+
+  - id: transition-duration-p95
+    title: Transition Duration P95
+    source: metrics
+    visualization: timeseries
+    purpose: Find slow state transitions such as Todo -> In Progress or Pushing -> Done.
+    metric: symphony_issue_transition_duration_ms
+    group_by:
+      - from_state
+      - to_state
+      - outcome
+    query_builder:
+      metric: symphony_issue_transition_duration_ms
+      aggregate: p95
+      step: 5m
+      group_by:
+        - from_state
+        - to_state
+        - outcome
+    read_as: High p95 means tracker update, review/pass handling, or terminal cleanup is slow.
+
+  - id: codex-turn-duration-p95
+    title: Codex Turn Duration P95
+    source: metrics
+    visualization: timeseries
+    purpose: Track global Codex turn latency by workflow phase and state.
+    metric: symphony_codex_turn_duration_ms
+    group_by:
+      - phase
+      - stage
+      - state
+      - outcome
+      - continuation
+    query_builder:
+      metric: symphony_codex_turn_duration_ms
+      aggregate: p95
+      step: 5m
+      group_by:
+        - phase
+        - stage
+        - state
+        - outcome
+        - continuation
+    read_as: Use this to spot slow implementer/reviewer turns without querying individual issues.
+
+  - id: slow-turn-count
+    title: Slow Turn Count
+    source: metrics
+    visualization: stat-timeseries
+    purpose: Count turns crossing the built-in 120000ms slow-turn threshold.
+    metric: symphony_codex_slow_turn_total
+    group_by:
+      - phase
+      - stage
+      - state
+      - outcome
+    query_builder:
+      metric: symphony_codex_slow_turn_total
+      aggregate: rate_sum
+      step: 5m
+      group_by:
+        - phase
+        - stage
+        - state
+        - outcome
+    read_as: Any non-zero value deserves Logs/Trace drilldown for codex_slow_turn.
+
+  - id: command-duration-p95
+    title: Command Duration P95 by Kind
+    source: metrics
+    visualization: timeseries
+    purpose: Distinguish shell/tool slowness from model/non-command time.
+    metric: symphony_codex_command_duration_ms
+    group_by:
+      - command_kind
+      - command_status
+      - phase
+      - stage
+    query_builder:
+      metric: symphony_codex_command_duration_ms
+      aggregate: p95
+      step: 5m
+      group_by:
+        - command_kind
+        - command_status
+        - phase
+        - stage
+    read_as: If turn duration is high but command p95 is low, slowness is mostly non-command time.
+
+  - id: command-failure-rate
+    title: Command Failure Rate by Kind
+    source: metrics
+    visualization: table
+    purpose: Find repeated failed command categories without using full command text as a label.
+    metric: symphony_codex_command_total
+    group_by:
+      - command_kind
+      - command_status
+      - phase
+      - stage
+    query_builder:
+      metric: symphony_codex_command_total
+      aggregate: rate_sum
+      step: 5m
+      group_by:
+        - command_kind
+        - command_status
+        - phase
+        - stage
+      table_transform: Calculate failed / total per command_kind, phase, and stage in the panel.
+    read_as: High search/read failure usually means workflow prompt or repo path assumptions are wrong.
+
+  - id: recent-slow-turn-logs
+    title: Recent Slow Turn Logs
+    source: logs
+    visualization: table
+    purpose: Open the human-readable slow-turn summary without writing SQL.
+    clickhouse_query: |
+      SELECT
+        timestamp,
+        attributes_string['issue_identifier'] AS issue,
+        body,
+        attributes_number['duration_ms'] AS duration_ms,
+        attributes_number['command_duration_ms'] AS command_duration_ms,
+        attributes_number['non_command_duration_ms'] AS non_command_duration_ms,
+        attributes_number['command_count'] AS command_count,
+        attributes_string['dominant_command_kind'] AS dominant,
+        trace_id
+      FROM signoz_logs.logs_v2
+      WHERE attributes_string['event'] = 'codex_slow_turn'
+      ORDER BY timestamp DESC
+      LIMIT 50
+    read_as: The body should explain total time, command time, non-command time, and dominant command kind.
+
+  - id: issue-timeline-logs
+    title: Issue Timeline Logs
+    source: logs
+    visualization: table
+    purpose: Drill down one issue lifecycle and Codex summary by issue_identifier.
+    variable_required:
+      - issue_identifier
+    clickhouse_query: |
+      SELECT
+        timestamp,
+        attributes_string['event'] AS event,
+        body,
+        attributes_number['duration_ms'] AS duration_ms,
+        attributes_number['command_duration_ms'] AS command_duration_ms,
+        attributes_number['non_command_duration_ms'] AS non_command_duration_ms,
+        attributes_string['evidence_locations'] AS evidence_locations,
+        attributes_string['source_file'] AS source_file,
+        attributes_number['source_line'] AS source_line,
+        trace_id,
+        span_id
+      FROM signoz_logs.logs_v2
+      WHERE
+        attributes_string['issue_identifier'] = '{{ issue_identifier }}'
+        AND attributes_string['event'] IN (
+          'dispatch_started',
+          'state_changed',
+          'codex_turn_started',
+          'codex_turn_completed',
+          'codex_turn_activity_summary',
+          'codex_slow_turn',
+          'codex_final',
+          'review_pass',
+          'push_pass',
+          'issue_error',
+          'blocked'
+        )
+      ORDER BY timestamp
+    read_as: This is the default single-issue timeline. Use trace_id to jump to the Trace view.
+
+  - id: issue-trace-timeline
+    title: Issue Trace Timeline
+    source: traces
+    visualization: table
+    purpose: Show span duration and turn activity fields for one issue.
+    variable_required:
+      - issue_identifier
+    clickhouse_query: |
+      SELECT
+        timestamp,
+        name,
+        round(duration_nano / 1000000, 1) AS duration_ms,
+        attributes_number['duration_ms'] AS attr_duration_ms,
+        attributes_number['command_duration_ms'] AS command_duration_ms,
+        attributes_number['non_command_duration_ms'] AS non_command_duration_ms,
+        attributes_number['command_count'] AS command_count,
+        attributes_string['dominant_command_kind'] AS dominant,
+        attributes_string['outcome'] AS outcome,
+        trace_id,
+        span_id
+      FROM signoz_traces.signoz_index_v3
+      WHERE attributes_string['issue_identifier'] = '{{ issue_identifier }}'
+      ORDER BY timestamp
+    read_as: issue_run and codex_turn_completed carry duration; activity_summary explains why the turn was slow.
+
+  - id: metric-cardinality-guard
+    title: Metric Cardinality Guard
+    source: metrics
+    visualization: table
+    purpose: Detect forbidden high-cardinality labels before they become a cost or usability problem.
+    clickhouse_query: |
+      SELECT
+        metric_name,
+        countIf(
+          mapContains(attrs, 'issue_identifier')
+          OR mapContains(attrs, 'issue_id')
+          OR mapContains(attrs, 'session_id')
+          OR mapContains(attrs, 'turn_id')
+          OR mapContains(attrs, 'turn_count')
+          OR mapContains(attrs, 'command')
+          OR mapContains(attrs, 'source_file')
+          OR mapContains(attrs, 'evidence_locations')
+        ) AS forbidden_series,
+        count() AS total_series
+      FROM signoz_metrics.distributed_time_series_v4
+      WHERE metric_name LIKE 'symphony_%'
+      GROUP BY metric_name
+      HAVING forbidden_series > 0
+      ORDER BY forbidden_series DESC
+    read_as: This panel should be empty. Any row means metrics label policy regressed.

@@ -3,6 +3,7 @@ package issueflow
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
@@ -10,6 +11,8 @@ import (
 	"symphony-go/internal/service/workflow"
 	"symphony-go/internal/service/workspace"
 )
+
+const slowCodexTurnThreshold = 120 * time.Second
 
 func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, attempt int) (Result, error) {
 	phase := nextWorkerPhase(issue)
@@ -63,6 +66,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 	lastAgentMessage := ""
 	attemptResult := Result{Outcome: OutcomeRetryContinuation}
 	currentIssue := issue
+	currentTurnCount := 1
 	request := codex.SessionRequest{
 		WorkspacePath: workspacePath,
 		Issue:         issue,
@@ -97,6 +101,17 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 				"state":        turnStartIssue.State,
 				"duration_ms":  durationMS,
 			}))
+			activityFields := turnActivityFields(result, turnCount, turnPhase, turnStage, turnStartIssue.State)
+			activityFields["issue_id"] = currentIssue.ID
+			activityFields["issue_identifier"] = currentIssue.Identifier
+			telemetry.RecordStep(ctx, rt.Telemetry, string(turnPhase), "codex_turn_activity_summary", "success", activityFields, nil)
+			logIssue(ctx, rt, currentIssue, "codex_turn_activity_summary", turnActivityMessage(result, turnCount), stepLogFields(turnPhase, "codex_turn_activity_summary", "success", activityFields))
+			if result.Duration >= slowCodexTurnThreshold {
+				slowFields := cloneMap(activityFields)
+				slowFields["threshold_ms"] = slowCodexTurnThreshold.Milliseconds()
+				telemetry.RecordStep(ctx, rt.Telemetry, string(turnPhase), "codex_slow_turn", "success", slowFields, nil)
+				logIssue(ctx, rt, currentIssue, "codex_slow_turn", slowTurnMessage(result), stepLogFields(turnPhase, "codex_slow_turn", "success", slowFields))
+			}
 			refreshed, err := rt.Tracker.FetchIssue(ctx, currentIssue.ID)
 			if err != nil {
 				attemptResult = Result{Outcome: OutcomeRetryFailure}
@@ -121,6 +136,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 				nextPhase := nextWorkerPhase(currentIssue)
 				nextStage := nextWorkerStage(currentIssue, nextTurn)
 				setRunningStage(rt, currentIssue, attempt, nextPhase, nextStage, stageMessage(nextStage), workspacePath, nextTurn)
+				currentTurnCount = nextTurn
 				promptIssue := currentIssue
 				return codex.TurnPrompt{
 					Text:         nextWorkerPrompt(currentIssue),
@@ -163,6 +179,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 			nextPhase := nextWorkerPhase(currentIssue)
 			nextStage := nextWorkerStage(currentIssue, nextTurn)
 			setRunningStage(rt, currentIssue, attempt, nextPhase, nextStage, stageMessage(nextStage), workspacePath, nextTurn)
+			currentTurnCount = nextTurn
 			promptIssue := currentIssue
 			return codex.TurnPrompt{
 				Text:         nextWorkerPrompt(currentIssue),
@@ -177,7 +194,9 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 			lastAgentMessage = text
 		}
 		updateRunningFromEvent(rt, issue.ID, event)
-		logIssue(ctx, rt, issue, "codex_event", event.Name, stepLogFields(phase, "codex_event", "", event.Payload))
+		eventPhase := nextWorkerPhase(currentIssue)
+		eventStage := nextWorkerStage(currentIssue, currentTurnCount)
+		logIssue(ctx, rt, issue, "codex_event", event.Name, stepLogFields(eventPhase, "codex_event", "", mergeEventFields(event.Payload, eventStage, currentIssue.State)))
 	})
 	removeRunning(rt, issue.ID)
 	if err != nil {
@@ -197,6 +216,74 @@ func stepLogFields(phase AgentPhase, step, outcome string, fields map[string]any
 		correlated["outcome"] = outcome
 	}
 	return correlated
+}
+
+func turnActivityFields(result codex.Result, turnCount int, phase AgentPhase, stage RunStage, state string) map[string]any {
+	durationMS := result.Duration.Milliseconds()
+	commandDurationMS := result.Stats.CommandDurationMS
+	nonCommandDurationMS := durationMS - commandDurationMS
+	if nonCommandDurationMS < 0 {
+		nonCommandDurationMS = 0
+	}
+	return map[string]any{
+		"session_id":                  result.SessionID,
+		"turn_id":                     result.TurnID,
+		"turn_count":                  turnCount,
+		"continuation":                result.Continuation,
+		"phase":                       string(phase),
+		"stage":                       string(stage),
+		"state":                       state,
+		"duration_ms":                 durationMS,
+		"command_count":               result.Stats.CommandCount,
+		"failed_command_count":        result.Stats.FailedCommandCount,
+		"command_duration_ms":         commandDurationMS,
+		"slowest_command_duration_ms": result.Stats.SlowestCommandDurationMS,
+		"non_command_duration_ms":     nonCommandDurationMS,
+		"dominant_command_kind":       result.Stats.DominantCommandKind(),
+		"file_change_count":           result.Stats.FileChangeCount,
+		"changed_file_count":          result.Stats.ChangedFileCount,
+		"final_message_present":       result.Stats.FinalMessagePresent,
+	}
+}
+
+func turnActivityMessage(result codex.Result, turnCount int) string {
+	return fmt.Sprintf("Turn %d finished in %dms; commands=%d failed=%d command_ms=%d files_changed=%d dominant=%s",
+		turnCount,
+		result.Duration.Milliseconds(),
+		result.Stats.CommandCount,
+		result.Stats.FailedCommandCount,
+		result.Stats.CommandDurationMS,
+		result.Stats.ChangedFileCount,
+		result.Stats.DominantCommandKind(),
+	)
+}
+
+func slowTurnMessage(result codex.Result) string {
+	nonCommandDurationMS := result.Duration.Milliseconds() - result.Stats.CommandDurationMS
+	if nonCommandDurationMS < 0 {
+		nonCommandDurationMS = 0
+	}
+	return fmt.Sprintf("Slow turn detected: duration=%dms command_ms=%d dominant=%s; likely non-command time=%dms",
+		result.Duration.Milliseconds(),
+		result.Stats.CommandDurationMS,
+		result.Stats.DominantCommandKind(),
+		nonCommandDurationMS,
+	)
+}
+
+func mergeEventFields(fields map[string]any, stage RunStage, state string) map[string]any {
+	merged := cloneMap(fields)
+	merged["stage"] = string(stage)
+	merged["state"] = state
+	return merged
+}
+
+func cloneMap(fields map[string]any) map[string]any {
+	clone := make(map[string]any, len(fields)+2)
+	for key, value := range fields {
+		clone[key] = value
+	}
+	return clone
 }
 
 func stageMessage(stage RunStage) string {
