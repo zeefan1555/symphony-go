@@ -1,6 +1,6 @@
 # SigNoz Dashboard 和验证指南
 
-本文档记录 `symphony-go` 接入 SigNoz 后的最小 dashboard、查询字段和端到端验收步骤。Dashboard 只使用低基数 metric label；`issue_identifier` 只用于 trace/log drilldown，不用于 metric 聚合。
+本文档记录 `symphony-go` 接入 SigNoz 后的最小 dashboard、查询字段和端到端验收步骤。Dashboard 只使用低基数 metric label；`issue_identifier` 只用于 trace/log drilldown，不用于 metric 聚合。任务或 smoke 若要求按 `issue_identifier` 查 metrics，应记录为不适用，而不是失败。
 
 ## 前置条件
 
@@ -21,7 +21,9 @@ export OTEL_EXPORTER_OTLP_INSECURE=true
 - trace span: `transition`
 - trace span: `step`
 - metrics: `symphony_issue_run_total`
+- metrics: `symphony_issue_transition_total`
 - logs fields: `trace_id`、`span_id`
+- lifecycle logs: `dispatch_started`、`state_changed`、`codex_turn_completed`、`review_pass`、`push_pass`、`blocked` 或 `issue_error`
 
 ## Dashboard 面板
 
@@ -242,9 +244,50 @@ issue_run
 ├─ step implementer/prompt_rendered
 ├─ step implementer/codex_turn_completed
 ├─ step implementer/after_run_hook
-├─ transition AI Review -> Merging
-└─ transition Merging -> Done
+├─ transition AI Review -> Pushing
+└─ transition Pushing -> Done
 ```
+
+ClickHouse 查询示例：
+
+```sql
+SELECT name, attributes_string['from_state'], attributes_string['to_state'], attributes_string['outcome']
+FROM signoz_traces.signoz_index_v3
+WHERE attributes_string['issue_identifier'] = 'ZEE-xxx'
+ORDER BY timestamp;
+```
+
+预期至少包含：
+
+```text
+transition Todo -> In Progress
+transition AI Review -> Pushing
+transition Pushing -> Done
+```
+
+## Logs drilldown
+
+SigNoz Logs 是 issue lifecycle 的统一查询入口。本地 `.human.log` / `.jsonl` 只作为本机 fallback/debug，不作为 smoke 主验收事实源。
+
+数据源：Logs
+
+过滤字段：
+
+```text
+service.name = symphony-go
+issue_identifier = ZEE-xxx
+```
+
+ClickHouse 查询示例：
+
+```sql
+SELECT body, trace_id
+FROM signoz_logs.logs_v2
+WHERE attributes_string['issue_identifier'] = 'ZEE-xxx'
+ORDER BY timestamp;
+```
+
+预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`state_changed`、`codex_turn_completed`，以及对应收口阶段的 `review_pass` / `push_pass`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
 
 ### 从日志跳回 Trace
 
@@ -271,8 +314,18 @@ trace_id = <jsonl trace_id>
 5. 在 Traces 中按 `service.name=symphony-go` 查询。
 6. 在 Traces 中按 `issue_identifier=ZEE-xxx` drilldown。
 7. 在 Metrics 中确认核心指标出现。
-8. 在 Logs 或本地 JSONL 中确认存在 `trace_id` / `span_id`。
+8. 在 Logs 中按 `issue_identifier=ZEE-xxx` 确认 lifecycle logs 存在，并带 `trace_id` / `span_id`。
 9. 用任意一条失败或关键日志的 `trace_id` 回查 Trace。
+10. 在 Metrics 中不带 `issue_identifier` 查询低基数字段：
+
+```sql
+SELECT metric_name, attrs
+FROM signoz_metrics.time_series_v4
+WHERE metric_name LIKE 'symphony_%'
+LIMIT 20;
+```
+
+验收点是存在 `symphony_issue_transition_total`，并能看到 `from_state` / `to_state` / `outcome` 等低基数字段；不要求、也不允许要求 `issue_identifier`。
 
 ## 禁止项
 

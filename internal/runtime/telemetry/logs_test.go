@@ -71,6 +71,48 @@ func TestRecordLogSkipsRawCodexPayload(t *testing.T) {
 	}
 }
 
+func TestRecordLogExportsLifecycleEvents(t *testing.T) {
+	logger := &recordingLogger{}
+	provider, _ := newTestProvider()
+	provider = testFacade{
+		tracer: provider.Tracer(),
+		meter:  provider.Meter(),
+		logger: logger,
+	}
+
+	for _, event := range []string{
+		"dispatch_started",
+		"state_changed",
+		"codex_turn_completed",
+		"review_pass",
+		"push_pass",
+		"blocked",
+		"issue_error",
+	} {
+		RecordLog(context.Background(), provider, logging.Event{
+			Event:           event,
+			Message:         event,
+			IssueID:         "issue-1",
+			IssueIdentifier: "ZEE-1",
+			Fields: map[string]any{
+				"from_state": "AI Review",
+				"to_state":   "Pushing",
+				"outcome":    "success",
+			},
+		})
+	}
+
+	if len(logger.records) != 7 {
+		t.Fatalf("records = %d, want lifecycle logs", len(logger.records))
+	}
+	for _, record := range logger.records {
+		attrs := logRecordAttrs(record)
+		if attrs["issue_identifier"] != "ZEE-1" {
+			t.Fatalf("attrs = %#v, want issue_identifier", attrs)
+		}
+	}
+}
+
 type recordingLogger struct {
 	embedded.Logger
 	records []otellog.Record

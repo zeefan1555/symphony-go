@@ -73,6 +73,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 			Issue:        &issue,
 		}},
 		AfterTurn: func(ctx context.Context, result codex.Result, turnCount int) (codex.TurnPrompt, bool, error) {
+			turnStartIssue := currentIssue
 			telemetry.RecordStep(ctx, rt.Telemetry, string(phase), "codex_turn_completed", "success", map[string]any{
 				"issue_id":         currentIssue.ID,
 				"issue_identifier": currentIssue.Identifier,
@@ -80,7 +81,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 				"turn_id":          result.TurnID,
 				"turn_count":       turnCount,
 			}, nil)
-			logIssue(ctx, rt, currentIssue, "turn_completed", "Codex turn completed", stepLogFields(phase, "codex_turn_completed", "success", map[string]any{"session_id": result.SessionID}))
+			logIssue(ctx, rt, currentIssue, "codex_turn_completed", "Codex turn completed", stepLogFields(phase, "codex_turn_completed", "success", map[string]any{"session_id": result.SessionID}))
 			refreshed, err := rt.Tracker.FetchIssue(ctx, currentIssue.ID)
 			if err != nil {
 				attemptResult = Result{Outcome: OutcomeRetryFailure}
@@ -101,8 +102,19 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 					attemptResult = Result{Outcome: OutcomeRetryFailure}
 					return codex.TurnPrompt{}, false, err
 				}
+				nextTurn := turnCount + 1
+				nextPhase := nextWorkerPhase(currentIssue)
+				nextStage := nextWorkerStage(currentIssue, nextTurn)
+				setRunningStage(rt, currentIssue, attempt, nextPhase, nextStage, stageMessage(nextStage), workspacePath, nextTurn)
+				promptIssue := currentIssue
+				return codex.TurnPrompt{
+					Text:         nextWorkerPrompt(currentIssue),
+					Continuation: true,
+					Attempt:      renderAttempt,
+					Issue:        &promptIssue,
+				}, true, nil
 			}
-			if pushingStatePasses(currentIssue, lastAgentMessage) {
+			if stateNameIn(turnStartIssue.State, []string{StatePushing}) && pushingStatePasses(currentIssue, lastAgentMessage) {
 				if !stateWriteExtensionEnabled(rt) {
 					attemptResult = Result{Outcome: OutcomeWaitHuman}
 					return codex.TurnPrompt{}, false, nil

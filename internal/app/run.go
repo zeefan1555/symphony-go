@@ -118,6 +118,9 @@ func NewRuntime(opts Options) (*Runtime, error) {
 		logging.WithIssueFiles(logBaseDir, false),
 		logging.WithIssueFilesMinLevel(slog.LevelDebug),
 	}
+	if opts.Issue != "" {
+		logOptions = append(logOptions, logging.WithVisibleIssueFilter(opts.Issue))
+	}
 	if !opts.TUI {
 		logOptions = append(logOptions, logging.WithConsole(opts.Stderr, true))
 	}

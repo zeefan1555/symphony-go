@@ -127,9 +127,9 @@ func TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans(t *testing.T) {
 		"step implementer/after_run_hook",
 		"issue_run",
 	)
-	fields, ok := observer.logFields("turn_completed")
+	fields, ok := observer.logFields("codex_turn_completed")
 	if !ok {
-		t.Fatalf("logs = %#v, want turn_completed", observer.logs)
+		t.Fatalf("logs = %#v, want codex_turn_completed", observer.logs)
 	}
 	if fields["phase"] != string(PhaseImplementer) || fields["step"] != "codex_turn_completed" {
 		t.Fatalf("turn_completed fields = %#v, want phase/step correlation", fields)
@@ -225,6 +225,30 @@ func TestRunIssueTrunkAIReviewPassContinuesToPushing(t *testing.T) {
 	}
 	if tracker.updateState != StatePushing {
 		t.Fatalf("UpdateIssueState = %q, want Pushing", tracker.updateState)
+	}
+	if len(runner.prompts) != 2 || runner.prompts[1].Text != PushingContinuationPromptText || !runner.prompts[1].Continuation {
+		t.Fatalf("prompts = %#v, want Pushing continuation", runner.prompts)
+	}
+}
+
+func TestRunIssueTrunkAIReviewTurnDoesNotAcceptSameTurnPushPass(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "review and push", State: StateAIReview}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{agentMessages: []string{
+		"Review: PASS\nPush: PASS\npushed too early",
+		"Pushing continuation started but no push was performed",
+	}}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	if tracker.updateState != StatePushing {
+		t.Fatalf("UpdateIssueState = %q, want Pushing only", tracker.updateState)
 	}
 	if len(runner.prompts) != 2 || runner.prompts[1].Text != PushingContinuationPromptText || !runner.prompts[1].Continuation {
 		t.Fatalf("prompts = %#v, want Pushing continuation", runner.prompts)
@@ -604,11 +628,12 @@ func (f *fakeTracker) UpdateIssueState(ctx context.Context, issueID, stateName s
 }
 
 type fakeRunner struct {
-	calls        int
-	request      codex.SessionRequest
-	prompts      []codex.TurnPrompt
-	agentMessage string
-	err          error
+	calls         int
+	request       codex.SessionRequest
+	prompts       []codex.TurnPrompt
+	agentMessage  string
+	agentMessages []string
+	err           error
 }
 
 func (f *fakeRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
@@ -622,12 +647,16 @@ func (f *fakeRunner) RunSession(ctx context.Context, request codex.SessionReques
 		f.prompts = append(f.prompts, request.Prompts[turnIndex])
 		turnResult := codex.Result{SessionID: "session-1", ThreadID: "thread-1", TurnID: "turn-1"}
 		result.Turns = append(result.Turns, turnResult)
-		if f.agentMessage != "" && onEvent != nil {
+		agentMessage := f.agentMessage
+		if turnIndex < len(f.agentMessages) {
+			agentMessage = f.agentMessages[turnIndex]
+		}
+		if agentMessage != "" && onEvent != nil {
 			onEvent(codex.Event{Name: "item/completed", Payload: map[string]any{
 				"params": map[string]any{
 					"item": map[string]any{
 						"type": "agentMessage",
-						"text": f.agentMessage,
+						"text": agentMessage,
 					},
 				},
 			}})

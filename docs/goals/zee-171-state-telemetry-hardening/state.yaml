@@ -1,0 +1,315 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "ZEE-171 State and Telemetry Hardening"
+  slug: "zee-171-state-telemetry-hardening"
+  kind: existing_plan
+  tranche: "Complete the ZEE-171 follow-up hardening across issueflow state ownership, forced Pushing continuation, SigNoz telemetry/logs acceptance, metrics query scope, and single-issue visible logging."
+  status: active
+  intake:
+    original_request: "Tighten ZEE-171 issueflow state ownership, continuation turns, telemetry acceptance, SigNoz logs, and --issue visible logging."
+    interpreted_outcome: "Symphony Go proves the Todo -> In Progress -> AI Review -> Pushing -> Done lifecycle follows framework-owned transitions, issue-level drilldown uses traces/logs, metrics stay low-cardinality, and single-issue console output is clean."
+    input_shape: existing_plan
+    audience: "Symphony Go workflow/operator and future AI agents"
+    authority: requested
+    proof_type: test
+    completion_proof: "Targeted tests and build pass; smoke issue shows Todo -> In Progress, AI Review -> Pushing, and Pushing -> Done; SigNoz traces/logs/metrics satisfy the new query contract; console noise check shows no non-target issue identifiers."
+    likely_misfire: "The run could pass by reaching Done eventually while still allowing same-turn AI Review push, agent-owned transition writes, metrics issue_identifier queries, or noisy non-target issue output."
+    blind_spots_considered:
+      - "Existing code may still use Merging terminology or tests that must be updated without broad unrelated refactors."
+      - "SigNoz smoke may require local OTLP collector, available Linear issue, and query access that are not guaranteed in every /goal run."
+      - "Filtering only at render time may be too late if workspace preflight logs are already emitted for unrelated issues."
+      - "Local .human.log/.jsonl can be useful for fallback but must not become the primary smoke acceptance source."
+    existing_plan_facts:
+      - "AI Review agent may only output Review: PASS or enter Rework."
+      - "Only framework code may perform AI Review -> Pushing after Review: PASS."
+      - "Only Pushing phase agent may run git push origin <target> and output Push: PASS."
+      - "Only framework code may perform Pushing -> Done after Push: PASS."
+      - "A turn that starts in AI Review must not let the framework go directly to Done even if push also appears in the same turn output."
+      - "Review: PASS must trigger PushingContinuationPromptText for the next turn."
+      - "Only a turn that starts in Pushing may recognize Push: PASS and enter Done."
+      - "Traces/logs must support issue_identifier=<ISSUE> queries."
+      - "Metrics must be queried without issue_identifier and only by low-cardinality fields such as phase/state/stage/from_state/to_state/outcome."
+      - "If a task asks for metrics by issue identifier, workflow should record not applicable instead of treating it as a failure."
+      - "Lifecycle events dispatch started, state_changed, codex_turn_completed, Review PASS / Push PASS summary, blocker, and error must enter OTel logs."
+      - "SigNoz logs are the unified query entrypoint; local .human.log/.jsonl are fallback/debug only."
+      - "--issue <ISSUE> visible logs must not print other issue identifiers or old workspace_retained spam."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+
+agents:
+  scout: bundled_not_installed
+  worker: bundled_not_installed
+  judge: bundled_not_installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://127.0.0.1:41737/zee-171-state-telemetry-hardening/"
+    command: "npx goalbuddy board /Users/bytedance/symphony-go/docs/goals/zee-171-state-telemetry-hardening"
+  github_projects:
+    status: not_requested
+    url: null
+    command: "npx goalbuddy extend github-projects"
+    missing: []
+
+active_task: T006
+
+tasks:
+  - id: T001
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Validate the user-provided ZEE-171 plan against current repo contracts and choose the first safe Worker slice."
+    inputs:
+      - "AGENTS.md"
+      - "docs/goals/zee-171-state-telemetry-hardening/goal.md"
+      - "User-provided code anchors and validation commands"
+      - "internal/service/issueflow/agent_session.go"
+      - "internal/service/issueflow/flow.go"
+      - "internal/service/issueflow/result.go"
+      - "internal/runtime/telemetry"
+      - "internal/app/run.go or orchestration/filter layer"
+      - "docs/telemetry/signoz-dashboard.md"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Preserve the existing plan facts unless current code evidence contradicts them."
+      - "Identify exact allowed_files, verification commands, and stop_if rules for the next Worker."
+    expected_output:
+      - "Decision: plan valid | needs adjustment"
+      - "Current code evidence with file:line anchors"
+      - "Exact next Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Any plan adjustments or blocked items"
+    receipt:
+      result: done
+      decision: "plan valid; start with state ownership and continuation gating."
+      summary: "Current code already has narrow framework state write helpers in issueflow, but AfterTurn can apply Review: PASS, mutate the refreshed issue to Pushing, and then evaluate Push: PASS against the same agent message in the same turn. The first safe Worker is T002."
+      evidence:
+        - "internal/service/issueflow/agent_session.go:94"
+        - "internal/service/issueflow/agent_session.go:105"
+        - "internal/service/issueflow/flow.go:174"
+        - "internal/service/issueflow/flow.go:182"
+        - "internal/service/issueflow/flow.go:221"
+        - "internal/service/issueflow/flow.go:233"
+        - "internal/service/issueflow/result.go:8"
+        - "internal/service/issueflow/result.go:9"
+        - "internal/runtime/telemetry/logs.go:14"
+        - "internal/service/orchestrator/orchestrator.go:189"
+      next_allowed_task: T002
+
+  - id: T002
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Implement framework-owned AI Review -> Pushing and Pushing -> Done transition gating with forced Pushing continuation."
+    allowed_files:
+      - "internal/service/issueflow/agent_session.go"
+      - "internal/service/issueflow/flow.go"
+      - "internal/service/issueflow/result.go"
+      - "internal/service/issueflow/*_test.go"
+      - "internal/service/orchestrator/*_test.go"
+    verify:
+      - "./test.sh ./internal/service/issueflow ./internal/service/orchestrator"
+      - "git diff --check"
+    stop_if:
+      - "Need to change status semantics outside AI Review/Pushing/Rework/Done ownership."
+      - "Need files outside allowed_files."
+      - "Existing tests prove the user-provided contract conflicts with current workflow design."
+      - "Targeted tests fail twice for unrelated environment/toolchain reasons."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/service/issueflow/agent_session.go"
+        - "internal/service/issueflow/result.go"
+        - "internal/service/issueflow/flow_test.go"
+      commands:
+        - cmd: "gofmt -w internal/service/issueflow/agent_session.go internal/service/issueflow/result.go internal/service/issueflow/flow_test.go"
+          status: pass
+        - cmd: "./test.sh ./internal/service/issueflow ./internal/service/orchestrator"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "AfterTurn now records the turn-start issue state, always returns a Pushing continuation immediately after Review: PASS, and only accepts Push: PASS when the turn started in Pushing. AI Review and Pushing prompts now explicitly separate review-only and push-only responsibilities. Added regression coverage for an AI Review turn that includes both Review: PASS and Push: PASS."
+
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Ensure lifecycle events are emitted to OTel logs and update telemetry/docs metrics acceptance to avoid issue_identifier metrics queries."
+    allowed_files:
+      - "internal/runtime/telemetry/**"
+      - "internal/service/issueflow/**"
+      - "internal/service/orchestrator/**"
+      - "docs/telemetry/signoz-dashboard.md"
+    verify:
+      - "./test.sh ./internal/service/issueflow ./internal/service/orchestrator ./internal/runtime/telemetry"
+      - "git diff --check"
+    stop_if:
+      - "Need to introduce a new telemetry backend or dependency."
+      - "Need production SigNoz access to decide local code behavior."
+      - "Need files outside allowed_files."
+      - "Verification fails twice for unrelated environment/toolchain reasons."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/service/issueflow/agent_session.go"
+        - "internal/service/issueflow/flow.go"
+        - "internal/service/issueflow/flow_test.go"
+        - "internal/runtime/telemetry/logs.go"
+        - "internal/runtime/telemetry/logs_test.go"
+        - "docs/telemetry/signoz-dashboard.md"
+      commands:
+        - cmd: "gofmt -w internal/service/issueflow/agent_session.go internal/service/issueflow/flow.go internal/service/issueflow/flow_test.go internal/runtime/telemetry/logs.go internal/runtime/telemetry/logs_test.go"
+          status: pass
+        - cmd: "./test.sh ./internal/service/issueflow ./internal/service/orchestrator ./internal/runtime/telemetry"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "Lifecycle OTel logs now export codex_turn_completed plus review_pass and push_pass summaries, with blocked/error lifecycle coverage. SigNoz dashboard docs now separate issue-level traces/logs queries from low-cardinality metrics queries and describe metrics issue_identifier requests as not applicable."
+
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: medium
+    objective: "Filter visible console/human output in --issue mode before non-target issue output or workspace preflight logs are emitted."
+    allowed_files:
+      - "internal/app/run.go"
+      - "internal/app/*_test.go"
+      - "internal/service/orchestrator/**"
+      - "internal/runtime/**"
+    verify:
+      - "./test.sh ./internal/service/orchestrator ./internal/runtime/telemetry"
+      - "git diff --check"
+    stop_if:
+      - "Need to suppress internal tracker reads rather than only visible output."
+      - "Need a broad logging framework rewrite."
+      - "Need files outside allowed_files."
+      - "Tests cannot distinguish visible output from internal debug/fallback logs."
+    receipt:
+      result: done
+      changed_files:
+        - "internal/app/run.go"
+        - "internal/runtime/logging/jsonl.go"
+        - "internal/runtime/logging/jsonl_test.go"
+      commands:
+        - cmd: "gofmt -w internal/runtime/logging/jsonl.go internal/runtime/logging/jsonl_test.go internal/app/run.go"
+          status: pass
+        - cmd: "./test.sh ./internal/runtime/logging ./internal/app ./internal/service/orchestrator ./internal/runtime/telemetry"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+      summary: "--issue now injects a logger visible issue filter before service startup. The filter suppresses non-target issue events from console and global human logs while keeping raw JSONL fallback/debug events intact."
+
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: blocked
+    reasoning_hint: medium
+    objective: "Run local verification and, when environment allows, perform the ZEE-171-style smoke with SigNoz traces/logs/metrics and console noise evidence."
+    allowed_files:
+      - "docs/goals/zee-171-state-telemetry-hardening/notes/**"
+      - "docs/telemetry/signoz-dashboard.md"
+    verify:
+      - "./test.sh ./internal/service/issueflow ./internal/service/orchestrator ./internal/runtime/telemetry"
+      - "./build.sh"
+      - "OTEL_SERVICE_NAME=symphony-go OTEL_EXPORTER_OTLP_PROTOCOL=grpc OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 OTEL_EXPORTER_OTLP_INSECURE=true make run-once ISSUE=<ISSUE> MERGE_TARGET=main"
+      - "SigNoz traces query includes transition Todo -> In Progress, AI Review -> Pushing, and Pushing -> Done for issue_identifier=<ISSUE>."
+      - "SigNoz logs query includes lifecycle logs for issue_identifier=<ISSUE>."
+      - "SigNoz metrics query finds symphony_issue_transition_total with low-cardinality from_state/to_state/outcome attrs and does not require issue_identifier."
+      - "make run-once ISSUE=<ISSUE> MERGE_TARGET=main 2>&1 | tee /tmp/symphony-smoke.log; rg 'issue=ZEE-' /tmp/symphony-smoke.log shows no issue different from <ISSUE>."
+    stop_if:
+      - "No suitable smoke issue is available."
+      - "OTLP collector or SigNoz query access is unavailable."
+      - "Smoke would push to an unintended target or perform an unapproved destructive action."
+      - "Need implementation files outside allowed_files after verification exposes a new bug; create a follow-up Worker slice instead."
+    receipt:
+      result: blocked
+      summary: "Local verification completed, but live smoke was not run because no concrete ISSUE was provided and make run-once ISSUE=<ISSUE> MERGE_TARGET=main may execute git push origin main during the Pushing phase. OTLP port 4317 is listening, so the remaining blocker is a safe smoke issue plus explicit approval to run the push-capable smoke."
+      commands:
+        - cmd: "./test.sh ./internal/service/issueflow ./internal/service/orchestrator ./internal/runtime/telemetry"
+          status: pass
+        - cmd: "./build.sh"
+          status: pass
+        - cmd: "./test.sh ./internal/runtime/logging ./internal/app"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+        - cmd: "lsof -nP -iTCP:4317 -sTCP:LISTEN || true"
+          status: pass
+      blocker:
+        - "Need a concrete smoke issue identifier."
+        - "Need explicit approval that running the smoke may push the configured target branch."
+      next: "Provide ISSUE=<safe issue> and confirm MERGE_TARGET=main push is approved, then rerun T005 smoke evidence collection."
+
+  - id: T006
+    type: pm
+    assignee: PM
+    status: active
+    reasoning_hint: default
+    objective: "Wait for operator-provided safe smoke issue and push approval, then reactivate T005 or create a smaller smoke verification task."
+    inputs:
+      - "T005 blocked receipt"
+      - "Current local verification results"
+    constraints:
+      - "Do not run make run-once without a concrete issue identifier."
+      - "Do not run push-capable smoke without explicit operator approval."
+      - "Keep all completed local verification receipts intact."
+    expected_output:
+      - "operator issue identifier"
+      - "push approval decision"
+      - "next active smoke task"
+    receipt: null
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit whether the full ZEE-171 state and telemetry hardening outcome is complete."
+    inputs:
+      - "All done task receipts"
+      - "Last verification commands and results"
+      - "Current dirty diff"
+      - "Smoke evidence or blocker handoff"
+    constraints:
+      - "Read-only."
+      - "Reject completion if any required Worker task is still queued, active, or lacks a receipt."
+      - "Reject completion if status ownership, forced Pushing continuation, telemetry/logs, metrics acceptance, or console filtering lacks direct evidence."
+      - "Reject completion if metrics issue_identifier absence was treated as failure instead of not applicable."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "Evidence mapped to each user requirement"
+      - "Missing evidence"
+      - "Next task if not complete"
+    receipt: null
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: unknown
+    task: null
+    commands: []

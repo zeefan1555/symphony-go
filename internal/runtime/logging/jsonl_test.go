@@ -318,6 +318,63 @@ func TestLoggerWritesIssueScopedLogs(t *testing.T) {
 	}
 }
 
+func TestVisibleIssueFilterSkipsOtherIssuesInConsoleAndHumanLog(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "logs", "run.jsonl")
+	humanPath := HumanLogPath(path)
+	var console bytes.Buffer
+	logger, err := New(path,
+		WithVisibleIssueFilter("ZEE-136"),
+		WithConsole(&console, false),
+		WithHumanFile(humanPath, false),
+		WithHumanFileMinLevel(slog.LevelDebug),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []Event{
+		{
+			Time:            "2026-05-01T20:00:00Z",
+			IssueIdentifier: "ZEE-136",
+			Event:           "dispatch_started",
+			Message:         "dispatch started",
+		},
+		{
+			Time:            "2026-05-01T20:00:01Z",
+			IssueIdentifier: "ZEE-137",
+			Event:           "workspace_retained",
+			Message:         "static cwd retained",
+		},
+	} {
+		if err := logger.Write(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	human, err := os.ReadFile(humanPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, out := range map[string]string{
+		"console": console.String(),
+		"human":   string(human),
+	} {
+		if !strings.Contains(out, "ZEE-136") || strings.Contains(out, "ZEE-137") || strings.Contains(out, "workspace_retained") {
+			t.Fatalf("%s output = %q, want only ZEE-136 visible events", name, out)
+		}
+	}
+	jsonl, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(jsonl), "ZEE-137") {
+		t.Fatalf("raw jsonl should keep fallback/debug event for filtered issue: %s", jsonl)
+	}
+}
+
 func TestHumanLogSummarizesCodexEvents(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "logs", "run.jsonl")

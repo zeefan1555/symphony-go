@@ -23,6 +23,7 @@ type Logger struct {
 	humanColor   bool
 	humanMin     slog.Level
 	humanIssue   string
+	visibleIssue string
 	console      io.Writer
 	color        bool
 	min          slog.Level
@@ -95,6 +96,12 @@ func WithIssueFiles(baseDir string, color bool) Option {
 func WithIssueFilesMinLevel(level slog.Level) Option {
 	return func(l *Logger) {
 		l.issueMin = level
+	}
+}
+
+func WithVisibleIssueFilter(issue string) Option {
+	return func(l *Logger) {
+		l.visibleIssue = strings.TrimSpace(issue)
 	}
 }
 
@@ -183,6 +190,9 @@ func (l *Logger) Write(event Event) error {
 	}
 	displayEvent, ok := HumanEvent(event)
 	if !ok {
+		return nil
+	}
+	if !visibleIssueAllowed(displayEvent, l.visibleIssue) {
 		return nil
 	}
 	level := parseLevel(displayEvent.Level)
@@ -316,6 +326,17 @@ func safeLogName(value string) string {
 
 func displayIssue(event Event) string {
 	return firstNonEmpty(event.IssueIdentifier, event.Issue)
+}
+
+func visibleIssueAllowed(event Event, filter string) bool {
+	filter = strings.TrimSpace(filter)
+	if filter == "" {
+		return true
+	}
+	if event.IssueIdentifier == "" && event.Issue == "" && event.IssueID == "" {
+		return true
+	}
+	return event.IssueIdentifier == filter || event.Issue == filter || event.IssueID == filter
 }
 
 func issueSectionEvent(event Event, issue string) Event {

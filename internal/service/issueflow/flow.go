@@ -227,6 +227,11 @@ func applyReviewPass(ctx context.Context, rt Runtime, issue issuemodel.Issue) (i
 	issue.State = StatePushing
 	endTransition("success", nil)
 	logIssue(ctx, rt, issue, "state_changed", "AI Review -> Pushing", nil)
+	logIssue(ctx, rt, issue, "review_pass", "Review PASS", map[string]any{
+		"from_state": StateAIReview,
+		"to_state":   StatePushing,
+		"outcome":    "success",
+	})
 	return issue, nil
 }
 
@@ -239,6 +244,11 @@ func applyPushPass(ctx context.Context, rt Runtime, issue issuemodel.Issue) (iss
 	issue.State = StateDone
 	endTransition("success", nil)
 	logIssue(ctx, rt, issue, "state_changed", "Pushing -> Done", nil)
+	logIssue(ctx, rt, issue, "push_pass", "Push PASS", map[string]any{
+		"from_state": StatePushing,
+		"to_state":   StateDone,
+		"outcome":    "success",
+	})
 	return issue, nil
 }
 
