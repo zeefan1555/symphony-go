@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -15,6 +16,7 @@ type Facade interface {
 	Enabled() bool
 	Tracer() trace.Tracer
 	Meter() metric.Meter
+	Logger() otellog.Logger
 	Shutdown(context.Context) error
 }
 

@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
+	nooplog "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
@@ -318,6 +320,10 @@ func (f *fakeTelemetry) Tracer() trace.Tracer {
 
 func (f *fakeTelemetry) Meter() metric.Meter {
 	return noopmetric.NewMeterProvider().Meter("test")
+}
+
+func (f *fakeTelemetry) Logger() otellog.Logger {
+	return nooplog.NewLoggerProvider().Logger("test")
 }
 
 func (f *fakeTelemetry) Shutdown(context.Context) error {

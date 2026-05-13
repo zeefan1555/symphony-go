@@ -1,0 +1,151 @@
+package telemetry
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	otellog "go.opentelemetry.io/otel/log"
+
+	"symphony-go/internal/runtime/logging"
+)
+
+var exportedLogEvents = map[string]bool{
+	"after_run_hook_failed":    true,
+	"ai_review_failed":         true,
+	"dispatch_skipped":         true,
+	"dispatch_started":         true,
+	"issue_error":              true,
+	"poll_error":               true,
+	"reconcile_error":          true,
+	"retry_fetch_error":        true,
+	"state_changed":            true,
+	"turn_completed":           true,
+	"waiting_for_ai_review":    true,
+	"waiting_for_review":       true,
+	"worker_stalled":           true,
+	"workflow_reload_failed":   true,
+	"workspace_cleanup_failed": true,
+	"workspace_hook_failed":    true,
+}
+
+var logFieldAllowlist = map[string]bool{
+	"attempt_kind":      true,
+	"error":             true,
+	"error_type":        true,
+	"from_state":        true,
+	"issue_id":          true,
+	"issue_identifier":  true,
+	"outcome":           true,
+	"phase":             true,
+	"session_id":        true,
+	"span_id":           true,
+	"stage":             true,
+	"state":             true,
+	"step":              true,
+	"to_state":          true,
+	"trace_id":          true,
+	"transition_from":   true,
+	"transition_to":     true,
+	"workflow_mode":     true,
+	"workspace_cleanup": true,
+}
+
+func RecordLog(ctx context.Context, provider Facade, event logging.Event) {
+	provider = activeFacade(provider)
+	if !provider.Enabled() || !exportedLogEvents[event.Event] {
+		return
+	}
+	level := logging.InferLevel(event)
+	severity := logSeverity(level)
+	logger := provider.Logger()
+	if !logger.Enabled(ctx, otellog.EnabledParameters{Severity: severity}) {
+		return
+	}
+	timestamp := time.Now()
+	if event.Time != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, event.Time); err == nil {
+			timestamp = parsed
+		}
+	}
+	levelName := event.Level
+	if levelName == "" {
+		levelName = logging.LevelName(level)
+	}
+	body := event.Message
+	if body == "" {
+		body = event.Event
+	}
+	var record otellog.Record
+	record.SetTimestamp(timestamp)
+	record.SetObservedTimestamp(time.Now())
+	record.SetSeverity(severity)
+	record.SetSeverityText(levelName)
+	record.SetEventName(event.Event)
+	record.SetBody(otellog.StringValue(body))
+	record.AddAttributes(logAttributes(event)...)
+	logger.Emit(ctx, record)
+}
+
+func logSeverity(level slog.Level) otellog.Severity {
+	switch {
+	case level >= slog.LevelError:
+		return otellog.SeverityError
+	case level >= slog.LevelWarn:
+		return otellog.SeverityWarn
+	case level <= slog.LevelDebug:
+		return otellog.SeverityDebug
+	default:
+		return otellog.SeverityInfo
+	}
+}
+
+func logAttributes(event logging.Event) []otellog.KeyValue {
+	fields := map[string]any{
+		"event":            event.Event,
+		"issue_id":         event.IssueID,
+		"issue_identifier": event.IssueIdentifier,
+		"session_id":       event.SessionID,
+		"trace_id":         event.TraceID,
+		"span_id":          event.SpanID,
+	}
+	for key, value := range event.Fields {
+		if logFieldAllowlist[key] {
+			fields[key] = value
+		}
+	}
+	attrs := make([]otellog.KeyValue, 0, len(fields))
+	for key, value := range fields {
+		if attr, ok := logAttr(key, value); ok {
+			attrs = append(attrs, attr)
+		}
+	}
+	return attrs
+}
+
+func logAttr(key string, value any) (otellog.KeyValue, bool) {
+	switch typed := value.(type) {
+	case nil:
+		return otellog.KeyValue{}, false
+	case string:
+		if typed == "" {
+			return otellog.KeyValue{}, false
+		}
+		return otellog.String(key, typed), true
+	case bool:
+		return otellog.Bool(key, typed), true
+	case int:
+		return otellog.Int(key, typed), true
+	case int64:
+		return otellog.Int64(key, typed), true
+	case float64:
+		return otellog.Float64(key, typed), true
+	default:
+		text := fmt.Sprint(typed)
+		if text == "" {
+			return otellog.KeyValue{}, false
+		}
+		return otellog.String(key, text), true
+	}
+}

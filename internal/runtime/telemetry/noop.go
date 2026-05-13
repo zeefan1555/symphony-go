@@ -3,6 +3,8 @@ package telemetry
 import (
 	"context"
 
+	otellog "go.opentelemetry.io/otel/log"
+	nooplog "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
@@ -12,12 +14,14 @@ import (
 type noopProvider struct {
 	tracer trace.Tracer
 	meter  metric.Meter
+	logger otellog.Logger
 }
 
 func NewNoop() Facade {
 	return noopProvider{
 		tracer: nooptrace.NewTracerProvider().Tracer(scopeName),
 		meter:  noopmetric.NewMeterProvider().Meter(scopeName),
+		logger: nooplog.NewLoggerProvider().Logger(scopeName),
 	}
 }
 
@@ -31,6 +35,10 @@ func (p noopProvider) Tracer() trace.Tracer {
 
 func (p noopProvider) Meter() metric.Meter {
 	return p.meter
+}
+
+func (p noopProvider) Logger() otellog.Logger {
+	return p.logger
 }
 
 func (p noopProvider) Shutdown(context.Context) error {

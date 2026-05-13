@@ -14,6 +14,8 @@ import (
 	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/workspace"
 
+	otellog "go.opentelemetry.io/otel/log"
+	nooplog "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -651,6 +653,7 @@ func (f *fakeObserver) logFields(event string) (map[string]any, bool) {
 type issueFlowTestTelemetry struct {
 	tracer trace.Tracer
 	meter  metric.Meter
+	logger otellog.Logger
 }
 
 func newIssueFlowTestTelemetry() (telemetry.Facade, *tracetest.SpanRecorder) {
@@ -659,6 +662,7 @@ func newIssueFlowTestTelemetry() (telemetry.Facade, *tracetest.SpanRecorder) {
 	return issueFlowTestTelemetry{
 		tracer: traceProvider.Tracer("test"),
 		meter:  noopmetric.NewMeterProvider().Meter("test"),
+		logger: nooplog.NewLoggerProvider().Logger("test"),
 	}, recorder
 }
 
@@ -672,6 +676,10 @@ func (p issueFlowTestTelemetry) Tracer() trace.Tracer {
 
 func (p issueFlowTestTelemetry) Meter() metric.Meter {
 	return p.meter
+}
+
+func (p issueFlowTestTelemetry) Logger() otellog.Logger {
+	return p.logger
 }
 
 func (p issueFlowTestTelemetry) Shutdown(context.Context) error {

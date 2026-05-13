@@ -8,6 +8,10 @@ require (
 	github.com/cloudwego/hertz v0.10.4
 	github.com/osteele/liquid v1.4.0
 	github.com/spf13/viper v1.20.1
+	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.11.0
+	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.11.0
+	go.opentelemetry.io/otel/log v0.11.0
+	go.opentelemetry.io/otel/sdk/log v0.11.0
 	google.golang.org/protobuf v1.36.5
 	gopkg.in/yaml.v3 v3.0.1
 )

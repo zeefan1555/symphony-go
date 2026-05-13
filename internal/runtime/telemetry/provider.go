@@ -8,11 +8,16 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otellog "go.opentelemetry.io/otel/log"
+	otellogglobal "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/metric"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -24,8 +29,10 @@ const defaultServiceName = "symphony-go"
 type Provider struct {
 	tracerProvider *sdktrace.TracerProvider
 	meterProvider  *sdkmetric.MeterProvider
+	loggerProvider *sdklog.LoggerProvider
 	tracer         trace.Tracer
 	meter          metric.Meter
+	logger         otellog.Logger
 }
 
 func NewFromEnv(ctx context.Context) (Facade, error) {
@@ -46,6 +53,10 @@ func NewFromEnv(ctx context.Context) (Facade, error) {
 	if err != nil {
 		return nil, err
 	}
+	logExporter, err := newLogExporter(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(traceExporter),
@@ -55,19 +66,26 @@ func NewFromEnv(ctx context.Context) (Facade, error) {
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(meterExporter)),
 		sdkmetric.WithResource(res),
 	)
+	loggerProvider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
+		sdklog.WithResource(res),
+	)
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetMeterProvider(meterProvider)
+	otellogglobal.SetLoggerProvider(loggerProvider)
 
 	return &Provider{
 		tracerProvider: tracerProvider,
 		meterProvider:  meterProvider,
+		loggerProvider: loggerProvider,
 		tracer:         tracerProvider.Tracer(scopeName),
 		meter:          meterProvider.Meter(scopeName),
+		logger:         loggerProvider.Logger(scopeName),
 	}, nil
 }
 
 func (p *Provider) Enabled() bool {
-	return p != nil && p.tracerProvider != nil && p.meterProvider != nil
+	return p != nil && p.tracerProvider != nil && p.meterProvider != nil && p.loggerProvider != nil
 }
 
 func (p *Provider) Tracer() trace.Tracer {
@@ -84,6 +102,13 @@ func (p *Provider) Meter() metric.Meter {
 	return p.meter
 }
 
+func (p *Provider) Logger() otellog.Logger {
+	if p == nil || p.logger == nil {
+		return NewNoop().Logger()
+	}
+	return p.logger
+}
+
 func (p *Provider) Shutdown(ctx context.Context) error {
 	if p == nil {
 		return nil
@@ -95,6 +120,9 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 	if p.meterProvider != nil {
 		result = errors.Join(result, p.meterProvider.Shutdown(ctx))
 	}
+	if p.loggerProvider != nil {
+		result = errors.Join(result, p.loggerProvider.Shutdown(ctx))
+	}
 	return result
 }
 
@@ -102,6 +130,7 @@ func endpointConfigured() bool {
 	keys := []string{
 		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
 		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
 		"OTEL_EXPORTER_OTLP_ENDPOINT",
 	}
 	for _, key := range keys {
@@ -132,4 +161,11 @@ func newMetricExporter(ctx context.Context) (sdkmetric.Exporter, error) {
 		return otlpmetrichttp.New(ctx)
 	}
 	return otlpmetricgrpc.New(ctx)
+}
+
+func newLogExporter(ctx context.Context) (sdklog.Exporter, error) {
+	if protocol() == "http/protobuf" {
+		return otlploghttp.New(ctx)
+	}
+	return otlploggrpc.New(ctx)
 }

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"go.opentelemetry.io/otel/attribute"
+	otellog "go.opentelemetry.io/otel/log"
+	nooplog "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -72,12 +74,14 @@ func newMetricTestProvider() (Facade, *sdkmetric.ManualReader) {
 	return testMetricFacade{
 		tracer: nooptrace.NewTracerProvider().Tracer("test"),
 		meter:  meterProvider.Meter("test"),
+		logger: nooplog.NewLoggerProvider().Logger("test"),
 	}, reader
 }
 
 type testMetricFacade struct {
 	tracer trace.Tracer
 	meter  metric.Meter
+	logger otellog.Logger
 }
 
 func (p testMetricFacade) Enabled() bool {
@@ -90,6 +94,10 @@ func (p testMetricFacade) Tracer() trace.Tracer {
 
 func (p testMetricFacade) Meter() metric.Meter {
 	return p.meter
+}
+
+func (p testMetricFacade) Logger() otellog.Logger {
+	return p.logger
 }
 
 func (p testMetricFacade) Shutdown(context.Context) error {

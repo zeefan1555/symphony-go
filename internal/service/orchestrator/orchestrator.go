@@ -963,22 +963,23 @@ func isTerminal(state string, terminal []string) bool {
 }
 
 func (o *Orchestrator) log(issue, event, message string, fields map[string]any) {
+	logEvent := logging.Event{
+		Issue:           issue,
+		IssueIdentifier: issue,
+		Event:           event,
+		Message:         message,
+		Fields:          fields,
+	}
+	if id, _ := fields["issue_id"].(string); id != "" {
+		logEvent.IssueID = id
+	}
+	if sessionID, _ := fields["session_id"].(string); sessionID != "" {
+		logEvent.SessionID = sessionID
+	}
 	if o.opts.Logger != nil {
-		logEvent := logging.Event{
-			Issue:           issue,
-			IssueIdentifier: issue,
-			Event:           event,
-			Message:         message,
-			Fields:          fields,
-		}
-		if id, _ := fields["issue_id"].(string); id != "" {
-			logEvent.IssueID = id
-		}
-		if sessionID, _ := fields["session_id"].(string); sessionID != "" {
-			logEvent.SessionID = sessionID
-		}
 		_ = o.opts.Logger.Write(logEvent)
 	}
+	telemetry.RecordLog(context.Background(), o.opts.Telemetry, logEvent)
 }
 
 func (o *Orchestrator) logIssue(issue issuemodel.Issue, event, message string, fields map[string]any) {
@@ -986,9 +987,6 @@ func (o *Orchestrator) logIssue(issue issuemodel.Issue, event, message string, f
 }
 
 func (o *Orchestrator) logIssueWithContext(ctx context.Context, issue issuemodel.Issue, event, message string, fields map[string]any) {
-	if o.opts.Logger == nil {
-		return
-	}
 	for key, value := range telemetry.TraceFields(ctx) {
 		fields = withLogField(fields, key, value)
 	}
@@ -1007,7 +1005,10 @@ func (o *Orchestrator) logIssueWithContext(ctx context.Context, issue issuemodel
 	if sessionID, _ := fields["session_id"].(string); sessionID != "" {
 		logEvent.SessionID = sessionID
 	}
-	_ = o.opts.Logger.Write(logEvent)
+	if o.opts.Logger != nil {
+		_ = o.opts.Logger.Write(logEvent)
+	}
+	telemetry.RecordLog(ctx, o.opts.Telemetry, logEvent)
 }
 
 func (o *Orchestrator) LogIssue(ctx context.Context, issue issuemodel.Issue, event, message string, fields map[string]any) {

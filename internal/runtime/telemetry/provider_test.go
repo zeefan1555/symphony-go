@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	otellog "go.opentelemetry.io/otel/log"
+	nooplog "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -89,6 +91,7 @@ func TestMetricAttrsDropsHighCardinalityLabels(t *testing.T) {
 type testFacade struct {
 	tracer trace.Tracer
 	meter  metric.Meter
+	logger otellog.Logger
 }
 
 func newTestProvider() (Facade, *tracetest.SpanRecorder) {
@@ -97,6 +100,7 @@ func newTestProvider() (Facade, *tracetest.SpanRecorder) {
 	return testFacade{
 		tracer: traceProvider.Tracer("test"),
 		meter:  noopmetric.NewMeterProvider().Meter("test"),
+		logger: nooplog.NewLoggerProvider().Logger("test"),
 	}, recorder
 }
 
@@ -112,6 +116,10 @@ func (p testFacade) Meter() metric.Meter {
 	return p.meter
 }
 
+func (p testFacade) Logger() otellog.Logger {
+	return p.logger
+}
+
 func (p testFacade) Shutdown(context.Context) error {
 	return nil
 }
@@ -124,6 +132,7 @@ func clearOTelEnv(t *testing.T) {
 		"OTEL_EXPORTER_OTLP_ENDPOINT",
 		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
 		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
 	} {
 		t.Setenv(key, "")
 	}
