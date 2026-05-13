@@ -17,8 +17,8 @@ func TestDefaultRunOptionsEnableTUI(t *testing.T) {
 	if opts.MergeTarget != "main" {
 		t.Fatalf("merge target = %q, want main", opts.MergeTarget)
 	}
-	if opts.WorkflowPath != "./WORKFLOW.md" {
-		t.Fatalf("workflow path = %q, want ./WORKFLOW.md", opts.WorkflowPath)
+	if opts.WorkflowPath != "./workflows/WORKFLOW-symphony-go.md" {
+		t.Fatalf("workflow path = %q, want ./workflows/WORKFLOW-symphony-go.md", opts.WorkflowPath)
 	}
 	if opts.mergeExplicit {
 		t.Fatal("default merge target should not be marked explicit")

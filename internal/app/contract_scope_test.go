@@ -14,7 +14,7 @@ func TestContractScopeIsDocumentedAndRuntimeAssemblyStaysLayered(t *testing.T) {
 
 	for _, want := range []string{
 		"long-running automation service",
-		"`WORKFLOW.md`",
+		"`workflows/WORKFLOW-symphony-go.md`",
 		"internal/service/workflow",
 		"internal/runtime/config",
 		"internal/integration/linear",
@@ -28,7 +28,7 @@ func TestContractScopeIsDocumentedAndRuntimeAssemblyStaysLayered(t *testing.T) {
 		"terminal TUI and loopback HTTP control plane are operator surfaces",
 		"not a rich web UI or multi-tenant control plane",
 		"not a general-purpose workflow engine or distributed job scheduler",
-		"Workflow branching, product-specific ticket edits, PR handling, and human handoff rules stay in `WORKFLOW.md`",
+		"Workflow branching, product-specific ticket edits, PR handling, and human handoff rules stay in `workflows/WORKFLOW-symphony-go.md`",
 	} {
 		if !strings.Contains(scopeDoc, want) {
 			t.Fatalf("contract scope doc missing %q", want)
@@ -97,7 +97,7 @@ func TestRuntimePolicyDocumentsSecurityAndOperationalSafety(t *testing.T) {
 		"Codex runner failures are not a separate public enum",
 		"app-server startup/read timeout",
 		"loopback HTTP control plane is an optional operator surface",
-		"`server.port` is present in `WORKFLOW.md`",
+		"`server.port` is present in active workflow front matter",
 		"CLI `--port` is an explicit runtime override",
 		"Port `0` is valid",
 		"negative ports are rejected by CLI parsing",

@@ -25,7 +25,7 @@ Do not use it for other repositories.
   for a manual gate.
 - `Human Review` is only an exceptional hold for real external blockers such as
   missing auth, unavailable tools, or permissions that cannot be fixed in-session.
-- Linear reads and writes in child agents must follow `WORKFLOW.md`: use the
+- Linear reads and writes in child agents must follow `workflows/WORKFLOW-symphony-go.md`: use the
   injected `linear_graphql` path, matching the listener's Linear GraphQL client.
   Do not use Linear MCP/app issue or comment writes in unattended child sessions.
 - Issue work happens in `.worktrees/<ISSUE>`. Post-run optimization of the repo
@@ -44,7 +44,7 @@ GraphQL automation contract:
 git rev-parse --show-toplevel
 pwd
 git status --short --branch
-rg -n "review_policy:|mode:|on_ai_fail|active_states|terminal_states" WORKFLOW.md
+rg -n "review_policy:|mode:|on_ai_fail|active_states|terminal_states" workflows/WORKFLOW-symphony-go.md
 ```
 
 Confirm the target project/team and any created smoke issue through the
@@ -52,7 +52,7 @@ supervising session's Linear tools. Do not treat `linear --version`,
 `linear auth whoami`, or Linear MCP approval as the health gate for the child
 automation path.
 
-Read `WORKFLOW.md` before creating the issue. The workflow is the source of
+Read `workflows/WORKFLOW-symphony-go.md` before creating the issue. The workflow is the source of
 truth for active states, AI review policy, worktree root, merge behavior, and
 the model command. Model changes belong in `codex.command`; this skill should
 not hardcode a model assumption.
@@ -81,7 +81,7 @@ shape:
 ## 约束
 - 只在 `/Users/bytedance/symphony-go` 仓库内工作。
 - 使用当前仓库的 `.worktrees/<ISSUE>` worktree。
-- 让 Symphony Go listener 按 `WORKFLOW.md` 全自动跑完：
+- 让 Symphony Go listener 按 `workflows/WORKFLOW-symphony-go.md` 全自动跑完：
   `Todo -> In Progress -> AI Review -> Merging -> Done`。
 - Linear 读写必须使用派生会话可用的 `linear_graphql` 工具；不要调用
   Linear MCP/app issue/comment 写入或 `linear` CLI 兜底。
@@ -103,7 +103,7 @@ First check whether a listener is already running. Do not start a duplicate
 service just because an old PID file exists:
 
 ```sh
-pgrep -fl 'bin/symphony-go run --workflow ./WORKFLOW.md' || true
+pgrep -fl 'bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md' || true
 test -f .symphony/pids/symphony-go.pid && cat .symphony/pids/symphony-go.pid || true
 test -f ".symphony/pids/<ISSUE>.pid" && cat ".symphony/pids/<ISSUE>.pid" || true
 ```
@@ -116,7 +116,7 @@ should exit after the target issue reaches `Done` or another terminal state:
 ISSUE=<ISSUE>
 make build
 date '+SMOKE_START %Y-%m-%dT%H:%M:%S%z'
-./bin/symphony-go run --workflow ./WORKFLOW.md --once --no-tui --issue "$ISSUE" --merge-target main
+./bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md --once --no-tui --issue "$ISSUE" --merge-target main
 date '+SMOKE_END %Y-%m-%dT%H:%M:%S%z'
 ```
 
@@ -202,7 +202,7 @@ if [ -f "$pid_file" ]; then
   kill "$(cat "$pid_file")" 2>/dev/null || true
   rm "$pid_file"
 fi
-pgrep -fl 'symphony-go run --workflow ./WORKFLOW.md|bin/symphony-go run' || true
+pgrep -fl 'symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md|bin/symphony-go run' || true
 ```
 
 ## Review The Run
@@ -258,7 +258,7 @@ repo root:
 
 ```sh
 git status --short --branch
-rg -n "StateSkills|runStateSkill|agent\\.state_skills" internal WORKFLOW.md README.md docs || true
+rg -n "StateSkills|runStateSkill|agent\\.state_skills" internal workflows/WORKFLOW-symphony-go.md README.md docs || true
 git diff --check
 go test ./internal/config ./internal/orchestrator ./internal/workflow ./internal/types
 CGO_ENABLED=0 go test ./...
@@ -280,7 +280,7 @@ the exact files.
 - Do not stop at `Human Review`; default flow should only use it for true external blockers.
 - Do not stop at `AI Review` or `Merging`; wait for terminal or a real blocker.
 - Do not start a long-lived listener when the user asked for one issue smoke;
-  use `./bin/symphony-go run --workflow ./WORKFLOW.md --once --no-tui --issue <ISSUE> --merge-target main`.
+  use `./bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md --once --no-tui --issue <ISSUE> --merge-target main`.
 - Do not start a second listener when one is already polling the same issue.
 - Do not let child agents fall back to Linear CLI or Linear MCP/app writes when
   the workflow requires `linear_graphql`.

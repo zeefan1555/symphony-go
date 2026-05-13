@@ -441,3 +441,52 @@ make -n bytecode
 ```bash
 find . -maxdepth 3 -path '*/run.sh' -print
 ```
+
+## 2026-05-13: 观测链路验证不要跑完整交付 workflow
+
+### 用户纠正
+
+- 用户指出：为了验证 OTel Logs/Traces/Metrics 而跑完整真实 issue 太慢，不合理。
+
+### 错误模式
+
+- 这是流程错误：我把“真实 issue”理解成完整端到端交付，导致 child Codex 进入多 turn、AI Review 和 Merging；但当前目标只是证明 SigNoz 三类信号入库。
+
+### 防复犯规则
+
+- 验证观测链路时默认使用最短可证明路径：只产生 `dispatch_started`、`state_changed`、`turn_completed` 或专用 telemetry probe。
+- 不要为了 telemetry smoke 让 workflow 进入 PR、merge、review 或长期续航阶段。
+- 如果必须用真实 Linear issue，第一轮 turn 产生 trace/log/metric 后立即停止，并汇报入库证据。
+
+### 固定动作
+
+- 跑观测 smoke 前先设定停止点，并准备 ClickHouse 查询：
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 make run-once ISSUE=<ISSUE>
+docker exec signoz-clickhouse clickhouse-client --query "SELECT count() FROM signoz_logs.logs_v2 WHERE attributes_string['issue_identifier']='<ISSUE>'"
+```
+
+## 2026-05-13: 长生命周期 root span 会造成 live trace 缺父 span
+
+### 用户纠正
+
+- 用户指出 SigNoz trace 出现 `This trace has missing spans`，并给出官方 missing spans 说明链接。
+
+### 错误模式
+
+- 这是技术判断错误：我把 `issue_run` 设计成长时间打开的 root span，但 OTel span 通常在 `End()` 后才导出；真实 issue 运行中或被中断时，子 span 和日志已经入库，root span 还没入库，SigNoz 就会显示缺失父 span。
+
+### 防复犯规则
+
+- 面向 live UI 的 trace root 不要设计成长时间打开且迟迟不 `End()` 的 span。
+- 如果需要在 SigNoz 运行中查看完整树，root span 应作为启动 marker 立即结束，耗时和 outcome 用 metrics 或后续短 span 表达。
+- 查 missing spans 时先查 ClickHouse 的 `span_id` / `parent_span_id`，确认缺的是父 span、采样丢失还是进程未 flush。
+
+### 固定动作
+
+- 遇到 SigNoz missing spans，先跑：
+
+```bash
+docker exec signoz-clickhouse clickhouse-client --query "SELECT name, span_id, parent_span_id FROM signoz_traces.signoz_index_v3 WHERE trace_id='<TRACE_ID>' ORDER BY timestamp"
+```

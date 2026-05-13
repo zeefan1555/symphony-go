@@ -96,6 +96,12 @@
 - `README.md` 不作为 AI 执行规则的唯一来源；如果 README 和本文件冲突，以本文件为准。
 - 工作流、自动化、脚本使用方式的长期约束，应该写在本文件或 `lesson.md`，不要散落在对话里。
 
+### Workflow 集中管理
+
+- 跨仓或本机使用的 Symphony workflow 统一沉淀到 `workflows/`，并在 `workflows/README.md` 记录来源、用途和运行入口。
+- 本仓默认运行 workflow 是 `workflows/WORKFLOW-symphony-go.md`；不要再把根目录 `WORKFLOW.md` 当作运行入口。
+- 不把 issue-specific prompt、临时 workpad、日志大文件或 secret 放入 `workflows/`。
+
 ### 根目录脚本必须高内聚
 
 - 根目录脚本是给人和 AI 直接使用的稳定入口，必须自解释、可独立运行。

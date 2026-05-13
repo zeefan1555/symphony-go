@@ -29,7 +29,7 @@ ISSUE_TEMPLATE = """中文冒烟测试：固定时间戳任务
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run one zh-smoke benchmark round.")
-    parser.add_argument("--workflow", default="./WORKFLOW.zh-smoke.md")
+    parser.add_argument("--workflow", default="./workflows/WORKFLOW-symphony-go.md")
     parser.add_argument("--team", default=os.environ.get("ZH_SMOKE_TEAM", "Zeefan"))
     parser.add_argument("--state", default="Todo")
     parser.add_argument("--merge-target", default=os.environ.get("MERGE_TARGET", ""))

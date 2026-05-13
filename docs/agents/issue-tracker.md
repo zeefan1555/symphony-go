@@ -1,6 +1,6 @@
 # Linear 任务跟踪
 
-本仓的任务和 PRD 记录在 Linear。当前仓库工作流使用 `WORKFLOW.md` 中配置的 Linear 项目。
+本仓的任务和 PRD 记录在 Linear。当前仓库工作流使用 `workflows/WORKFLOW-symphony-go.md` 中配置的 Linear 项目。
 
 ## 约定
 

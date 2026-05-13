@@ -11,12 +11,8 @@ import (
 func StartIssueRun(ctx context.Context, provider Facade, fields map[string]any) (context.Context, EndFunc) {
 	provider = activeFacade(provider)
 	ctx, span := provider.Tracer().Start(ctx, "issue_run", trace.WithAttributes(Attrs(fields)...))
+	span.End()
 	return ctx, func(outcome string, err error) {
-		if outcome != "" {
-			span.SetAttributes(Attrs(map[string]any{"outcome": outcome})...)
-		}
-		recordSpanError(span, err)
-		span.End()
 		recordIssueRun(ctx, provider, outcome, fields)
 	}
 }

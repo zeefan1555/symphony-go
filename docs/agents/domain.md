@@ -11,7 +11,7 @@
 - 根目录 `CONTEXT.md`，如果存在。
 - `SPEC.md`，用于理解本仓产品与架构契约。
 - `docs/contract-scope.md`，用于确认本仓实现边界、非目标和可选 operator surface。
-- `WORKFLOW.md`，用于理解当前 Linear 驱动的执行工作流。
+- `workflows/WORKFLOW-symphony-go.md`，用于理解当前 Linear 驱动的执行工作流。
 - `docs/runtime-policy.md`，用于理解 approval、sandbox、user-input-required 和 dynamic tool 策略。
 - `docs/adr/`，用于读取架构决策，如果存在。
 - 排查重复工作流失败或用户纠正时，读取 `docs/optimization/` 和 `lesson.md`。
@@ -22,8 +22,8 @@
 
 ## 使用本仓术语
 
-输出中提到领域概念时，优先使用 `SPEC.md`、`WORKFLOW.md`、`CONTEXT.md` 和 `lesson.md` 里的术语。不要为工作流状态、workpad、issue worktree 或 Linear 交接行为另造名称。
+输出中提到领域概念时，优先使用 `SPEC.md`、`workflows/WORKFLOW-symphony-go.md`、`CONTEXT.md` 和 `lesson.md` 里的术语。不要为工作流状态、workpad、issue worktree 或 Linear 交接行为另造名称。
 
 ## 标出冲突
 
-如果某个建议和 `SPEC.md`、`WORKFLOW.md`、ADR 或 `AGENTS.md` 冲突，先明确指出冲突，再提出修改方案。
+如果某个建议和 `SPEC.md`、`workflows/WORKFLOW-symphony-go.md`、ADR 或 `AGENTS.md` 冲突，先明确指出冲突，再提出修改方案。

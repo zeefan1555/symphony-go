@@ -24,7 +24,7 @@ type runOptions struct {
 
 func defaultRunOptions() runOptions {
 	return runOptions{
-		WorkflowPath: "./WORKFLOW.md",
+		WorkflowPath: "./workflows/WORKFLOW-symphony-go.md",
 		MergeTarget:  "main",
 		TUI:          true,
 	}
@@ -33,7 +33,7 @@ func defaultRunOptions() runOptions {
 func parseRunOptions(args []string) (runOptions, error) {
 	opts := defaultRunOptions()
 	runFlags := flag.NewFlagSet("run", flag.ContinueOnError)
-	runFlags.StringVar(&opts.WorkflowPath, "workflow", opts.WorkflowPath, "path to WORKFLOW.md")
+	runFlags.StringVar(&opts.WorkflowPath, "workflow", opts.WorkflowPath, "path to workflow file")
 	runFlags.BoolVar(&opts.Once, "once", opts.Once, "poll once and exit")
 	runFlags.StringVar(&opts.Issue, "issue", opts.Issue, "optional issue identifier or id filter")
 	runFlags.StringVar(&opts.MergeTarget, "merge-target", opts.MergeTarget, "local branch receiving Merging-state work")
@@ -110,7 +110,7 @@ func main() {
 
 func runMain(args []string, run func(app.Options) error) int {
 	if len(args) < 2 || args[1] != "run" {
-		fmt.Fprintln(os.Stderr, "usage: symphony-go run [path-to-WORKFLOW.md] [--workflow ./WORKFLOW.md] [--once] [--issue ZEE-8] [--port 0] [--tui|--no-tui]")
+		fmt.Fprintln(os.Stderr, "usage: symphony-go run [path-to-workflow.md] [--workflow ./workflows/WORKFLOW-symphony-go.md] [--once] [--issue ZEE-8] [--port 0] [--tui|--no-tui]")
 		return 2
 	}
 	opts, err := parseRunOptions(args[2:])

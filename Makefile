@@ -1,8 +1,8 @@
 GO ?= go
 BINARY := bin/symphony-go
-WORKFLOW ?= ./WORKFLOW.md
-BYTECODE_WORKFLOW ?= /Users/bytedance/bytecode/WORKFLOW.md
-ZH_SMOKE_WORKFLOW ?= ./WORKFLOW.zh-smoke.md
+WORKFLOW ?= ./workflows/WORKFLOW-symphony-go.md
+BYTECODE_WORKFLOW ?= ./workflows/WORKFLOW-bytedcode.md
+ZH_SMOKE_WORKFLOW ?= $(WORKFLOW)
 ISSUE ?=
 MERGE_TARGET ?=
 MERGE_TARGET_FLAG := $(if $(strip $(MERGE_TARGET)),--merge-target $(MERGE_TARGET),)
@@ -11,8 +11,8 @@ RESULTS ?= ../.codex/skills/zh-smoke-harness/experiments/results.tsv
 RESULTS_MD ?= ../.codex/skills/zh-smoke-harness/experiments/rounds.md
 TEAM ?= Zeefan
 CHANGE_NOTE ?=
-BYTECODE_TRIAGE_PROCESS_PATTERN ?= symphony-go.*run.*/Users/bytedance/bytecode/WORKFLOW.md
-ZH_SMOKE_PROCESS_PATTERN ?= symphony-go.*run.*WORKFLOW.zh-smoke.md
+BYTECODE_TRIAGE_PROCESS_PATTERN ?= symphony-go.*run.*workflows/WORKFLOW-bytedcode.md
+ZH_SMOKE_PROCESS_PATTERN ?= symphony-go.*run.*workflows/WORKFLOW-symphony-go.md
 
 # External link mode keeps macOS binaries dyld-friendly on machines that reject
 # some `go run` temporary executables with a missing LC_UUID load command.

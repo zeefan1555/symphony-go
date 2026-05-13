@@ -242,7 +242,7 @@ func strPtr(value string) *string {
 }
 
 func TestRepoWorkflowUsesAIReviewPRSkillFastPath(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "WORKFLOW.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "workflows", "WORKFLOW-symphony-go.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +354,7 @@ func TestRepoSkillsDocumentFastPullAndMergePassContract(t *testing.T) {
 	}
 	runText := string(runRaw)
 	for _, want := range []string{
-		"./bin/symphony-go run --workflow ./WORKFLOW.md --once --no-tui --issue \"$ISSUE\" --merge-target main",
+		"./bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md --once --no-tui --issue \"$ISSUE\" --merge-target main",
 		"PR creation waits for `Merging`",
 		"Agent reports `Merge: PASS`; orchestrator then moves the issue to `Done`",
 	} {

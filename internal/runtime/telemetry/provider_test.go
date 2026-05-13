@@ -61,9 +61,12 @@ func TestStartIssueRunAndRecordTransitionCreateSpans(t *testing.T) {
 		t.Fatalf("ended spans = %d, want 2", len(ended))
 	}
 	names := []string{ended[0].Name(), ended[1].Name()}
-	want := []string{"transition Todo -> In Progress", "issue_run"}
+	want := []string{"issue_run", "transition Todo -> In Progress"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("span names = %#v, want %#v", names, want)
+	}
+	if ended[1].Parent().SpanID() != ended[0].SpanContext().SpanID() {
+		t.Fatalf("transition parent = %s, want issue_run span %s", ended[1].Parent().SpanID(), ended[0].SpanContext().SpanID())
 	}
 }
 

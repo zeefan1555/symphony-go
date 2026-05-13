@@ -10,7 +10,7 @@ The service can isolate normal implementation work to a per-issue workspace and 
 
 ## Approval And Sandbox Policy
 
-Runtime policy is loaded from `WORKFLOW.md`:
+Runtime policy is loaded from the active workflow file. The default repository workflow is `workflows/WORKFLOW-symphony-go.md`:
 
 - `codex.approval_policy` is forwarded to app-server `thread/start` and `turn/start`.
 - `codex.thread_sandbox` is forwarded to app-server `thread/start`.
@@ -32,7 +32,7 @@ Errors may name the missing configuration field or expected environment variable
 
 ## Hook Safety
 
-Workspace hooks are trusted shell scripts from `WORKFLOW.md`. In the default per-issue mode they run with the issue workspace as cwd; in `static_cwd` mode they run with the configured static cwd. Hooks use the configured hook timeout so a stuck hook does not block the orchestrator indefinitely.
+Workspace hooks are trusted shell scripts from the active workflow file. In the default per-issue mode they run with the issue workspace as cwd; in `static_cwd` mode they run with the configured static cwd. Hooks use the configured hook timeout so a stuck hook does not block the orchestrator indefinitely.
 
 Hook command, output, and error strings are logged only as shortened previews. Operators should avoid printing secrets from hooks because even truncated output is still operator-visible.
 
@@ -92,7 +92,7 @@ Codex runner failures are not a separate public enum. Operators should treat the
 
 The loopback HTTP control plane is an optional operator surface. It is disabled by default and does not change scheduler, runner, tracker, or workspace semantics.
 
-The extension is enabled when either `server.port` is present in `WORKFLOW.md` front matter or the CLI is started with `--port`. CLI `--port` is an explicit runtime override and takes precedence over workflow config. Port `0` is valid and asks the host OS to allocate an ephemeral port; negative ports are rejected by CLI parsing.
+The extension is enabled when either `server.port` is present in active workflow front matter or the CLI is started with `--port`. CLI `--port` is an explicit runtime override and takes precedence over workflow config. Port `0` is valid and asks the host OS to allocate an ephemeral port; negative ports are rejected by CLI parsing.
 
 The current bind host is loopback by default. Workflow front matter currently owns only `server.port`; there is no workflow `server.host` schema. The HTTP listener is opened once during runtime startup, before the orchestrator loop starts.
 
