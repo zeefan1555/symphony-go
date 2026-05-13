@@ -18,18 +18,18 @@ Do not use it for other repositories.
 
 ## Operating Contract
 
-- Default flow follows the Elixir-style PR handoff with AI review:
-  `Todo -> In Progress -> AI Review -> Merging -> Done`.
+- Default flow uses the configured target branch directly:
+  `Todo -> In Progress -> AI Review -> Done`.
 - The listener, workflow, and orchestrator own state transitions; do not pause
-  for a human to move `AI Review` or `Merging` unless the user explicitly asks
-  for a manual gate.
+  for a human after `AI Review` unless the user explicitly asks for a manual
+  gate.
 - `Human Review` is only an exceptional hold for real external blockers such as
   missing auth, unavailable tools, or permissions that cannot be fixed in-session.
 - Linear reads and writes in child agents must follow `workflows/WORKFLOW-symphony-go.md`: use the
   injected `linear_graphql` path, matching the listener's Linear GraphQL client.
   Do not use Linear MCP/app issue or comment writes in unattended child sessions.
-- Issue work happens in `.worktrees/<ISSUE>`. Post-run optimization of the repo
-  happens in the repo root after the target issue is terminal.
+- Issue work happens in the repo root on the configured target branch. Do not
+  create issue worktrees, PR branches, scratch checkouts, or temporary clones.
 - Every observed improvement must be recorded in
   `docs/optimization/symphony-issue-run.md` before committing.
 - After verified optimization changes, create a local commit on `main` and push
@@ -53,9 +53,9 @@ supervising session's Linear tools. Do not treat `linear --version`,
 automation path.
 
 Read `workflows/WORKFLOW-symphony-go.md` before creating the issue. The workflow is the source of
-truth for active states, AI review policy, worktree root, merge behavior, and
-the model command. Model changes belong in `codex.command`; this skill should
-not hardcode a model assumption.
+truth for active states, AI review policy, static repo-root cwd, target branch
+push behavior, and the model command. Model changes belong in `codex.command`;
+this skill should not hardcode a model assumption.
 
 If `git status --short` shows unrelated local edits, do not overwrite them.
 Either finish the current repo optimization first or stop and report the
@@ -80,15 +80,15 @@ shape:
 
 ## 约束
 - 只在 `/Users/bytedance/symphony-go` 仓库内工作。
-- 使用当前仓库的 `.worktrees/<ISSUE>` worktree。
+- 使用当前仓库 repo root 和配置的目标分支，不创建 worktree、临时 clone 或 PR 分支。
 - 让 Symphony Go listener 按 `workflows/WORKFLOW-symphony-go.md` 全自动跑完：
-  `Todo -> In Progress -> AI Review -> Merging -> Done`。
+  `Todo -> In Progress -> AI Review -> Done`。
 - Linear 读写必须使用派生会话可用的 `linear_graphql` 工具；不要调用
   Linear MCP/app issue/comment 写入或 `linear` CLI 兜底。
 - Linear workpad、状态说明、commit message 和可见说明默认使用中文。
-- `AI Review` 只审查本地 commit、workpad 和 validation evidence；不要提前创建 PR。
-- `Merging` 阶段打开并遵守 `.codex/skills/pr/SKILL.md`，用 `pr_merge_flow.sh` 完成 PR flow。
-- PR script 成功后，agent 必须更新 workpad merge evidence 并以 `Merge: PASS` 最终回复；`Done` 由 orchestrator 收口。
+- `AI Review` 只审查本地 commit、workpad 和 validation evidence；不要创建 PR。
+- `AI Review` 通过后直接 `git push origin <target>`，更新 workpad push evidence，移动 issue 到 `Done`。
+- Agent 最终回复必须以 `Push: PASS` 开头，并包含目标分支、pushed commit 和验证摘要。
 ```
 
 Capture the identifier and URL, then verify identifier, URL, state, team, and
@@ -126,7 +126,7 @@ issues continuously. Do not start a duplicate listener for a single smoke run.
 ## Monitor To Terminal
 
 Watch the issue, human log, and daemon log until terminal. Do not stop at
-`AI Review`, `Rework`, or `Merging`.
+`AI Review` or `Rework`.
 
 ```sh
 ISSUE=<ISSUE>
@@ -141,23 +141,20 @@ current issue state while monitoring.
 Expected healthy evidence:
 
 - Issue moves `Todo -> In Progress`.
-- `.worktrees/<ISSUE>` is created.
-- Workpad receives initial, handoff, AI Review, and merge evidence.
-- Implementation creates a local commit before `AI Review`; PR creation waits for `Merging`.
-- AI Review passes to `Merging` or sends the issue to `Rework` with reasons.
-- Rework produces a new implementation commit, updates the PR, and returns to `AI Review`.
-- `Merging` uses `.codex/skills/pr/SKILL.md` and `pr_merge_flow.sh` to push,
-  create/update the PR, wait for checks/review feedback, squash-merge, and
-  report root status.
-- Agent reports `Merge: PASS`; orchestrator then moves the issue to `Done`.
+- Worker cwd is the repo root on the configured target branch.
+- Workpad receives initial, handoff, AI Review, and push evidence.
+- Implementation creates one or more local commits before `AI Review`.
+- AI Review either pushes the target branch and moves the issue to `Done`, or
+  sends the issue to `Rework` with reasons.
+- Rework produces a new implementation commit and returns to `AI Review`.
+- Agent reports `Push: PASS` after pushing the target branch and moving the issue to `Done`.
 - Issue reaches `Done`.
 
 If the issue stalls, diagnose before restarting:
 
 ```sh
-git worktree list --porcelain | rg -n "$ISSUE|\\.worktrees/$ISSUE" || true
-rg -n "$ISSUE|state_changed|ai_review|rework|merge|blocked|error" "$latest_human"
-rg -n "$ISSUE|state_changed|ai_review|rework|merge|blocked|error" .symphony/logs/run-*.jsonl
+rg -n "$ISSUE|state_changed|ai_review|rework|push|blocked|error" "$latest_human"
+rg -n "$ISSUE|state_changed|ai_review|rework|push|blocked|error" .symphony/logs/run-*.jsonl
 ps -ef | rg 'symphony-go|codex app-server' | rg -v rg
 ```
 
@@ -165,29 +162,32 @@ Also re-read the issue before restarting.
 
 Treat repeated stalls as framework signal. Do not keep restarting blindly.
 
-## Merging Checks
+## Push Checks
 
-`Merging` must use the PR flow documented in `.codex/skills/pr/SKILL.md`. The
-issue worktree branch is pushed and linked to a PR during `Merging`, then the PR
-script waits for checks/review feedback, handles blockers, squash-merges, and
-reports root status.
+This workflow does not use PR-based `Merging`. After `AI Review` passes, the
+agent pushes the configured target branch directly and moves the issue to
+`Done`.
 
-Do not call `gh pr merge` directly and do not run `git merge --no-ff
-<issue-branch>` in the root checkout for the normal path. If the PR script fails,
-inspect the exact PR/GitHub/checks blocker and record it instead of falling
-back to local main merge.
+Before declaring success, confirm:
+
+- The current branch is the configured target branch.
+- `git status --short` is clean.
+- The relevant local commit range and validation evidence are recorded in the
+  workpad.
+- `git push origin <target>` succeeded.
+- Workpad push evidence records branch, pushed commit, validation summary, and
+  AI Review verdict.
 
 After terminal state, verify:
 
 ```sh
 git status --short --branch
 git rev-parse --short HEAD
-git rev-parse --short origin/main
-git worktree list --porcelain | rg -n "<ISSUE>|\\.worktrees/<ISSUE>" || true
+git rev-parse --short origin/<target>
 ```
 
 Use Linear GraphQL or the supervising session's Linear tooling to verify final
-issue state, workpad evidence, and links.
+issue state and workpad evidence.
 
 ## Stop The Issue Listener
 
@@ -209,15 +209,15 @@ pgrep -fl 'symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md|bin/sy
 
 After terminal state and listener cleanup, always review the run before
 reporting back. Use the latest human log, JSONL log, Linear workpad, git status,
-and worktree cleanup evidence.
+and push evidence.
 
 Classify findings:
 
 - Skill gaps: instructions caused manual waiting, duplicate listeners, wrong
   team/project/state, missing terminal checks, or unclear handoff.
-- Workflow gaps: prompt caused wrong PR creation timing, wrong PR skill usage,
-  wrong state routing, weak AI Review/Rework loop, or ambiguous
-  repo-root/worktree behavior.
+- Workflow gaps: prompt caused PR flow fallback, wrong state routing, weak
+  AI Review/Rework loop, unsafe target-branch handling, or ambiguous repo-root
+  behavior.
 - Code gaps: behavior should be first-class in the orchestrator, workspace
   manager, Linear adapter, runner, logs, or TUI instead of relying on humans.
 - Environment gaps: auth, git permissions, stale processes, or local filesystem
@@ -278,7 +278,7 @@ the exact files.
 ## Common Mistakes
 
 - Do not stop at `Human Review`; default flow should only use it for true external blockers.
-- Do not stop at `AI Review` or `Merging`; wait for terminal or a real blocker.
+- Do not stop at `AI Review`; wait for terminal or a real blocker.
 - Do not start a long-lived listener when the user asked for one issue smoke;
   use `./bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md --once --no-tui --issue <ISSUE> --merge-target main`.
 - Do not start a second listener when one is already polling the same issue.
@@ -286,10 +286,9 @@ the exact files.
   the workflow requires `linear_graphql`.
 - Do not hardcode another repository path, remote, branch, project, or model.
 - Do not declare health from a PID file alone; confirm with `ps` and logs.
-- Do not delete `.worktrees/<ISSUE>` manually while the issue is active.
-- Do not declare `Merging` complete until the PR skill has merged the PR, the
-  workpad has merge evidence, `Merge: PASS` has been emitted, and orchestrator
-  terminal cleanup has been checked.
+- Do not create or delete `.worktrees/<ISSUE>` for this workflow.
+- Do not create PRs or run `pr_merge_flow.sh`; success is target-branch push
+  evidence plus terminal issue state.
 - Do not leave optimization learnings only in chat; record them in the docs,
   then commit and push verified changes.
 
@@ -300,9 +299,8 @@ Report back with:
 - Linear issue identifier and URL.
 - Listener mode, PID, daemon log, and human/JSONL log paths.
 - Final issue state.
-- Worktree path and cleanup result.
+- Repo root, target branch, and pushed commit.
 - AI Review result and any Rework loop.
-- PR URL, AI Review result, and squash merge/root sync evidence if `Merging` ran.
-- Root checkout status after merge.
+- Push evidence and root checkout status.
 - Optimization notes recorded, files changed, validation commands, commit, and
   push result.

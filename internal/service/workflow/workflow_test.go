@@ -241,40 +241,35 @@ func strPtr(value string) *string {
 	return &value
 }
 
-func TestRepoWorkflowUsesAIReviewPRSkillFastPath(t *testing.T) {
+func TestRepoWorkflowUsesLocalTargetBranchPushFlow(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "workflows", "WORKFLOW-symphony-go.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(raw)
 	for _, want := range []string{
-		"active_states:\n    - Todo\n    - In Progress\n    - AI Review\n    - Merging\n    - Rework",
-		"本 workflow 使用 `AI Review` 作为示例 workflow 里 `Human Review` 的自动审核位置",
-		"`pr`：当 issue 进入 `Merging` 时",
+		"active_states:\n    - Todo\n    - In Progress\n    - AI Review\n    - Rework",
+		"workspace:\n  mode: static_cwd\n  cwd: ..",
+		"只在当前 repo root 中工作。不要为 issue 创建 git worktree、scratch checkout、临时 clone 或 PR 分支。",
+		"`merge.target` 是本 workflow 的目标开发分支",
+		"所有实现、验证、commit 和 push 都在配置的目标分支上完成。",
+		"同步目标分支时只做 fast-forward",
+		"`push`：AI Review 通过后推送目标分支到远端。",
+		"不要打开或执行 `.codex/skills/pr/SKILL.md`",
+		"默认路径是 `Todo -> In Progress -> AI Review -> Done`。",
 		"AI Review`，并在同一个 session 中继续审查 issue、workpad、本地 diff、commit range 和验证证据",
-		"`Merging` 阶段走 `pr` skill 快路径",
-		"打开并遵守 `.codex/skills/pr/SKILL.md`",
-		".codex/skills/pr/scripts/pr_merge_flow.sh",
-		"Merging 快路径",
-		"不要在脚本前重新展开实现、review 或完整历史 workpad",
-		"PR script 和远端 checks 是 `Merging` 阶段的质量门槛",
-		"test -x .codex/skills/pr/scripts/pr_merge_flow.sh",
-		"正常路径不要 `sed`/展开读取完整脚本内容",
-		"Merge: PASS",
-		"agent 不直接移动 issue 到 `Done`",
-		"issue worktree agent 不负责写 repo-root `main` checkout",
-		"repo-root `main` checkout sync 由 orchestrator/operator 在 repo-root context 收尾",
+		"review 通过后，不进入 PR 或 Merging 流程；直接推送当前目标分支到远端",
+		"AI Review`：本地 commit 和验证已完成，同一个 issue agent 继续审核；通过后 push 目标分支并进入 `Done`",
+		"一个独立逻辑改动对应一个 commit；多类改动要拆成多个清晰 commit。",
+		"## Step 3：AI Review 与 push handling",
+		"执行 `git push origin <target>`，只推送配置的目标分支。",
+		"最终回复以 `Push: PASS` 开头",
+		"## 移动到 Done 前的完成门槛",
 		"后续 continuation prompt 只用于阶段续航",
 		"正常简单任务不要为每个小命令更新 workpad",
-		"不要从 issue worktree agent 执行 `git -C /Users/bytedance/symphony-go pull --ff-only origin main`",
-		"`origin/main` 已 fetch 到该 merge commit",
-		"每一条 actionable reviewer comment",
-		"不要在移动到 `AI Review` 前提前创建 PR 或重复 sweep",
-		"使用 `commit` skill 提交当前 issue worktree 分支",
+		"使用 `commit` skill 提交到当前目标分支",
 		"当 issue 处于 `AI Review`，同一个 issue agent 审查 issue、workpad、本地 diff",
-		"不要直接调用 `gh pr merge`",
 		"本地 diff、commit range 和验证证据足以支持 AI Review",
-		"PR metadata 必须完整，包括 `symphony` label",
 		"使用 `linear_graphql`，不要使用 Linear MCP/app 工具",
 		"读取 issue、team states、comments：使用 `linear_graphql` query",
 		"更新 issue 状态：先读取 team states 拿到目标 `stateId`，再使用 `linear_graphql` 的 `issueUpdate` mutation",
@@ -297,7 +292,11 @@ func TestRepoWorkflowUsesAIReviewPRSkillFastPath(t *testing.T) {
 		"repo-root sync 完成",
 		"由 PR skill 统一负责 push、PR 创建/更新、feedback sweep、checks、squash merge 和 repo-root sync",
 		"merge 完成后，更新 workpad merge evidence，并移动 issue 到 `Done`",
-		"才移动 issue 到 `Done`",
+		"进入 `Merging`，失败时进入 `Rework`",
+		"`Merging` 阶段走 `pr` skill 快路径",
+		"打开并遵守 `.codex/skills/pr/SKILL.md`",
+		"PR metadata 必须完整，包括 `symphony` label",
+		"每一条 actionable reviewer comment",
 		"使用 Linear MCP/app 工具，不要使用 Linear CLI",
 		"不要使用 `linear` CLI 或 `linear_graphql` 作为兜底",
 		"通过 Linear MCP/app issue 更新工具将状态更新为 `In Progress`",
@@ -355,8 +354,9 @@ func TestRepoSkillsDocumentFastPullAndMergePassContract(t *testing.T) {
 	runText := string(runRaw)
 	for _, want := range []string{
 		"./bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md --once --no-tui --issue \"$ISSUE\" --merge-target main",
-		"PR creation waits for `Merging`",
-		"Agent reports `Merge: PASS`; orchestrator then moves the issue to `Done`",
+		"`Todo -> In Progress -> AI Review -> Done`",
+		"Agent reports `Push: PASS` after pushing the target branch and moving the issue to `Done`",
+		"Issue work happens in the repo root on the configured target branch",
 	} {
 		if !strings.Contains(runText, want) {
 			t.Fatalf("symphony issue run skill missing %q", want)
@@ -366,6 +366,8 @@ func TestRepoSkillsDocumentFastPullAndMergePassContract(t *testing.T) {
 		".codex/skills/land/SKILL.md",
 		"`AI Review` 前必须创建/更新 PR",
 		"Use `run-once` only for diagnosis",
+		"PR creation waits for `Merging`",
+		"Agent reports `Merge: PASS`",
 	} {
 		if strings.Contains(runText, forbidden) {
 			t.Fatalf("symphony issue run skill still contains %q", forbidden)
