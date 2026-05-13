@@ -46,6 +46,18 @@ func TestStateComparisonNormalizesCaseAndSpace(t *testing.T) {
 	}
 }
 
+func TestRunningMetricFieldsUseStableLabels(t *testing.T) {
+	fields := runningMetricFields(observability.RunningEntry{
+		State:      "In Progress",
+		AgentPhase: "implementer",
+		Stage:      "running_agent",
+	})
+
+	if len(fields) != 1 || fields["stage"] != "active" {
+		t.Fatalf("running metric fields = %#v, want only stable active label", fields)
+	}
+}
+
 func TestRequestRefreshSignalsPollWithoutBlocking(t *testing.T) {
 	o := New(Options{Workflow: &runtimeconfig.Workflow{Config: runtimeconfig.Config{}}})
 

@@ -1,9 +1,11 @@
 package orchestrator
 
 import (
+	"context"
 	"time"
 
 	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/runtime/telemetry"
 	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/issueflow"
 )
@@ -68,4 +70,5 @@ func (o *Orchestrator) setRunningStageLocked(issue issuemodel.Issue, attempt int
 		return
 	}
 	o.snapshot.Running = append(o.snapshot.Running, entry)
+	telemetry.RecordIssueActive(context.Background(), o.opts.Telemetry, 1, runningMetricFields(entry))
 }

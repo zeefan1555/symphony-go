@@ -1221,11 +1221,7 @@ func positiveDelta(next, previous int) int {
 }
 
 func runningMetricFields(entry observability.RunningEntry) map[string]any {
-	return map[string]any{
-		"state": entry.State,
-		"phase": entry.AgentPhase,
-		"stage": entry.Stage,
-	}
+	return map[string]any{"stage": "active"}
 }
 
 func retryMetricFields(entry observability.RetryEntry) map[string]any {
