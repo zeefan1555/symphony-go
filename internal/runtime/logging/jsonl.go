@@ -488,8 +488,9 @@ func humanCompletedItem(_ Event, display Event, params map[string]any) (Event, b
 		exitCode := intField(item, "exitCode")
 		command := commandLabel(item)
 		cwd := stringField(item, "cwd")
+		durationMS := intField(item, "durationMs")
 		display.Event = "codex_command"
-		display.Message = "Codex command completed"
+		display.Message = commandMessage(command, exitCode, durationMS)
 		if isContextReadCommand(command, cwd) {
 			display.Level = "debug"
 		}
@@ -497,17 +498,18 @@ func humanCompletedItem(_ Event, display Event, params map[string]any) (Event, b
 			display.Level = "warn"
 		}
 		display.Fields = compactMap(map[string]any{
-			"command":     command,
-			"cwd":         basePath(cwd),
-			"duration_ms": intField(item, "durationMs"),
-			"exit_code":   exitCode,
-			"output":      previewText(stringField(item, "aggregatedOutput"), 180),
+			"command":        command,
+			"command_status": commandStatus(exitCode),
+			"cwd":            basePath(cwd),
+			"duration_ms":    durationMS,
+			"exit_code":      exitCode,
+			"output":         previewText(stringField(item, "aggregatedOutput"), 180),
 		})
 		return display, true
 	case "fileChange":
 		display.Event = "codex_file_change"
-		display.Message = "Codex file change completed"
 		display.Fields = fileChangeFields(item)
+		display.Message = fileChangeMessage(display.Fields)
 		return display, true
 	default:
 		return Event{}, false
@@ -552,20 +554,43 @@ func planFields(params map[string]any) map[string]any {
 func fileChangeFields(item map[string]any) map[string]any {
 	changes, _ := item["changes"].([]any)
 	paths := make([]string, 0, len(changes))
+	locations := make([]string, 0, len(changes))
 	added := 0
 	removed := 0
+	lineStart := 0
+	lineEnd := 0
 	for _, change := range changes {
 		entry := mapFromAny(change)
-		if path := basePath(stringField(entry, "path")); path != "" {
+		path := basePath(stringField(entry, "path"))
+		if path != "" {
 			paths = append(paths, path)
 		}
-		plus, minus := diffLineCounts(stringField(entry, "diff"))
+		diff := stringField(entry, "diff")
+		plus, minus := diffLineCounts(diff)
 		added += plus
 		removed += minus
+		start, end := diffLineRange(diff)
+		if path != "" && start > 0 {
+			locations = append(locations, lineLocation(path, start, end))
+		}
+		if start > 0 && (lineStart == 0 || start < lineStart) {
+			lineStart = start
+		}
+		if end > lineEnd {
+			lineEnd = end
+		}
 	}
 	return compactMap(map[string]any{
-		"files":   strings.Join(paths, ","),
-		"summary": diffSummary(added, removed),
+		"additions":      added,
+		"changed_lines":  added + removed,
+		"deletions":      removed,
+		"file":           firstString(paths),
+		"file_count":     intIfPositive(len(paths)),
+		"file_locations": strings.Join(locations, ","),
+		"files":          strings.Join(paths, ","),
+		"line_end":       intIfPositive(lineEnd),
+		"line_start":     intIfPositive(lineStart),
+		"summary":        diffSummary(added, removed),
 	})
 }
 
@@ -606,11 +631,102 @@ func diffLineCounts(diff string) (int, int) {
 	return added, removed
 }
 
+func diffLineRange(diff string) (int, int) {
+	start := 0
+	end := 0
+	for _, line := range strings.Split(diff, "\n") {
+		if !strings.HasPrefix(line, "@@ ") {
+			continue
+		}
+		lineStart, lineEnd, ok := parseHunkLineRange(line)
+		if !ok {
+			continue
+		}
+		if start == 0 || lineStart < start {
+			start = lineStart
+		}
+		if lineEnd > end {
+			end = lineEnd
+		}
+	}
+	return start, end
+}
+
+func parseHunkLineRange(line string) (int, int, bool) {
+	fields := strings.Fields(line)
+	oldStart, oldCount, oldOK := 0, 0, false
+	for _, field := range fields {
+		switch {
+		case strings.HasPrefix(field, "+"):
+			start, count, ok := parseRangeToken(field)
+			if !ok {
+				continue
+			}
+			if count <= 0 && oldOK {
+				return oldStart, oldStart + maxInt(oldCount, 1) - 1, true
+			}
+			return start, start + maxInt(count, 1) - 1, true
+		case strings.HasPrefix(field, "-"):
+			oldStart, oldCount, oldOK = parseRangeToken(field)
+		}
+	}
+	return 0, 0, false
+}
+
+func parseRangeToken(token string) (int, int, bool) {
+	token = strings.TrimLeft(token, "+-")
+	parts := strings.SplitN(token, ",", 2)
+	start, err := strconv.Atoi(parts[0])
+	if err != nil || start < 0 {
+		return 0, 0, false
+	}
+	count := 1
+	if len(parts) == 2 {
+		parsed, err := strconv.Atoi(parts[1])
+		if err != nil || parsed < 0 {
+			return 0, 0, false
+		}
+		count = parsed
+	}
+	return start, count, true
+}
+
 func diffSummary(added, removed int) string {
 	if added == 0 && removed == 0 {
 		return ""
 	}
 	return fmt.Sprintf("+%d/-%d", added, removed)
+}
+
+func lineLocation(path string, start, end int) string {
+	if start <= 0 {
+		return path
+	}
+	if end <= start {
+		return fmt.Sprintf("%s:%d", path, start)
+	}
+	return fmt.Sprintf("%s:%d-%d", path, start, end)
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func intIfPositive(value int) *int {
+	if value <= 0 {
+		return nil
+	}
+	return &value
 }
 
 func commandLabel(item map[string]any) string {
@@ -621,6 +737,52 @@ func commandLabel(item map[string]any) string {
 		}
 	}
 	return previewText(stripShellWrapper(stringField(item, "command")), 180)
+}
+
+func commandStatus(exitCode *int) string {
+	if exitCode != nil && *exitCode != 0 {
+		return "failed"
+	}
+	return "succeeded"
+}
+
+func commandMessage(command string, exitCode, durationMS *int) string {
+	status := commandStatus(exitCode)
+	if command == "" {
+		command = "command"
+	}
+	detail := ""
+	if exitCode != nil && *exitCode != 0 {
+		detail = fmt.Sprintf("exit=%d", *exitCode)
+	}
+	if durationMS != nil {
+		if detail != "" {
+			detail += " "
+		}
+		detail += fmt.Sprintf("%dms", *durationMS)
+	}
+	if detail != "" {
+		return fmt.Sprintf("Command %s: %s (%s)", status, command, detail)
+	}
+	return fmt.Sprintf("Command %s: %s", status, command)
+}
+
+func fileChangeMessage(fields map[string]any) string {
+	if fields == nil {
+		return "File change completed"
+	}
+	location := stringField(fields, "file_locations")
+	if location == "" {
+		location = stringField(fields, "files")
+	}
+	summary := stringField(fields, "summary")
+	if location != "" && summary != "" {
+		return fmt.Sprintf("Changed %s (%s)", location, summary)
+	}
+	if location != "" {
+		return "Changed " + location
+	}
+	return "File change completed"
 }
 
 func isContextReadCommand(command, cwd string) bool {

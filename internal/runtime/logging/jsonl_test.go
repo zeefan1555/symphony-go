@@ -475,9 +475,9 @@ func TestHumanLogSummarizesCodexEvents(t *testing.T) {
 	out := string(raw)
 	for _, want := range []string{
 		"event=codex_plan", "progress=1/3", "current=运行验证命令",
-		"event=codex_command", `command="git status --short"`, "cwd=ZEE-8", `output="M SMOKE.md"`,
+		"event=codex_command", "command_status=succeeded", `command="git status --short"`, "cwd=ZEE-8", `output="M SMOKE.md"`, "Command succeeded: git status --short",
 		"event=codex_message", "phase=commentary", "已确认",
-		"event=codex_file_change", "files=SMOKE.md", "summary=+1/-0",
+		"event=codex_file_change", "file=SMOKE.md", "files=SMOKE.md", "file_locations=SMOKE.md:1-2", "line_start=1", "line_end=2", "changed_lines=1", "additions=1", "deletions=0", "summary=+1/-0", "Changed SMOKE.md:1-2",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("human log %q missing %q", out, want)

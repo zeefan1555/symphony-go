@@ -300,6 +300,10 @@ SELECT
   attributes_string['event'] AS event,
   body,
   attributes_number['duration_ms'] AS duration_ms,
+  attributes_string['command'] AS command,
+  attributes_string['command_status'] AS command_status,
+  attributes_string['file_locations'] AS file_locations,
+  attributes_number['changed_lines'] AS changed_lines,
   trace_id,
   span_id
 FROM signoz_logs.logs_v2
@@ -307,7 +311,13 @@ WHERE attributes_string['issue_identifier'] = 'ZEE-xxx'
 ORDER BY timestamp;
 ```
 
-预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`codex_turn_started`、`codex_turn_completed`、`state_changed`，以及对应收口阶段的 `review_pass` / `push_pass` 和 `codex_final`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。`codex_command` 只导出 `command`、`cwd`、`exit_code`、`duration_ms`；不导出长 output。
+预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`codex_turn_started`、`codex_turn_completed`、`state_changed`，以及对应收口阶段的 `review_pass` / `push_pass` 和 `codex_final`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
+
+精选 Codex 执行日志按生产排障风格保留关键字段：
+
+- `codex_command`：`body` 是人类可读命令结果，字段包含 `command`、`command_status`、`cwd`、`exit_code`、`duration_ms`；不导出长 output。
+- `codex_file_change`：`body` 是人类可读变更摘要，字段包含 `file`、`files`、`file_locations`、`line_start`、`line_end`、`changed_lines`、`additions`、`deletions`、`summary`。
+- `codex_final`：`body` 只保留截断后的最终摘要，不导出 token delta 或原始 payload。
 
 ### Metrics boundary
 

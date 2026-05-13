@@ -138,7 +138,7 @@ func TestRecordLogExportsCuratedCodexEvents(t *testing.T) {
 				"item": map[string]any{
 					"type": "fileChange",
 					"changes": []any{
-						map[string]any{"path": "/tmp/work/ZEE-1/SMOKE.md", "diff": "+done\n"},
+						map[string]any{"path": "/tmp/work/ZEE-1/SMOKE.md", "diff": "@@ -0,0 +1 @@\n+done\n"},
 					},
 				},
 			},
@@ -172,16 +172,26 @@ func TestRecordLogExportsCuratedCodexEvents(t *testing.T) {
 		t.Fatalf("event names = %#v, want %#v", names, wantNames)
 	}
 	commandAttrs := logRecordAttrs(logger.records[2])
-	if commandAttrs["command"] != "git status --short" || commandAttrs["cwd"] != "ZEE-1" {
+	if commandAttrs["command"] != "git status --short" || commandAttrs["command_status"] != "succeeded" || commandAttrs["cwd"] != "ZEE-1" {
 		t.Fatalf("command attrs = %#v", commandAttrs)
+	}
+	if logger.records[2].Body().AsString() != "Command succeeded: git status --short (25ms)" {
+		t.Fatalf("command body = %q", logger.records[2].Body().AsString())
 	}
 	commandInts := logRecordIntAttrs(logger.records[2])
 	if commandInts["exit_code"] != 0 || commandInts["duration_ms"] != 25 {
 		t.Fatalf("command int attrs = %#v, want exit_code and duration_ms", commandInts)
 	}
 	fileAttrs := logRecordAttrs(logger.records[3])
-	if fileAttrs["files"] != "SMOKE.md" {
-		t.Fatalf("file attrs = %#v, want SMOKE.md", fileAttrs)
+	if fileAttrs["file"] != "SMOKE.md" || fileAttrs["files"] != "SMOKE.md" || fileAttrs["file_locations"] != "SMOKE.md:1" {
+		t.Fatalf("file attrs = %#v, want SMOKE.md location", fileAttrs)
+	}
+	if logger.records[3].Body().AsString() != "Changed SMOKE.md:1 (+1/-0)" {
+		t.Fatalf("file body = %q", logger.records[3].Body().AsString())
+	}
+	fileInts := logRecordIntAttrs(logger.records[3])
+	if fileInts["file_count"] != 1 || fileInts["line_start"] != 1 || fileInts["line_end"] != 1 || fileInts["changed_lines"] != 1 || fileInts["additions"] != 1 || fileInts["deletions"] != 0 {
+		t.Fatalf("file int attrs = %#v, want file count and line metadata", fileInts)
 	}
 }
 

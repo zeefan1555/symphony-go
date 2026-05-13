@@ -8,7 +8,7 @@ goal:
   slug: "issue-timeline-observability"
   kind: existing_plan
   tranche: "Validate the provided telemetry plan, then complete successive safe implementation, docs, and smoke slices until single-issue Trace/Logs timeline drilldown is proven and Metrics remain low-cardinality."
-  status: active
+  status: done
   intake:
     original_request: "Issue Timeline Observability 优化计划"
     interpreted_outcome: "A single issue can be inspected as a complete Trace/Logs timeline by issue_identifier, while Metrics stay global and low-cardinality."
@@ -69,7 +69,7 @@ visual_board:
     command: "npx goalbuddy extend github-projects"
     missing: []
 
-active_task: T011
+active_task: null
 
 tasks:
   - id: T001
@@ -306,6 +306,7 @@ tasks:
     objective: "Update SigNoz documentation with Issue Timeline drilldown examples and clarify Trace/Logs versus Metrics responsibilities."
     allowed_files:
       - "docs/telemetry/signoz-dashboard.md"
+      - "docs/telemetry/smoke-results/zee-178-issue-timeline-observability-20260513.md"
       - "docs/goals/issue-timeline-observability/state.yaml"
     verify:
       - "git diff --check"
@@ -355,11 +356,12 @@ tasks:
   - id: T010
     type: worker
     assignee: Worker
-    status: blocked
+    status: done
     reasoning_hint: high
     objective: "Run or prepare a real issue smoke proving the SigNoz Trace/Logs timeline and Metrics low-cardinality queries."
     allowed_files:
       - "docs/telemetry/signoz-dashboard.md"
+      - "docs/telemetry/smoke-results/zee-178-issue-timeline-observability-20260513.md"
       - "docs/goals/issue-timeline-observability/state.yaml"
     verify:
       - "Trace query by issue_identifier shows issue_run duration, transitions, duration-bearing codex_turn_completed, AI Review -> Pushing, and Pushing -> Done."
@@ -371,24 +373,24 @@ tasks:
       - "External state transition requires owner approval not already granted."
       - "Smoke would mutate unrelated production data."
     receipt:
-      result: blocked
+      result: done
       changed_files:
         - "docs/telemetry/signoz-dashboard.md"
+        - "docs/telemetry/smoke-results/zee-178-issue-timeline-observability-20260513.md"
       commands:
-        - cmd: "docker ps --format '{{.Names}}\\t{{.Status}}' | rg -i 'signoz|clickhouse|otel|collector'"
+        - cmd: "created Linear smoke issue ZEE-178"
           status: pass
-        - cmd: "curl GraphQL query for ZEE-170 and ZEE-177"
+        - cmd: "OTEL_SERVICE_NAME=symphony-go OTEL_EXPORTER_OTLP_PROTOCOL=grpc OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 OTEL_EXPORTER_OTLP_INSECURE=true make run-once ISSUE=ZEE-178 MERGE_TARGET=feat_zff"
           status: pass
-        - cmd: "docker exec signoz-clickhouse clickhouse-client trace/log/metrics probes"
-          status: partial
-        - cmd: "git diff --check"
+        - cmd: "SigNoz trace/log/metrics ClickHouse queries for ZEE-178"
           status: pass
-      summary: "SigNoz, ClickHouse, and LINEAR_API_KEY are available. Existing ZEE-177/ZEE-170 telemetry is queryable, and a docs query mismatch was fixed from event_name to attributes_string['event']. A new post-change real issue smoke was not run because no safe fresh issue identifier was provided and running the main workflow now would perform externally visible Linear/workpad/state actions from a dirty repo with unrelated pre-existing AGENTS.md/lesson.md changes."
-      missing_requirement: "Operator must approve a fresh smoke issue or provide an existing safe issue ID to run with current code and OTEL env."
+        - cmd: "git push origin feat_zff"
+          status: pass
+      summary: "Real Linear smoke ZEE-178 reached Done through Todo -> In Progress -> AI Review -> Rework -> AI Review -> Pushing -> Done. Trace query shows issue_run duration 841494ms, duration-bearing codex_turn_completed spans, AI Review -> Pushing, and Pushing -> Done. Logs show dispatch_started, codex_turn_started, codex_turn_completed with duration_ms, state_changed, review_pass, push_pass, codex_final, codex_command, and codex_file_change. Recent metrics samples after the smoke had zero forbidden labels for issue_identifier, issue_id, session_id, turn_id, turn_count, and duration_ms."
   - id: T011
     type: pm
     assignee: PM
-    status: active
+    status: done
     reasoning_hint: default
     objective: "Wait for operator direction for the real issue smoke: provide or approve a safe issue ID, or explicitly skip external smoke for this goal run."
     inputs:
@@ -400,11 +402,16 @@ tasks:
       - "Do not treat old ZEE-177/ZEE-170 traces as proof of the new code path."
     expected_output:
       - "Approved issue ID and smoke command, or explicit skip decision."
-    receipt: null
+    receipt:
+      result: done
+      summary: "Operator approved creating and running a fresh real Linear smoke. PM created ZEE-178 and activated the smoke path."
+      evidence:
+        - "ZEE-178"
+        - "https://linear.app/zeefan/issue/ZEE-178/issue-timeline-observability-live-smoke-20260513t121930z"
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Audit whether the full Issue Timeline Observability outcome is complete."
     inputs:
@@ -421,7 +428,17 @@ tasks:
       - "full_outcome_complete: true | false"
       - "missing evidence"
       - "next task if not complete"
-    receipt: null
+    receipt:
+      result: done
+      decision: complete
+      full_outcome_complete: true
+      summary: "Full Issue Timeline Observability outcome is complete. Local tests/build passed, ZEE-178 real smoke reached Done, traces/logs prove single-issue timeline drilldown with real durations, and recent metrics samples prove low-cardinality labels only."
+      evidence:
+        - "Linear ZEE-178 state: Done"
+        - "Trace issue_run duration_ms: 841494.805875"
+        - "Trace transitions: Todo -> In Progress, AI Review -> Pushing, Pushing -> Done"
+        - "Logs include codex_turn_started, codex_turn_completed duration_ms, codex_final, codex_command, codex_file_change, review_pass, push_pass"
+        - "Recent metrics forbidden-label count: 0"
 
 checks:
   dirty_fingerprint: "## feat_zff...origin/feat_zff"
