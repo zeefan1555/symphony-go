@@ -267,6 +267,9 @@ SELECT
   attributes_string['message'] AS message,
   attributes_string['command'] AS command,
   attributes_string['file_locations'] AS file_locations,
+  attributes_string['source_file'] AS source_file,
+  attributes_number['source_line'] AS source_line,
+  attributes_string['source_function'] AS source_function,
   attributes_string['from_state'] AS from_state,
   attributes_string['to_state'] AS to_state,
   attributes_string['outcome'] AS outcome
@@ -313,6 +316,9 @@ SELECT
   attributes_string['command_status'] AS command_status,
   attributes_string['file_locations'] AS file_locations,
   attributes_number['changed_lines'] AS changed_lines,
+  attributes_string['source_file'] AS source_file,
+  attributes_number['source_line'] AS source_line,
+  attributes_string['source_function'] AS source_function,
   trace_id,
   span_id
 FROM signoz_logs.logs_v2
@@ -321,6 +327,8 @@ ORDER BY timestamp;
 ```
 
 预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`codex_turn_started`、`codex_turn_completed`、`state_changed`，以及对应收口阶段的 `review_pass` / `merge_pass`；直接推送收口场景还应包含 `push_pass`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
+
+每条 lifecycle / Codex 精选日志都应保留生产排障所需的打点来源字段：`source_file`、`source_line`、`source_function`。这些字段表示 Symphony 代码里哪一行打出了这条日志；`file_locations` 表示 agent 修改了目标仓库文件的哪几行，两者语义不同。
 
 精选 Codex 执行日志按生产排障风格保留关键字段：
 

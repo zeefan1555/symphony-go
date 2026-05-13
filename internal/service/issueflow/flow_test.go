@@ -141,6 +141,12 @@ func TestRunIssueTrunkRecordsWorkspacePromptAndTurnSpans(t *testing.T) {
 	if fields["stage"] != string(StageRunningAgent) || fields["state"] != StateInProgress || fields["continuation"] != false {
 		t.Fatalf("turn_completed fields = %#v, want stage/state/continuation", fields)
 	}
+	if fields["source_file"] != "internal/service/issueflow/agent_session.go" {
+		t.Fatalf("turn_completed fields = %#v, want source_file=agent_session.go", fields)
+	}
+	if line, ok := fields["source_line"].(int); !ok || line <= 0 {
+		t.Fatalf("turn_completed fields = %#v, want positive source_line", fields)
+	}
 	turnSpan, ok := endedSpan(recorder, "step implementer/codex_turn_completed")
 	if !ok {
 		t.Fatalf("ended spans = %#v, want codex_turn_completed", recorder.Ended())
