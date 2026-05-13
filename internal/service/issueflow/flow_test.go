@@ -37,7 +37,7 @@ func TestDefinitionForTrunkShowsHumanReadableMainline(t *testing.T) {
 	if def.EntryPoint != "issueflow.RunIssueTrunk" {
 		t.Fatalf("EntryPoint = %q, want issueflow.RunIssueTrunk", def.EntryPoint)
 	}
-	wantSteps := []string{StateBlocked, StateTodo, StateInProgress, StateAIReview, StatePushing, StateDone}
+	wantSteps := []string{StateBlocked, StateTodo, StateInProgress, StateAIReview, StateMerging, StateDone}
 	if len(def.Steps) != len(wantSteps) {
 		t.Fatalf("steps = %#v, want %d trunk steps", def.Steps, len(wantSteps))
 	}
@@ -224,7 +224,7 @@ func TestRunIssueTrunkWaitsForBlockedAndInReview(t *testing.T) {
 	}
 }
 
-func TestRunIssueTrunkAIReviewPassContinuesToPushing(t *testing.T) {
+func TestRunIssueTrunkAIReviewPassContinuesToMerging(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "review", State: StateAIReview}
 	tracker := &fakeTracker{issue: issue}
 	runner := &fakeRunner{agentMessage: "Review: PASS\nlooks good"}
@@ -238,11 +238,11 @@ func TestRunIssueTrunkAIReviewPassContinuesToPushing(t *testing.T) {
 	if result.Outcome != OutcomeRetryContinuation {
 		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
 	}
-	if tracker.updateState != StatePushing {
-		t.Fatalf("UpdateIssueState = %q, want Pushing", tracker.updateState)
+	if tracker.updateState != StateMerging {
+		t.Fatalf("UpdateIssueState = %q, want Merging", tracker.updateState)
 	}
-	if len(runner.prompts) != 2 || runner.prompts[1].Text != PushingContinuationPromptText || !runner.prompts[1].Continuation {
-		t.Fatalf("prompts = %#v, want Pushing continuation", runner.prompts)
+	if len(runner.prompts) != 2 || runner.prompts[1].Text != MergingContinuationPromptText || !runner.prompts[1].Continuation {
+		t.Fatalf("prompts = %#v, want Merging continuation", runner.prompts)
 	}
 	turnLogs := observer.logFieldsList("codex_turn_completed")
 	if len(turnLogs) != 2 {
@@ -253,17 +253,17 @@ func TestRunIssueTrunkAIReviewPassContinuesToPushing(t *testing.T) {
 		t.Fatalf("first turn fields = %#v, want AI Review reviewer running_agent", first)
 	}
 	second := turnLogs[1]
-	if second["phase"] != string(PhaseReviewer) || second["stage"] != string(StageContinuingPushing) || second["state"] != StatePushing || second["continuation"] != true {
-		t.Fatalf("second turn fields = %#v, want Pushing reviewer continuing_pushing", second)
+	if second["phase"] != string(PhaseReviewer) || second["stage"] != string(StageContinuingMerging) || second["state"] != StateMerging || second["continuation"] != true {
+		t.Fatalf("second turn fields = %#v, want Merging reviewer continuing_merging", second)
 	}
 }
 
-func TestRunIssueTrunkAIReviewTurnDoesNotAcceptSameTurnPushPass(t *testing.T) {
-	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "review and push", State: StateAIReview}
+func TestRunIssueTrunkAIReviewTurnDoesNotAcceptSameTurnMergePass(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "review and merge", State: StateAIReview}
 	tracker := &fakeTracker{issue: issue}
 	runner := &fakeRunner{agentMessages: []string{
-		"Review: PASS\nPush: PASS\npushed too early",
-		"Pushing continuation started but no push was performed",
+		"Review: PASS\nMerge: PASS\nmerged too early",
+		"Merging continuation started but no merge was performed",
 	}}
 	rt := testRuntime(t, tracker, runner, &fakeObserver{})
 
@@ -274,15 +274,15 @@ func TestRunIssueTrunkAIReviewTurnDoesNotAcceptSameTurnPushPass(t *testing.T) {
 	if result.Outcome != OutcomeRetryContinuation {
 		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
 	}
-	if tracker.updateState != StatePushing {
-		t.Fatalf("UpdateIssueState = %q, want Pushing only", tracker.updateState)
+	if tracker.updateState != StateMerging {
+		t.Fatalf("UpdateIssueState = %q, want Merging only", tracker.updateState)
 	}
-	if len(runner.prompts) != 2 || runner.prompts[1].Text != PushingContinuationPromptText || !runner.prompts[1].Continuation {
-		t.Fatalf("prompts = %#v, want Pushing continuation", runner.prompts)
+	if len(runner.prompts) != 2 || runner.prompts[1].Text != MergingContinuationPromptText || !runner.prompts[1].Continuation {
+		t.Fatalf("prompts = %#v, want Merging continuation", runner.prompts)
 	}
 }
 
-func TestRunIssueTrunkRecordsAIReviewToPushingSpan(t *testing.T) {
+func TestRunIssueTrunkRecordsAIReviewToMergingSpan(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-TRACE", Title: "review", State: StateAIReview}
 	tracker := &fakeTracker{issue: issue}
 	runner := &fakeRunner{agentMessage: "Review: PASS\nlooks good"}
@@ -297,7 +297,7 @@ func TestRunIssueTrunkRecordsAIReviewToPushingSpan(t *testing.T) {
 	if result.Outcome != OutcomeRetryContinuation {
 		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
 	}
-	assertEndedSpanNames(t, recorder, "transition AI Review -> Pushing", "issue_run")
+	assertEndedSpanNames(t, recorder, "transition AI Review -> Merging", "issue_run")
 }
 
 func TestRunIssueTrunkReusesOneSessionForContinuation(t *testing.T) {

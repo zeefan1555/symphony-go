@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/codes"
 	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/trace"
 
 	"symphony-go/internal/runtime/logging"
 )
@@ -23,6 +25,7 @@ var exportedLogEvents = map[string]bool{
 	"dispatch_skipped":         true,
 	"dispatch_started":         true,
 	"issue_error":              true,
+	"merge_pass":               true,
 	"poll_error":               true,
 	"push_pass":                true,
 	"reconcile_error":          true,
@@ -86,17 +89,13 @@ func RecordLog(ctx context.Context, provider Facade, event logging.Event) {
 	if !provider.Enabled() || !exportedLogEvents[event.Event] {
 		return
 	}
+	timestamp := logTimestamp(event)
+	recordCuratedLogSpan(ctx, provider, event, timestamp)
 	level := logging.InferLevel(event)
 	severity := logSeverity(level)
 	logger := provider.Logger()
 	if !logger.Enabled(ctx, otellog.EnabledParameters{Severity: severity}) {
 		return
-	}
-	timestamp := time.Now()
-	if event.Time != "" {
-		if parsed, err := time.Parse(time.RFC3339Nano, event.Time); err == nil {
-			timestamp = parsed
-		}
 	}
 	levelName := event.Level
 	if levelName == "" {
@@ -115,6 +114,15 @@ func RecordLog(ctx context.Context, provider Facade, event logging.Event) {
 	record.SetBody(otellog.StringValue(body))
 	record.AddAttributes(logAttributes(event)...)
 	logger.Emit(ctx, record)
+}
+
+func logTimestamp(event logging.Event) time.Time {
+	if event.Time != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, event.Time); err == nil {
+			return parsed
+		}
+	}
+	return time.Now()
 }
 
 func curatedLogEvent(event logging.Event) (logging.Event, bool) {
@@ -137,6 +145,72 @@ func curatedLogEvent(event logging.Event) (logging.Event, bool) {
 	return display, true
 }
 
+func recordCuratedLogSpan(ctx context.Context, provider Facade, event logging.Event, completedAt time.Time) {
+	switch event.Event {
+	case "codex_command":
+		recordCommandLogSpan(ctx, provider, event, completedAt)
+	case "codex_file_change", "codex_final":
+		recordInstantLogSpan(ctx, provider, event, completedAt)
+	}
+}
+
+func recordCommandLogSpan(ctx context.Context, provider Facade, event logging.Event, completedAt time.Time) {
+	startedAt := completedAt
+	if durationMS, ok := int64LogField(event.Fields, "duration_ms"); ok && durationMS > 0 {
+		startedAt = completedAt.Add(-time.Duration(durationMS) * time.Millisecond)
+	}
+	_, span := provider.Tracer().Start(ctx, logSpanName(event), trace.WithAttributes(Attrs(logSpanFields(event))...), trace.WithTimestamp(startedAt))
+	setLogSpanStatus(span, event)
+	span.End(trace.WithTimestamp(completedAt))
+}
+
+func recordInstantLogSpan(ctx context.Context, provider Facade, event logging.Event, timestamp time.Time) {
+	_, span := provider.Tracer().Start(ctx, logSpanName(event), trace.WithAttributes(Attrs(logSpanFields(event))...), trace.WithTimestamp(timestamp))
+	setLogSpanStatus(span, event)
+	span.End(trace.WithTimestamp(timestamp))
+}
+
+func logSpanName(event logging.Event) string {
+	phase := stringLogField(event.Fields, "phase")
+	if phase == "" {
+		phase = "codex"
+	}
+	return "step " + phase + "/" + event.Event
+}
+
+func logSpanFields(event logging.Event) map[string]any {
+	fields := map[string]any{
+		"event":            event.Event,
+		"issue_id":         event.IssueID,
+		"issue_identifier": event.IssueIdentifier,
+		"message":          event.Message,
+		"outcome":          logSpanOutcome(event),
+		"session_id":       event.SessionID,
+		"span_id":          event.SpanID,
+		"step":             event.Event,
+		"trace_id":         event.TraceID,
+	}
+	for key, value := range event.Fields {
+		fields[key] = value
+	}
+	return fields
+}
+
+func logSpanOutcome(event logging.Event) string {
+	if status := stringLogField(event.Fields, "command_status"); status != "" {
+		return status
+	}
+	return "success"
+}
+
+func setLogSpanStatus(span trace.Span, event logging.Event) {
+	if logSpanOutcome(event) == "failed" {
+		span.SetStatus(codes.Error, "command failed")
+		return
+	}
+	span.SetStatus(codes.Ok, "")
+}
+
 func mergeCodexLogFields(displayFields map[string]any, rawFields map[string]any) map[string]any {
 	fields := make(map[string]any, len(displayFields)+8)
 	for key, value := range displayFields {
@@ -157,6 +231,36 @@ func mergeCodexLogFields(displayFields map[string]any, rawFields map[string]any)
 		}
 	}
 	return fields
+}
+
+func stringLogField(fields map[string]any, key string) string {
+	if fields == nil {
+		return ""
+	}
+	value, ok := fields[key]
+	if !ok || value == nil {
+		return ""
+	}
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return fmt.Sprint(value)
+}
+
+func int64LogField(fields map[string]any, key string) (int64, bool) {
+	if fields == nil {
+		return 0, false
+	}
+	switch typed := fields[key].(type) {
+	case int:
+		return int64(typed), true
+	case int64:
+		return typed, true
+	case float64:
+		return int64(typed), true
+	default:
+		return 0, false
+	}
 }
 
 func firstNonEmpty(values ...string) string {

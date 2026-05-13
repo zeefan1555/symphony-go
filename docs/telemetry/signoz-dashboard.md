@@ -23,7 +23,7 @@ export OTEL_EXPORTER_OTLP_INSECURE=true
 - metrics: `symphony_issue_run_total`
 - metrics: `symphony_issue_transition_total`
 - logs fields: `trace_id`、`span_id`
-- lifecycle logs: `dispatch_started`、`state_changed`、`codex_turn_completed`、`review_pass`、`push_pass`、`blocked` 或 `issue_error`
+- lifecycle logs: `dispatch_started`、`state_changed`、`codex_turn_completed`、`review_pass`、`merge_pass`、`push_pass`、`blocked` 或 `issue_error`
 
 ## Dashboard 面板
 
@@ -246,10 +246,13 @@ issue_run
 ├─ step implementer/workspace_prepared
 ├─ step implementer/before_run_hook
 ├─ step implementer/prompt_rendered
+├─ step implementer/codex_command
+├─ step implementer/codex_file_change
+├─ step implementer/codex_final
 ├─ step implementer/codex_turn_completed
 ├─ step implementer/after_run_hook
-├─ transition AI Review -> Pushing
-└─ transition Pushing -> Done
+├─ transition AI Review -> Merging
+└─ transition Merging -> Done
 ```
 
 ClickHouse 查询示例：
@@ -261,6 +264,9 @@ SELECT
   duration_nano / 1000000 AS duration_ms,
   attributes_string['phase'] AS phase,
   attributes_string['stage'] AS stage,
+  attributes_string['message'] AS message,
+  attributes_string['command'] AS command,
+  attributes_string['file_locations'] AS file_locations,
   attributes_string['from_state'] AS from_state,
   attributes_string['to_state'] AS to_state,
   attributes_string['outcome'] AS outcome
@@ -275,8 +281,11 @@ ORDER BY timestamp;
 issue_run with full run duration
 transition Todo -> In Progress
 step .../codex_turn_completed with real duration_ms
-transition AI Review -> Pushing
-transition Pushing -> Done
+step .../codex_command with command duration_ms
+step .../codex_file_change with file_locations and changed_lines
+step .../codex_final with bounded message
+transition AI Review -> Merging
+transition Merging -> Done
 ```
 
 ### Logs timeline
@@ -311,7 +320,7 @@ WHERE attributes_string['issue_identifier'] = 'ZEE-xxx'
 ORDER BY timestamp;
 ```
 
-预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`codex_turn_started`、`codex_turn_completed`、`state_changed`，以及对应收口阶段的 `review_pass` / `push_pass` 和 `codex_final`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
+预期包含当前 issue 的 lifecycle logs：`dispatch_started`、`codex_turn_started`、`codex_turn_completed`、`state_changed`，以及对应收口阶段的 `review_pass` / `merge_pass`；直接推送收口场景还应包含 `push_pass`。若出现 blocker 或错误，应能查到 `blocked` 或 `issue_error` 等事件。
 
 精选 Codex 执行日志按生产排障风格保留关键字段：
 

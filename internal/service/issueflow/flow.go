@@ -219,17 +219,17 @@ func nextWorkerStage(issue issuemodel.Issue, turn int) RunStage {
 }
 
 func applyReviewPass(ctx context.Context, rt Runtime, issue issuemodel.Issue) (issuemodel.Issue, error) {
-	_, endTransition := telemetry.StartTransition(ctx, rt.Telemetry, StateAIReview, StatePushing, issueFields(issue))
-	if err := rt.Tracker.UpdateIssueState(ctx, issue.ID, StatePushing); err != nil {
+	_, endTransition := telemetry.StartTransition(ctx, rt.Telemetry, StateAIReview, StateMerging, issueFields(issue))
+	if err := rt.Tracker.UpdateIssueState(ctx, issue.ID, StateMerging); err != nil {
 		endTransition("error", err)
 		return issue, err
 	}
-	issue.State = StatePushing
+	issue.State = StateMerging
 	endTransition("success", nil)
-	logIssue(ctx, rt, issue, "state_changed", "AI Review -> Pushing", nil)
+	logIssue(ctx, rt, issue, "state_changed", "AI Review -> Merging", nil)
 	logIssue(ctx, rt, issue, "review_pass", "Review PASS", map[string]any{
 		"from_state": StateAIReview,
-		"to_state":   StatePushing,
+		"to_state":   StateMerging,
 		"outcome":    "success",
 	})
 	return issue, nil
@@ -261,6 +261,11 @@ func applyMergePass(ctx context.Context, rt Runtime, issue issuemodel.Issue) (is
 	issue.State = StateDone
 	endTransition("success", nil)
 	logIssue(ctx, rt, issue, "state_changed", "Merging -> Done", nil)
+	logIssue(ctx, rt, issue, "merge_pass", "Merge PASS", map[string]any{
+		"from_state": StateMerging,
+		"to_state":   StateDone,
+		"outcome":    "success",
+	})
 	return issue, nil
 }
 
