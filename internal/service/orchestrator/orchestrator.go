@@ -963,6 +963,9 @@ func isTerminal(state string, terminal []string) bool {
 }
 
 func (o *Orchestrator) log(issue, event, message string, fields map[string]any) {
+	for key, value := range logging.SourceFields(1) {
+		fields = withLogField(fields, key, value)
+	}
 	logEvent := logging.Event{
 		Issue:           issue,
 		IssueIdentifier: issue,
@@ -983,10 +986,16 @@ func (o *Orchestrator) log(issue, event, message string, fields map[string]any) 
 }
 
 func (o *Orchestrator) logIssue(issue issuemodel.Issue, event, message string, fields map[string]any) {
+	for key, value := range logging.SourceFields(1) {
+		fields = withLogField(fields, key, value)
+	}
 	o.logIssueWithContext(context.Background(), issue, event, message, fields)
 }
 
 func (o *Orchestrator) logIssueWithContext(ctx context.Context, issue issuemodel.Issue, event, message string, fields map[string]any) {
+	for key, value := range logging.SourceFields(1) {
+		fields = withLogField(fields, key, value)
+	}
 	for key, value := range telemetry.TraceFields(ctx) {
 		fields = withLogField(fields, key, value)
 	}

@@ -28,8 +28,11 @@ func TestRecordLogExportsAllowedEvents(t *testing.T) {
 		IssueID:         "issue-1",
 		IssueIdentifier: "ZEE-1",
 		Fields: map[string]any{
-			"phase":       "implementation",
-			"raw_payload": "do not export",
+			"phase":           "implementation",
+			"raw_payload":     "do not export",
+			"source_file":     "internal/service/issueflow/flow.go",
+			"source_function": "internal/service/issueflow.RunIssueTrunk",
+			"source_line":     72,
 		},
 	})
 
@@ -44,8 +47,12 @@ func TestRecordLogExportsAllowedEvents(t *testing.T) {
 		t.Fatalf("body = %q, want transition message", record.Body().AsString())
 	}
 	attrs := logRecordAttrs(record)
-	if attrs["issue_identifier"] != "ZEE-1" || attrs["phase"] != "implementation" {
-		t.Fatalf("attrs = %#v, want issue_identifier and phase", attrs)
+	if attrs["issue_identifier"] != "ZEE-1" || attrs["phase"] != "implementation" || attrs["source_file"] != "internal/service/issueflow/flow.go" || attrs["source_function"] != "internal/service/issueflow.RunIssueTrunk" {
+		t.Fatalf("attrs = %#v, want issue_identifier, phase, and source fields", attrs)
+	}
+	ints := logRecordIntAttrs(record)
+	if ints["source_line"] != 72 {
+		t.Fatalf("int attrs = %#v, want source_line", ints)
 	}
 	if _, ok := attrs["raw_payload"]; ok {
 		t.Fatalf("raw_payload should not be exported: %#v", attrs)

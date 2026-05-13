@@ -4,6 +4,7 @@ import (
 	"context"
 
 	runtimeconfig "symphony-go/internal/runtime/config"
+	"symphony-go/internal/runtime/logging"
 	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
@@ -49,8 +50,24 @@ func removeRunning(rt Runtime, issueID string) {
 
 func logIssue(ctx context.Context, rt Runtime, issue issuemodel.Issue, event, message string, fields map[string]any) {
 	if rt.Observer != nil {
+		fields = mergeLogFields(fields, logging.SourceFields(1))
 		rt.Observer.LogIssue(ctx, issue, event, message, fields)
 	}
+}
+
+func mergeLogFields(fields map[string]any, extra map[string]any) map[string]any {
+	for key, value := range extra {
+		if value == nil || value == "" {
+			continue
+		}
+		if fields == nil {
+			fields = map[string]any{}
+		}
+		if _, ok := fields[key]; !ok {
+			fields[key] = value
+		}
+	}
+	return fields
 }
 
 func updateRunningFromEvent(rt Runtime, issueID string, event codex.Event) {
