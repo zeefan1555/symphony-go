@@ -66,4 +66,3 @@ Minimum local validation for this smoke:
 git diff --check
 ./test.sh ./internal/runtime/telemetry ./internal/service/issueflow
 ```
-
