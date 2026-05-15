@@ -47,6 +47,13 @@ func TestNewRuntimeAssemblesRunDependencies(t *testing.T) {
 	if runtime.Telemetry == nil || runtime.Telemetry.Enabled() {
 		t.Fatal("runtime telemetry should be present and disabled without OTLP endpoint")
 	}
+	if runtime.SessionStore == nil {
+		t.Fatal("runtime session store is nil")
+	}
+	sessionDBPath := filepath.Join(filepath.Dir(workflowPath), ".symphony", "state", "sessions.db")
+	if _, err := os.Stat(sessionDBPath); err != nil {
+		t.Fatalf("session db was not created at %s: %v", sessionDBPath, err)
+	}
 	if got := runtime.Loaded.Config.Workspace.Root; !filepath.IsAbs(got) {
 		t.Fatalf("workspace root = %q, want absolute path", got)
 	}
@@ -239,6 +246,18 @@ func TestRuntimeCloseShutsDownTelemetry(t *testing.T) {
 	}
 	if !telemetry.closed {
 		t.Fatal("telemetry was not shut down")
+	}
+}
+
+func TestRuntimeCloseClosesSessionStore(t *testing.T) {
+	closer := &fakeCloser{}
+	runtime := Runtime{SessionStore: closer}
+
+	if err := runtime.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if !closer.closed {
+		t.Fatal("session store was not closed")
 	}
 }
 

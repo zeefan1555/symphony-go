@@ -403,6 +403,68 @@ printf '%s\n' '{"method":"turn/completed"}'
 	}
 }
 
+func TestRunnerResumesThreadWhenResumeThreadIDProvided(t *testing.T) {
+	workspacePath := t.TempDir()
+	fake := filepath.Join(t.TempDir(), "fake-codex")
+	trace := filepath.Join(t.TempDir(), "trace.jsonl")
+	script := `#!/bin/sh
+trace="$TRACE_FILE"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":1,"result":{}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-resumed"}}}'
+IFS= read -r line
+printf '%s\n' "$line" >> "$trace"
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-resumed"}}}'
+printf '%s\n' '{"method":"turn/completed"}'
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TRACE_FILE", trace)
+	runner := New(runtimeconfig.CodexConfig{
+		Command:        fake,
+		ApprovalPolicy: "never",
+		ThreadSandbox:  "workspace-write",
+		TurnTimeoutMS:  5000,
+		ReadTimeoutMS:  5000,
+	})
+
+	result, err := runner.RunSession(context.Background(), SessionRequest{
+		WorkspacePath:  workspacePath,
+		ResumeThreadID: "thread-old",
+		Issue:          issuemodel.Issue{Identifier: "ZEE-1", Title: "resume"},
+		Prompts:        []TurnPrompt{{Text: "rework prompt", Continuation: true}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ThreadID != "thread-resumed" || result.SessionID != "thread-resumed-turn-resumed" {
+		t.Fatalf("result = %#v, want resumed thread and turn", result)
+	}
+	raw, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if strings.Contains(text, `"method":"thread/start"`) {
+		t.Fatalf("trace unexpectedly used thread/start:\n%s", text)
+	}
+	if strings.Count(text, `"method":"thread/resume"`) != 1 {
+		t.Fatalf("thread/resume count mismatch:\n%s", text)
+	}
+	if !strings.Contains(text, `"threadId":"thread-old"`) {
+		t.Fatalf("thread/resume missing requested thread id:\n%s", text)
+	}
+	if !strings.Contains(text, `"threadId":"thread-resumed"`) || !strings.Contains(text, "rework prompt") {
+		t.Fatalf("turn/start did not use resumed thread or prompt:\n%s", text)
+	}
+}
+
 func TestRunnerRecordsTurnDuration(t *testing.T) {
 	workspacePath := t.TempDir()
 	fake := filepath.Join(t.TempDir(), "fake-codex")

@@ -2,6 +2,7 @@ GO ?= go
 BINARY := bin/symphony-go
 WORKFLOW ?= ./workflows/WORKFLOW-symphony-go.md
 BYTECODE_WORKFLOW ?= ./workflows/WORKFLOW-bytedcode.md
+EXPLORE_WORKFLOW ?= ./workflows/WORKFLOW-zeefan-explore.md
 ZH_SMOKE_WORKFLOW ?= $(WORKFLOW)
 ISSUE ?=
 MERGE_TARGET ?=
@@ -12,13 +13,14 @@ RESULTS_MD ?= ../.codex/skills/zh-smoke-harness/experiments/rounds.md
 TEAM ?= Zeefan
 CHANGE_NOTE ?=
 BYTECODE_TRIAGE_PROCESS_PATTERN ?= symphony-go.*run.*workflows/WORKFLOW-bytedcode.md
+EXPLORE_PROCESS_PATTERN ?= symphony-go.*run.*workflows/WORKFLOW-zeefan-explore.md
 ZH_SMOKE_PROCESS_PATTERN ?= symphony-go.*run.*workflows/WORKFLOW-symphony-go.md
 
 # External link mode keeps macOS binaries dyld-friendly on machines that reject
 # some `go run` temporary executables with a missing LC_UUID load command.
 LDFLAGS := -linkmode=external
 
-.PHONY: build test idl-lint hertz-generate check-generated-hertz-boundary hertz-layout-smoke run run-once bytecode bytecode-once bytecode-stop bytecode-triage bytecode-triage-once bytecode-triage-stop zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
+.PHONY: build test idl-lint hertz-generate check-generated-hertz-boundary hertz-layout-smoke run run-once bytecode bytecode-once bytecode-stop bytecode-triage bytecode-triage-once bytecode-triage-stop explore explore-once explore-stop zh-smoke-run zh-smoke-once zh-smoke-stop zh-smoke-metrics zh-smoke-round clean
 
 build:
 	GO=$(GO) SYMPHONY_GO_BUILD_LDFLAGS="$(LDFLAGS)" SYMPHONY_GO_BINARY="$(BINARY)" ./build.sh
@@ -59,6 +61,15 @@ bytecode-triage-once: build
 
 bytecode-triage-stop:
 	-pkill -f "$(BYTECODE_TRIAGE_PROCESS_PATTERN)"
+
+explore: build
+	$(BINARY) run --workflow $(EXPLORE_WORKFLOW) --no-tui $(if $(ISSUE),--issue $(ISSUE),)
+
+explore-once: build
+	$(BINARY) run --workflow $(EXPLORE_WORKFLOW) --once --no-tui $(if $(ISSUE),--issue $(ISSUE),)
+
+explore-stop:
+	-pkill -f "$(EXPLORE_PROCESS_PATTERN)"
 
 zh-smoke-run: build
 	$(BINARY) run --workflow $(ZH_SMOKE_WORKFLOW) --tui $(MERGE_TARGET_FLAG)

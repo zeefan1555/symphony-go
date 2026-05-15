@@ -2,9 +2,11 @@ package issueflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"symphony-go/internal/runtime/sessionstore"
 	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
@@ -63,16 +65,42 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 	}
 	endStep("success", nil)
 	setRunningStage(rt, issue, attempt, phase, nextWorkerStage(issue, 1), stageMessage(nextWorkerStage(issue, 1)), workspacePath, 1)
+	resumeThreadID := resumeThreadIDForRework(ctx, rt, issue, workspacePath)
+	attemptResult, sessionResult, err := runCodexSessionAttempt(ctx, rt, issue, attempt, workspacePath, promptText, renderAttempt, resumeThreadID)
+	if err != nil && resumeThreadID != "" && ctx.Err() == nil && len(sessionResult.Turns) == 0 {
+		logIssue(ctx, rt, issue, "thread_resume_failed", err.Error(), stepLogFields(nextWorkerPhase(issue), "thread_resume", "error", map[string]any{
+			"thread_id":      resumeThreadID,
+			"workspace_path": workspacePath,
+			"fallback":       "new_thread",
+		}))
+		deleteSessionRecord(ctx, rt, issue.ID)
+		attemptResult, sessionResult, err = runCodexSessionAttempt(ctx, rt, issue, attempt, workspacePath, promptText, renderAttempt, "")
+	}
+	removeRunning(rt, issue.ID)
+	if err != nil {
+		return returnRetryOrStop(err)
+	}
+	return attemptResult, nil
+}
+
+func runCodexSessionAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, attempt int, workspacePath string, promptText string, renderAttempt *int, resumeThreadID string) (Result, codex.SessionResult, error) {
 	lastAgentMessage := ""
 	attemptResult := Result{Outcome: OutcomeRetryContinuation}
 	currentIssue := issue
 	currentTurnCount := 1
+	initialPromptText := promptText
+	initialContinuation := false
+	if resumeThreadID != "" {
+		initialPromptText = ContinuationPromptText
+		initialContinuation = true
+	}
 	request := codex.SessionRequest{
-		WorkspacePath: workspacePath,
-		Issue:         issue,
+		WorkspacePath:  workspacePath,
+		ResumeThreadID: resumeThreadID,
+		Issue:          issue,
 		Prompts: []codex.TurnPrompt{{
-			Text:         promptText,
-			Continuation: false,
+			Text:         initialPromptText,
+			Continuation: initialContinuation,
 			Attempt:      renderAttempt,
 			Issue:        &issue,
 		}},
@@ -118,6 +146,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 				return codex.TurnPrompt{}, false, err
 			}
 			currentIssue = refreshed
+			upsertSessionRecord(ctx, rt, currentIssue, workspacePath, result)
 			if outcome, done, err := decideAfterTurn(ctx, rt, currentIssue); done {
 				attemptResult = outcome
 				return codex.TurnPrompt{}, false, err
@@ -189,7 +218,7 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 			}, true, nil
 		},
 	}
-	_, err = rt.Runner.RunSession(ctx, request, func(event codex.Event) {
+	sessionResult, err := rt.Runner.RunSession(ctx, request, func(event codex.Event) {
 		if text := CompletedAgentMessageText(event); text != "" {
 			lastAgentMessage = text
 		}
@@ -198,11 +227,71 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 		eventStage := nextWorkerStage(currentIssue, currentTurnCount)
 		logIssue(ctx, rt, issue, "codex_event", event.Name, stepLogFields(eventPhase, "codex_event", "", mergeEventFields(event.Payload, eventStage, currentIssue.State)))
 	})
-	removeRunning(rt, issue.ID)
 	if err != nil {
-		return returnRetryOrStop(err)
+		return attemptResult, sessionResult, err
 	}
-	return attemptResult, nil
+	return attemptResult, sessionResult, nil
+}
+
+func resumeThreadIDForRework(ctx context.Context, rt Runtime, issue issuemodel.Issue, workspacePath string) string {
+	if rt.Sessions == nil || !stateNameIn(issue.State, []string{StateRework}) {
+		return ""
+	}
+	record, err := rt.Sessions.Get(ctx, issue.ID)
+	if err != nil {
+		if !errors.Is(err, sessionstore.ErrNotFound) {
+			logIssue(ctx, rt, issue, "session_store_lookup_failed", err.Error(), stepLogFields(nextWorkerPhase(issue), "session_store_lookup", "error", nil))
+		}
+		return ""
+	}
+	if record.ThreadID == "" {
+		logIssue(ctx, rt, issue, "thread_resume_skipped", "stored session record has no thread id", stepLogFields(nextWorkerPhase(issue), "thread_resume", "skipped", map[string]any{
+			"reason": "empty_thread_id",
+		}))
+		return ""
+	}
+	if record.WorkspacePath != workspacePath {
+		logIssue(ctx, rt, issue, "thread_resume_skipped", "stored session workspace does not match current workspace", stepLogFields(nextWorkerPhase(issue), "thread_resume", "skipped", map[string]any{
+			"reason":           "workspace_mismatch",
+			"stored_workspace": record.WorkspacePath,
+			"workspace_path":   workspacePath,
+			"thread_id":        record.ThreadID,
+		}))
+		return ""
+	}
+	return record.ThreadID
+}
+
+func upsertSessionRecord(ctx context.Context, rt Runtime, issue issuemodel.Issue, workspacePath string, result codex.Result) {
+	if rt.Sessions == nil || result.ThreadID == "" {
+		return
+	}
+	record := sessionstore.Record{
+		IssueID:         issue.ID,
+		IssueIdentifier: issue.Identifier,
+		ThreadID:        result.ThreadID,
+		WorkspacePath:   workspacePath,
+		WorkerHost:      result.WorkerHost,
+		LastState:       issue.State,
+		LastSessionID:   result.SessionID,
+		LastTurnID:      result.TurnID,
+		UpdatedAt:       time.Now().UTC(),
+	}
+	if err := rt.Sessions.Upsert(ctx, record); err != nil {
+		logIssue(ctx, rt, issue, "session_store_upsert_failed", err.Error(), stepLogFields(nextWorkerPhase(issue), "session_store_upsert", "error", map[string]any{
+			"thread_id":      result.ThreadID,
+			"workspace_path": workspacePath,
+		}))
+	}
+}
+
+func deleteSessionRecord(ctx context.Context, rt Runtime, issueID string) {
+	if rt.Sessions == nil {
+		return
+	}
+	if err := rt.Sessions.Delete(ctx, issueID); err != nil {
+		logIssue(ctx, rt, issuemodel.Issue{ID: issueID}, "session_store_delete_failed", err.Error(), stepLogFields(PhaseImplementer, "session_store_delete", "error", nil))
+	}
 }
 
 func stepLogFields(phase AgentPhase, step, outcome string, fields map[string]any) map[string]any {

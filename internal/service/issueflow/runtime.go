@@ -5,6 +5,7 @@ import (
 
 	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/logging"
+	"symphony-go/internal/runtime/sessionstore"
 	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
@@ -20,6 +21,12 @@ type Runner interface {
 	RunSession(context.Context, codex.SessionRequest, func(codex.Event)) (codex.SessionResult, error)
 }
 
+type SessionStore interface {
+	Get(context.Context, string) (sessionstore.Record, error)
+	Upsert(context.Context, sessionstore.Record) error
+	Delete(context.Context, string) error
+}
+
 type Observer interface {
 	SetRunningStage(issue issuemodel.Issue, attempt int, phase AgentPhase, stage RunStage, message, workspacePath string, turnCount int)
 	RemoveRunning(issueID string)
@@ -32,6 +39,7 @@ type Runtime struct {
 	Tracker   Tracker
 	Workspace *workspace.Manager
 	Runner    Runner
+	Sessions  SessionStore
 	Observer  Observer
 	Telemetry telemetry.Facade
 }

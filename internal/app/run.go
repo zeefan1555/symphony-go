@@ -18,6 +18,7 @@ import (
 	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/logging"
 	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/runtime/sessionstore"
 	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	controlplane "symphony-go/internal/service/control"
@@ -56,6 +57,7 @@ type Runtime struct {
 	runner         *codex.Runner
 	Logger         io.Closer
 	Telemetry      telemetry.Facade
+	SessionStore   io.Closer
 }
 
 const defaultServerHost = "127.0.0.1"
@@ -143,6 +145,12 @@ func NewRuntime(opts Options) (*Runtime, error) {
 		_ = log.Close()
 		return nil, err
 	}
+	sessions, err := sessionstore.Open(sessionstore.DefaultPath(repoRoot))
+	if err != nil {
+		_ = tel.Shutdown(context.Background())
+		_ = log.Close()
+		return nil, err
+	}
 
 	manager := workspace.NewFromConfig(loaded.Config.Workspace, loaded.Config.Hooks)
 	runner := codex.New(loaded.Config.Codex, codex.WithDynamicToolExecutor(codex.NewDynamicToolExecutor(tracker)))
@@ -163,13 +171,14 @@ func NewRuntime(opts Options) (*Runtime, error) {
 			}
 			return codex.New(cfg)
 		},
-		Logger:      log,
-		Telemetry:   tel,
-		Reloader:    reloader,
-		Once:        opts.Once,
-		IssueFilter: opts.Issue,
-		RepoRoot:    repoRoot,
-		MergeTarget: MergeTargetOverride(opts.MergeTarget, opts.MergeExplicit),
+		Logger:       log,
+		Telemetry:    tel,
+		SessionStore: sessions,
+		Reloader:     reloader,
+		Once:         opts.Once,
+		IssueFilter:  opts.Issue,
+		RepoRoot:     repoRoot,
+		MergeTarget:  MergeTargetOverride(opts.MergeTarget, opts.MergeExplicit),
 	})
 
 	return &Runtime{
@@ -183,9 +192,10 @@ func NewRuntime(opts Options) (*Runtime, error) {
 			Tracker:   tracker,
 			Config:    loaded.Config,
 		})),
-		runner:    runner,
-		Logger:    log,
-		Telemetry: tel,
+		runner:       runner,
+		Logger:       log,
+		Telemetry:    tel,
+		SessionStore: sessions,
 	}, nil
 }
 
@@ -279,6 +289,11 @@ func (r *Runtime) Close() error {
 		ctx, cancel := context.WithTimeout(context.Background(), controlShutdownTimeout)
 		defer cancel()
 		if err := r.Telemetry.Shutdown(ctx); firstErr == nil {
+			firstErr = err
+		}
+	}
+	if r.SessionStore != nil {
+		if err := r.SessionStore.Close(); firstErr == nil {
 			firstErr = err
 		}
 	}

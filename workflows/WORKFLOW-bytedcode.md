@@ -87,7 +87,7 @@ No description provided.
    - 环境戳：`<host>:/Users/bytedance/bytecode@<time-or-sha>`
    - 问题复述
    - 排查计划
-   - 证据清单
+   - 证据清单：代码证据必须写成可跳转链接，例如 `[service/foo.go:123](/Users/bytedance/bytecode/Backend-Server/social_pet/service/foo.go:123)`；命令或日志证据写 artifact 路径、命令摘要和关键行号。
    - 当前结论
    - Blocker 或需要人工继续的动作
 5. 诊断完成且证据充分时，把 issue 状态更新为 `Done`。
@@ -102,19 +102,18 @@ No description provided.
    - 如果候选仓库存在 `AGENTS.md`，先读取并遵守。
    - 如果存在 README、go.mod、package.json 或本地 docs，只读取当前问题需要的部分。
 3. 使用 bytedcli：
-   - 涉及字节内部平台、日志、trace、TCC、CDS、Codebase、MR、CI、配置、服务树、APM、Slardar、Live Trace 等信息时，使用 bytedcli skill 和 `bytedcli` 命令。
-   - 先运行只读 auth/帮助类命令确认能力，例如 `bytedcli --json auth status` 或 `bytedcli <domain> --help`。
-   - bytedcli 通过 npx 包装时，优先使用临时 npm cache，避免写入全局 npm cache：`NPM_CONFIG_CACHE=/private/tmp/bytedcli-npm-cache bytedcli ...`。
-   - 查询日志、trace、TCC/CDS 大对象或任何可能产生长输出的命令时，必须先把完整输出持久化到 `/Users/bytedance/bytecode/.symphony/artifacts/{{ issue.identifier }}/`，例如：
+   - 适用场景：Unified skill for the entire bytedcli command surface. Use when tasks involve ByteDance internal R&D platforms and the agent should prefer bytedcli through CLI, MCP, or bundled references instead of opening web pages or hand-writing internal API calls.
+   - 一旦判断要使用 bytedcli，先路由到 [`.codex/skills/bytedcli/SKILL.md`](/Users/bytedance/bytecode/.codex/skills/bytedcli/SKILL.md)，按 skill 的 Route by task 或 subskills index 找真实 domain；不要按场景词硬猜同名 domain，例如 ByteTech 文章走 `insearch`，不是 `bytetech`。先跑 `bytedcli --json auth status` 或 `bytedcli <domain> --help`，不要猜命令。
+   - 需要稳定证据时默认加 `--json` 且只取必要字段；npx 包装时使用临时 npm cache：`NPM_CONFIG_CACHE=/private/tmp/bytedcli-npm-cache bytedcli ...`。
+   - 日志、trace、TCC/CDS 大对象或任何长输出必须先完整落盘到 `/Users/bytedance/bytecode/.symphony/artifacts/{{ issue.identifier }}/`，例如：
      ```bash
      mkdir -p /Users/bytedance/bytecode/.symphony/artifacts/{{ issue.identifier }}
      NPM_CONFIG_CACHE=/private/tmp/bytedcli-npm-cache bytedcli log get-logid-log ... > /Users/bytedance/bytecode/.symphony/artifacts/{{ issue.identifier }}/logid-<psm>.txt 2>&1
      ```
-   - 大输出文件写入后，只允许用 `rg -n '<keyword>' <artifact>`、`sed -n '<start>,<end>p' <artifact>`、`head`、`tail`、`wc -l` 提取小片段进入上下文；不要把完整日志、完整 JSON 或完整 trace 粘进 workpad/最终回复。
-   - workpad 记录 artifact 路径、命令摘要、关键命中行号和 1-3 行必要摘录即可；需要稳定证据时默认加 `--json`，并只请求当前问题需要的字段。
+   - 落盘后只用 `rg -n`、`sed -n`、`head`、`tail`、`wc -l` 提取小片段；workpad 只记录 artifact 路径、命令摘要、关键行号和 1-3 行摘录。
    - bytedcli 不可用或未登录时，不要安装新工具；记录 blocker 和建议的人类验证命令。
 4. 形成结论：
-   - 结论必须绑定证据：本地代码 `file:line`、命令输出摘要、日志片段、bytedcli 查询结果或明确的反证。
+   - 结论必须绑定证据：本地代码可跳转链接、命令输出摘要、日志片段、bytedcli 查询结果或明确的反证。
    - 区分“已确认事实”“基于证据的推断”“仍需外部验证”。
    - 不要给实现补丁；可以给最小修复建议、风险和下一步验证命令。
 

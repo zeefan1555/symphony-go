@@ -10,6 +10,7 @@ import (
 	"time"
 
 	runtimeconfig "symphony-go/internal/runtime/config"
+	"symphony-go/internal/runtime/sessionstore"
 	"symphony-go/internal/runtime/telemetry"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
@@ -377,6 +378,137 @@ func TestRunIssueTrunkReusesOneSessionForContinuation(t *testing.T) {
 	}
 }
 
+func TestRunIssueTrunkContinuesReworkInSameSession(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "rework", State: StateAIReview}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{tracker: tracker, stateChanges: []string{StateRework}}
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("RunSession calls = %d, want one live session through Rework", runner.calls)
+	}
+	got := promptTexts(runner.prompts)
+	want := []string{"work on ZEE-1", ContinuationPromptText}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("prompts = %#v, want %#v", got, want)
+	}
+	if promptIssue := runner.prompts[1].Issue; promptIssue == nil || promptIssue.State != StateRework {
+		t.Fatalf("Rework continuation issue = %#v, want state %q", promptIssue, StateRework)
+	}
+}
+
+func TestRunIssueTrunkStoresThreadWhenHumanReviewStopsWorker(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "human review", State: StateInProgress}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{tracker: tracker, stateChanges: []string{StateHumanReview}}
+	store := newFakeSessionStore()
+	rt := testRuntime(t, tracker, runner, &fakeObserver{})
+	rt.Sessions = store
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeWaitHuman {
+		t.Fatalf("outcome = %q, want wait human", result.Outcome)
+	}
+	record, err := store.Get(context.Background(), issue.ID)
+	if err != nil {
+		t.Fatalf("stored session missing: %v", err)
+	}
+	if record.ThreadID != "thread-1" || record.LastTurnID != "turn-1" || record.LastState != StateHumanReview {
+		t.Fatalf("record = %#v, want Human Review thread metadata", record)
+	}
+}
+
+func TestRunIssueTrunkResumesStoredThreadForRework(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "rework", State: StateRework}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{}
+	observer := &fakeObserver{}
+	rt := testRuntime(t, tracker, runner, observer)
+	store := newFakeSessionStore()
+	rt.Sessions = store
+	workspacePath, _, err := rt.Workspace.Ensure(context.Background(), issue)
+	if err != nil {
+		t.Fatalf("Ensure returned error: %v", err)
+	}
+	if err := store.Upsert(context.Background(), sessionstore.Record{
+		IssueID:         issue.ID,
+		IssueIdentifier: issue.Identifier,
+		ThreadID:        "thread-old",
+		WorkspacePath:   workspacePath,
+		LastState:       StateHumanReview,
+	}); err != nil {
+		t.Fatalf("Upsert returned error: %v", err)
+	}
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	if len(runner.requests) != 1 || runner.requests[0].ResumeThreadID != "thread-old" {
+		t.Fatalf("requests = %#v, want Rework resume thread", runner.requests)
+	}
+	if got := runner.prompts[0]; got.Text != ContinuationPromptText || !got.Continuation {
+		t.Fatalf("first prompt = %#v, want Rework continuation prompt", got)
+	}
+}
+
+func TestRunIssueTrunkFallsBackWhenReworkResumeFails(t *testing.T) {
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "rework", State: StateRework}
+	tracker := &fakeTracker{issue: issue}
+	runner := &fakeRunner{resumeErr: errFakeRunner}
+	observer := &fakeObserver{}
+	rt := testRuntime(t, tracker, runner, observer)
+	store := newFakeSessionStore()
+	rt.Sessions = store
+	workspacePath, _, err := rt.Workspace.Ensure(context.Background(), issue)
+	if err != nil {
+		t.Fatalf("Ensure returned error: %v", err)
+	}
+	if err := store.Upsert(context.Background(), sessionstore.Record{
+		IssueID:         issue.ID,
+		IssueIdentifier: issue.Identifier,
+		ThreadID:        "thread-old",
+		WorkspacePath:   workspacePath,
+		LastState:       StateHumanReview,
+	}); err != nil {
+		t.Fatalf("Upsert returned error: %v", err)
+	}
+
+	result, err := RunIssueTrunk(context.Background(), rt, issue, 0)
+	if err != nil {
+		t.Fatalf("RunIssueTrunk returned error: %v", err)
+	}
+	if result.Outcome != OutcomeRetryContinuation {
+		t.Fatalf("outcome = %q, want retry continuation", result.Outcome)
+	}
+	if len(runner.requests) != 2 || runner.requests[0].ResumeThreadID != "thread-old" || runner.requests[1].ResumeThreadID != "" {
+		t.Fatalf("requests = %#v, want resume then new thread fallback", runner.requests)
+	}
+	if !observer.sawLog("thread_resume_failed") {
+		t.Fatal("thread_resume_failed log missing")
+	}
+	record, err := store.Get(context.Background(), issue.ID)
+	if err != nil {
+		t.Fatalf("stored fallback session missing: %v", err)
+	}
+	if record.ThreadID != "thread-1" {
+		t.Fatalf("record thread = %q, want fallback thread-1", record.ThreadID)
+	}
+}
+
 func TestRunIssueTrunkRunsHooksOncePerWorkerAttempt(t *testing.T) {
 	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "hooks", State: StateInProgress}
 	tracker := &fakeTracker{issue: issue}
@@ -711,19 +843,27 @@ func (f *fakeTracker) UpdateIssueState(ctx context.Context, issueID, stateName s
 type fakeRunner struct {
 	calls         int
 	request       codex.SessionRequest
+	requests      []codex.SessionRequest
 	prompts       []codex.TurnPrompt
 	agentMessage  string
 	agentMessages []string
+	tracker       *fakeTracker
+	stateChanges  []string
 	duration      time.Duration
 	stats         codex.TurnStats
 	err           error
+	resumeErr     error
 }
 
 func (f *fakeRunner) RunSession(ctx context.Context, request codex.SessionRequest, onEvent func(codex.Event)) (codex.SessionResult, error) {
 	f.calls++
 	f.request = request
+	f.requests = append(f.requests, request)
 	if f.err != nil {
 		return codex.SessionResult{}, f.err
+	}
+	if request.ResumeThreadID != "" && f.resumeErr != nil {
+		return codex.SessionResult{}, f.resumeErr
 	}
 	result := codex.SessionResult{SessionID: "session-1", ThreadID: "thread-1"}
 	for turnIndex := 0; turnIndex < len(request.Prompts); turnIndex++ {
@@ -773,6 +913,13 @@ func (f *fakeRunner) RunSession(ctx context.Context, request codex.SessionReques
 		if request.AfterTurn == nil {
 			continue
 		}
+		if turnIndex < len(f.stateChanges) && f.stateChanges[turnIndex] != "" {
+			if f.tracker != nil {
+				if err := f.tracker.UpdateIssueState(ctx, request.Issue.ID, f.stateChanges[turnIndex]); err != nil {
+					return codex.SessionResult{}, err
+				}
+			}
+		}
 		next, ok, err := request.AfterTurn(ctx, turnResult, turnIndex+1)
 		if err != nil {
 			return codex.SessionResult{}, err
@@ -790,6 +937,42 @@ func promptTexts(prompts []codex.TurnPrompt) []string {
 		texts = append(texts, prompt.Text)
 	}
 	return texts
+}
+
+type fakeSessionStore struct {
+	records map[string]sessionstore.Record
+	err     error
+}
+
+func newFakeSessionStore() *fakeSessionStore {
+	return &fakeSessionStore{records: map[string]sessionstore.Record{}}
+}
+
+func (f *fakeSessionStore) Get(ctx context.Context, issueID string) (sessionstore.Record, error) {
+	if f.err != nil {
+		return sessionstore.Record{}, f.err
+	}
+	record, ok := f.records[issueID]
+	if !ok {
+		return sessionstore.Record{}, sessionstore.ErrNotFound
+	}
+	return record, nil
+}
+
+func (f *fakeSessionStore) Upsert(ctx context.Context, record sessionstore.Record) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.records[record.IssueID] = record
+	return nil
+}
+
+func (f *fakeSessionStore) Delete(ctx context.Context, issueID string) error {
+	if f.err != nil {
+		return f.err
+	}
+	delete(f.records, issueID)
+	return nil
 }
 
 type fakeObserver struct {
@@ -925,7 +1108,7 @@ func testRuntime(t *testing.T, tracker *fakeTracker, runner *fakeRunner, observe
 		Workflow: &runtimeconfig.Workflow{
 			Config: runtimeconfig.Config{
 				Tracker: runtimeconfig.TrackerConfig{
-					ActiveStates:   []string{StateTodo, StateInProgress, StateAIReview, StatePushing, StateMerging, StateHumanReview},
+					ActiveStates:   []string{StateTodo, StateInProgress, StateAIReview, StatePushing, StateMerging, StateRework, StateHumanReview},
 					TerminalStates: []string{StateDone},
 				},
 				Agent: runtimeconfig.AgentConfig{

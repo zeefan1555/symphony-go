@@ -18,6 +18,7 @@ import (
 	runtimeconfig "symphony-go/internal/runtime/config"
 	"symphony-go/internal/runtime/logging"
 	"symphony-go/internal/runtime/observability"
+	"symphony-go/internal/runtime/sessionstore"
 	"symphony-go/internal/service/codex"
 	issuemodel "symphony-go/internal/service/issue"
 	"symphony-go/internal/service/issueflow"
@@ -1373,6 +1374,7 @@ func TestStartupCleanupRemovesTerminalWorkspaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	tracker := &reconciliationTracker{terminalIssues: []issuemodel.Issue{terminalIssue}}
+	sessions := &recordingSessionStore{}
 	logPath := filepath.Join(t.TempDir(), "logs", "run.jsonl")
 	logger, err := logging.New(logPath)
 	if err != nil {
@@ -1384,9 +1386,10 @@ func TestStartupCleanupRemovesTerminalWorkspaces(t *testing.T) {
 				Tracker: runtimeconfig.TrackerConfig{TerminalStates: []string{"Done", "Canceled"}},
 			},
 		},
-		Tracker:   tracker,
-		Workspace: workspaceManager,
-		Logger:    logger,
+		Tracker:      tracker,
+		Workspace:    workspaceManager,
+		Logger:       logger,
+		SessionStore: sessions,
 	})
 
 	o.StartupCleanup(ctx)
@@ -1402,6 +1405,9 @@ func TestStartupCleanupRemovesTerminalWorkspaces(t *testing.T) {
 	}
 	if got := tracker.lastFetchStates(); strings.Join(got, ",") != "Done,Canceled" {
 		t.Fatalf("startup cleanup states = %v, want terminal states", got)
+	}
+	if got := sessions.deletedIDs(); strings.Join(got, ",") != terminalIssue.ID {
+		t.Fatalf("deleted session ids = %v, want %s", got, terminalIssue.ID)
 	}
 	raw, err := os.ReadFile(logPath)
 	if err != nil {
@@ -3036,6 +3042,32 @@ func (t *reconciliationTracker) lastFetchStates() []string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return append([]string(nil), t.states...)
+}
+
+type recordingSessionStore struct {
+	mu      sync.Mutex
+	deleted []string
+}
+
+func (s *recordingSessionStore) Get(context.Context, string) (sessionstore.Record, error) {
+	return sessionstore.Record{}, sessionstore.ErrNotFound
+}
+
+func (s *recordingSessionStore) Upsert(context.Context, sessionstore.Record) error {
+	return nil
+}
+
+func (s *recordingSessionStore) Delete(_ context.Context, issueID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deleted = append(s.deleted, issueID)
+	return nil
+}
+
+func (s *recordingSessionStore) deletedIDs() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.deleted...)
 }
 
 type blockingRunner struct {

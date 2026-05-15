@@ -80,11 +80,12 @@ type TurnStats struct {
 }
 
 type SessionRequest struct {
-	WorkspacePath string
-	WorkerHost    string
-	Issue         issuemodel.Issue
-	Prompts       []TurnPrompt
-	AfterTurn     func(context.Context, Result, int) (TurnPrompt, bool, error)
+	WorkspacePath  string
+	WorkerHost     string
+	ResumeThreadID string
+	Issue          issuemodel.Issue
+	Prompts        []TurnPrompt
+	AfterTurn      func(context.Context, Result, int) (TurnPrompt, bool, error)
 }
 
 type TurnPrompt struct {
@@ -151,7 +152,7 @@ func (r *Runner) RunSession(ctx context.Context, request SessionRequest, onEvent
 	if len(request.Prompts) == 0 {
 		return SessionResult{}, fmt.Errorf("codex session requires at least one prompt")
 	}
-	session, err := r.startSession(ctx, request.WorkspacePath, request.WorkerHost)
+	session, err := r.startSession(ctx, request.WorkspacePath, request.WorkerHost, request.ResumeThreadID)
 	if err != nil {
 		return SessionResult{}, err
 	}
@@ -432,9 +433,9 @@ func stripShellWrapper(command string) string {
 	return command
 }
 
-func (r *Runner) startSession(ctx context.Context, workspacePath string, workerHost string) (*session, error) {
+func (r *Runner) startSession(ctx context.Context, workspacePath string, workerHost string, resumeThreadID string) (*session, error) {
 	if strings.TrimSpace(workerHost) != "" {
-		return r.startRemoteSession(ctx, workspacePath, strings.TrimSpace(workerHost))
+		return r.startRemoteSession(ctx, workspacePath, strings.TrimSpace(workerHost), resumeThreadID)
 	}
 	cmd := exec.CommandContext(ctx, "bash", "-lc", r.Config.Command)
 	cmd.Dir = workspacePath
@@ -470,7 +471,7 @@ func (r *Runner) startSession(ctx context.Context, workspacePath string, workerH
 		s.Close()
 		return nil, err
 	}
-	threadID, err := s.startThread(workspacePath, r.Config.ApprovalPolicy, r.Config.ThreadSandbox)
+	threadID, err := s.startOrResumeThread(workspacePath, r.Config.ApprovalPolicy, r.Config.ThreadSandbox, resumeThreadID)
 	if err != nil {
 		s.Close()
 		return nil, err
@@ -479,7 +480,7 @@ func (r *Runner) startSession(ctx context.Context, workspacePath string, workerH
 	return s, nil
 }
 
-func (r *Runner) startRemoteSession(ctx context.Context, workspacePath string, workerHost string) (*session, error) {
+func (r *Runner) startRemoteSession(ctx context.Context, workspacePath string, workerHost string, resumeThreadID string) (*session, error) {
 	if err := validateRemoteWorkspacePath(workspacePath); err != nil {
 		return nil, err
 	}
@@ -504,7 +505,7 @@ func (r *Runner) startRemoteSession(ctx context.Context, workspacePath string, w
 		s.Close()
 		return nil, err
 	}
-	threadID, err := s.startThread(workspacePath, r.Config.ApprovalPolicy, r.Config.ThreadSandbox)
+	threadID, err := s.startOrResumeThread(workspacePath, r.Config.ApprovalPolicy, r.Config.ThreadSandbox, resumeThreadID)
 	if err != nil {
 		s.Close()
 		return nil, err
@@ -627,6 +628,13 @@ func (s *session) initialize() error {
 	return s.send(map[string]any{"method": "initialized", "params": map[string]any{}})
 }
 
+func (s *session) startOrResumeThread(cwd string, approvalPolicy any, sandbox string, resumeThreadID string) (string, error) {
+	if strings.TrimSpace(resumeThreadID) != "" {
+		return s.resumeThread(cwd, approvalPolicy, sandbox, strings.TrimSpace(resumeThreadID))
+	}
+	return s.startThread(cwd, approvalPolicy, sandbox)
+}
+
 func (s *session) startThread(cwd string, approvalPolicy any, sandbox string) (string, error) {
 	if err := s.send(map[string]any{
 		"method": "thread/start",
@@ -650,6 +658,31 @@ func (s *session) startThread(cwd string, approvalPolicy any, sandbox string) (s
 		return "", fmt.Errorf("invalid thread/start response: %v", result)
 	}
 	return threadID, nil
+}
+
+func (s *session) resumeThread(cwd string, approvalPolicy any, sandbox string, threadID string) (string, error) {
+	if err := s.send(map[string]any{
+		"method": "thread/resume",
+		"id":     threadStartID,
+		"params": map[string]any{
+			"threadId":       threadID,
+			"approvalPolicy": approvalPolicy,
+			"sandbox":        sandbox,
+			"cwd":            cwd,
+		},
+	}); err != nil {
+		return "", err
+	}
+	result, err := s.awaitResponse(threadStartID)
+	if err != nil {
+		return "", err
+	}
+	thread, _ := result["thread"].(map[string]any)
+	resumedThreadID, _ := thread["id"].(string)
+	if resumedThreadID == "" {
+		return "", fmt.Errorf("invalid thread/resume response: %v", result)
+	}
+	return resumedThreadID, nil
 }
 
 func (s *session) dynamicToolSpecs() []any {

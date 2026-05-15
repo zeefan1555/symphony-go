@@ -51,6 +51,7 @@ type Options struct {
 	NewTimer                 func(time.Duration, func()) *time.Timer
 	Logger                   *logging.Logger
 	Telemetry                telemetry.Facade
+	SessionStore             issueflow.SessionStore
 	Once                     bool
 	IssueFilter              string
 	RepoRoot                 string
@@ -77,6 +78,7 @@ type runtimeSnapshot struct {
 	workspace   *workspace.Manager
 	runner      AgentRunner
 	telemetry   telemetry.Facade
+	sessions    issueflow.SessionStore
 	repoRoot    string
 	mergeTarget string
 }
@@ -89,6 +91,7 @@ func (rt runtimeSnapshot) issueFlowRuntime(observer issueflow.Observer) issueflo
 		Runner:    rt.runner,
 		Observer:  observer,
 		Telemetry: rt.telemetry,
+		Sessions:  rt.sessions,
 	}
 }
 
@@ -335,7 +338,9 @@ func (o *Orchestrator) StartupCleanup(ctx context.Context) {
 	}
 	cleanupCtx := workspace.WithHookSource(ctx, "startup_cleanup")
 	for _, issue := range issues {
-		o.cleanupWorkspace(cleanupCtx, rt.workspace, issue, observability.RunningEntry{})
+		if err := o.cleanupWorkspace(cleanupCtx, rt.workspace, issue, observability.RunningEntry{}); err == nil {
+			o.deleteStoredSession(cleanupCtx, rt, issue)
+		}
 	}
 }
 
@@ -553,6 +558,7 @@ func (o *Orchestrator) currentRuntime() runtimeSnapshot {
 		workspace:   o.opts.Workspace,
 		runner:      o.opts.Runner,
 		telemetry:   o.opts.Telemetry,
+		sessions:    o.opts.SessionStore,
 		repoRoot:    o.opts.RepoRoot,
 		mergeTarget: effectiveMergeTarget(o.opts),
 	}
@@ -727,6 +733,7 @@ func (o *Orchestrator) dispatchIssueDone(ctx context.Context, issue issuemodel.I
 		workspace:   o.opts.Workspace,
 		runner:      o.opts.Runner,
 		telemetry:   o.opts.Telemetry,
+		sessions:    o.opts.SessionStore,
 		repoRoot:    o.opts.RepoRoot,
 		mergeTarget: effectiveMergeTarget(o.opts),
 	}
@@ -759,7 +766,10 @@ func (o *Orchestrator) workerExited(rt runtimeSnapshot, issue issuemodel.Issue, 
 	o.mu.Unlock()
 
 	if cleanup, ok := o.popPendingTerminalCleanup(issue.ID); ok {
-		o.cleanupWorkspace(context.Background(), rt.workspace, cleanup.issue, cleanup.entry)
+		ctx := context.Background()
+		if err := o.cleanupWorkspace(ctx, rt.workspace, cleanup.issue, cleanup.entry); err == nil {
+			o.deleteStoredSession(ctx, rt, cleanup.issue)
+		}
 		o.releaseIssue(issue.ID)
 		return
 	}
@@ -815,7 +825,17 @@ func (o *Orchestrator) cleanupTerminalIssueAfterExit(ctx context.Context, rt run
 	if err := o.cleanupWorkspace(workspace.WithHookSource(ctx, "worker_exit_terminal_cleanup"), rt.workspace, refreshed, observability.RunningEntry{}); err != nil {
 		return false
 	}
+	o.deleteStoredSession(ctx, rt, refreshed)
 	return true
+}
+
+func (o *Orchestrator) deleteStoredSession(ctx context.Context, rt runtimeSnapshot, issue issuemodel.Issue) {
+	if rt.sessions == nil || issue.ID == "" {
+		return
+	}
+	if err := rt.sessions.Delete(ctx, issue.ID); err != nil {
+		o.logIssue(issue, "session_store_delete_failed", err.Error(), nil)
+	}
 }
 
 func (o *Orchestrator) handleRetry(issueID string) {
