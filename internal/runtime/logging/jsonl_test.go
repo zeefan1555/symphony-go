@@ -712,6 +712,29 @@ func TestFormatConsoleKeepsArrowsReadable(t *testing.T) {
 	}
 }
 
+func TestFormatConsolePrintsClickableSourceLocation(t *testing.T) {
+	got := FormatConsole(Event{
+		Time:  "2026-05-01T20:00:00Z",
+		Level: "info",
+		Event: "workspace_retained",
+		Fields: map[string]any{
+			"source_file":     "internal/service/orchestrator/orchestrator.go",
+			"source_line":     434,
+			"source_function": "internal/service/orchestrator.(*Orchestrator).cleanupWorkspace",
+			"workspace_path":  "/Users/bytedance/bytecode",
+		},
+		Message: "static cwd retained",
+	}, false)
+	if !strings.Contains(got, "internal/service/orchestrator/orchestrator.go:434") {
+		t.Fatalf("FormatConsole() = %q, want clickable source location", got)
+	}
+	for _, hidden := range []string{"source_file=", "source_line=", "source_function="} {
+		if strings.Contains(got, hidden) {
+			t.Fatalf("FormatConsole() = %q, should hide %s after rendering location", got, hidden)
+		}
+	}
+}
+
 func TestInferLevel(t *testing.T) {
 	tests := []struct {
 		name  string

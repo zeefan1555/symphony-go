@@ -321,6 +321,9 @@ func (o *Orchestrator) reconcileRunning(ctx context.Context) error {
 
 func (o *Orchestrator) StartupCleanup(ctx context.Context) {
 	rt := o.currentRuntime()
+	if rt.workspace != nil && rt.workspace.StaticCWD() {
+		return
+	}
 	terminalStates := rt.workflow.Config.Tracker.TerminalStates
 	if len(terminalStates) == 0 {
 		return

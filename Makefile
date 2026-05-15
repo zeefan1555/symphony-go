@@ -52,7 +52,7 @@ bytecode-once: bytecode-triage-once
 bytecode-stop: bytecode-triage-stop
 
 bytecode-triage: build
-	$(BINARY) run --workflow $(BYTECODE_WORKFLOW) --tui $(if $(ISSUE),--issue $(ISSUE),)
+	$(BINARY) run --workflow $(BYTECODE_WORKFLOW) --no-tui $(if $(ISSUE),--issue $(ISSUE),)
 
 bytecode-triage-once: build
 	$(BINARY) run --workflow $(BYTECODE_WORKFLOW) --once --no-tui $(if $(ISSUE),--issue $(ISSUE),)

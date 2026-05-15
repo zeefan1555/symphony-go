@@ -1,0 +1,1875 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Symphony Go 工作流地图</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #020617;
+      --panel: #0f172a;
+      --panel-soft: #111827;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --line: #334155;
+      --active: #facc15;
+      --backend: #34d399;
+      --runtime: #38bdf8;
+      --transport: #a78bfa;
+      --external: #fb923c;
+      --ops: #fb7185;
+      --docs: #cbd5e1;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 18px;
+      background: radial-gradient(circle at 20% 10%, rgba(14, 165, 233, 0.12), transparent 28rem), var(--bg);
+      color: var(--text);
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    header {
+      padding: 0 0 14px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      max-width: 1120px;
+      color: var(--muted);
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(720px, 1fr) 330px;
+      gap: 14px;
+      height: calc(100vh - 124px);
+      min-height: 680px;
+    }
+
+    .panel {
+      background: rgba(15, 23, 42, 0.86);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 8px;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+    }
+
+    .side-panel {
+      display: grid;
+      grid-template-rows: minmax(260px, 0.78fr) minmax(240px, 1fr);
+      gap: 12px;
+      min-height: 0;
+    }
+
+    #flowButtons {
+      display: block;
+      padding: 12px;
+      overflow-y: auto;
+      height: calc(100% - 42px);
+    }
+
+    .panel h2 {
+      margin: 0;
+      padding: 14px 14px 10px;
+      font-size: 13px;
+      color: #f8fafc;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    .flow-button {
+      width: 100%;
+      display: block;
+      margin: 0 0 8px;
+      padding: 9px 10px;
+      color: var(--text);
+      text-align: left;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 7px;
+      background: rgba(2, 6, 23, 0.28);
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .flow-button:hover,
+    .flow-button.active {
+      background: rgba(250, 204, 21, 0.08);
+    }
+
+    .flow-button.active {
+      border-color: rgba(250, 204, 21, 0.72);
+      box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.18);
+    }
+
+    .flow-title {
+      display: block;
+      margin-bottom: 3px;
+      color: #f8fafc;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .flow-summary {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .map-panel {
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .map-toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: var(--dot);
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .map-viewport {
+      position: relative;
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      background: rgba(2, 6, 23, 0.28);
+    }
+
+    .map-canvas {
+      position: relative;
+      width: 1300px;
+      height: 900px;
+      min-width: 1300px;
+      background:
+        linear-gradient(rgba(30, 41, 59, 0.22) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30, 41, 59, 0.22) 1px, transparent 1px);
+      background-size: 36px 36px;
+      overflow: hidden;
+      transform: scale(var(--map-scale, 1));
+      transform-origin: top left;
+    }
+
+    .swimlanes {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .swimlane {
+      position: absolute;
+      top: 0;
+      height: 900px;
+      border-left: 1px dashed rgba(148, 163, 184, 0.09);
+      border-right: 1px dashed rgba(148, 163, 184, 0.05);
+      background: linear-gradient(90deg, rgba(148, 163, 184, 0.035), transparent);
+    }
+
+    .lane-label {
+      position: absolute;
+      top: 18px;
+      left: 14px;
+      color: rgba(148, 163, 184, 0.42);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    .edges {
+      position: absolute;
+      inset: 0;
+      width: 1300px;
+      height: 900px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .node {
+      position: absolute;
+      z-index: 2;
+      width: var(--w);
+      min-height: var(--h);
+      padding: 8px 9px;
+      border: 1px solid color-mix(in srgb, var(--node-color), white 8%);
+      border-radius: 7px;
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.78));
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+      opacity: 0.28;
+      transition: opacity 160ms ease, border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .node.active {
+      opacity: 1;
+      border-color: var(--active);
+      transform: translateY(-2px);
+      box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.26), 0 16px 34px rgba(0, 0, 0, 0.34);
+    }
+
+    .node.touched {
+      opacity: 0.88;
+    }
+
+    .node.external { --node-color: var(--external); }
+    .node.entry { --node-color: var(--docs); }
+    .node.runtime { --node-color: var(--runtime); }
+    .node.service { --node-color: var(--backend); }
+    .node.transport { --node-color: var(--transport); }
+    .node.ops { --node-color: var(--ops); }
+
+    .node-kind {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--node-color);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .node-name {
+      display: block;
+      color: #f8fafc;
+      font-weight: 700;
+      line-height: 1.25;
+      font-size: 14px;
+    }
+
+    .node-package {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.25;
+    }
+
+    .edge-path {
+      fill: none;
+      stroke: rgba(100, 116, 139, 0.35);
+      stroke-width: 2;
+    }
+
+    .edge-path.active {
+      stroke: var(--active);
+      stroke-width: 3;
+      filter: drop-shadow(0 0 5px rgba(250, 204, 21, 0.45));
+    }
+
+    .edge-label rect {
+      fill: rgba(2, 6, 23, 0.92);
+      stroke: rgba(250, 204, 21, 0.42);
+      rx: 5;
+    }
+
+    .edge-label text {
+      fill: #fde68a;
+      font-size: 11px;
+    }
+
+    .detail-body {
+      padding: 14px;
+      height: calc(100% - 42px);
+      overflow: auto;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+
+    .pill {
+      padding: 3px 8px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 999px;
+      color: #cbd5e1;
+      font-size: 11px;
+      background: rgba(15, 23, 42, 0.84);
+    }
+
+    .detail-summary {
+      margin: 0 0 14px;
+      color: var(--muted);
+    }
+
+    .step {
+      padding: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 8px;
+      background: rgba(2, 6, 23, 0.24);
+    }
+
+    .steps-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .step-title {
+      margin-bottom: 4px;
+      color: #f8fafc;
+      font-weight: 700;
+    }
+
+    .step-meta,
+    .step-evidence {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .step-payload {
+      margin: 7px 0;
+      color: #bae6fd;
+      font-size: 12px;
+    }
+
+    .json-preview {
+      margin: 14px 0 0;
+      padding: 12px;
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 8px;
+      background: rgba(2, 6, 23, 0.72);
+      color: #cbd5e1;
+      font-size: 11px;
+      white-space: pre-wrap;
+    }
+
+    .json-details {
+      margin-top: 14px;
+      color: var(--muted);
+    }
+
+    .json-details summary {
+      cursor: pointer;
+      color: #f8fafc;
+      font-weight: 700;
+    }
+
+    @media (max-width: 980px) {
+      body {
+        padding: 10px;
+        font-size: 13px;
+      }
+
+      header {
+        padding: 16px 14px 12px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      .subtitle {
+        font-size: 12px;
+      }
+
+      .shell {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 0;
+      }
+
+      .side-panel {
+        grid-template-rows: auto auto;
+      }
+
+      #flowButtons {
+        max-height: 320px;
+      }
+
+      .map-toolbar {
+        flex-direction: column;
+      }
+
+      .hint {
+        white-space: normal;
+      }
+
+      .map-viewport {
+        flex: 0 0 auto;
+        height: min(72vh, 760px);
+        min-height: 0;
+      }
+
+      .detail-body {
+        height: auto;
+        max-height: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Symphony Go 工作流地图</h1>
+    <p class="subtitle">这是一个由 JSON 驱动的单页地图，覆盖本仓运行时、控制面、workflow、workspace、Codex、Linear、telemetry 和构建动作。点击左侧动作后，页面会高亮涉及的包和组件，并说明每个边界传递了什么。</p>
+  </header>
+
+  <div class="shell">
+    <main class="panel map-panel">
+      <div class="map-toolbar">
+        <div class="legend" id="legend"></div>
+        <div class="hint">黄色节点和连线属于当前选中的动作。</div>
+      </div>
+      <div class="map-viewport" id="mapViewport">
+        <div class="map-canvas" id="mapCanvas">
+          <div class="swimlanes" id="swimlanes"></div>
+          <svg class="edges" viewBox="0 0 1300 900" aria-hidden="true">
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#facc15"></polygon>
+              </marker>
+              <marker id="arrowhead-muted" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"></polygon>
+              </marker>
+            </defs>
+            <g id="edgeLayer"></g>
+          </svg>
+          <div id="nodes"></div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="side-panel">
+      <section class="panel flow-list">
+        <h2>流程</h2>
+        <div id="flowButtons"></div>
+      </section>
+
+      <section class="panel detail">
+        <h2>步骤</h2>
+        <div class="detail-body" id="flowDetail"></div>
+      </section>
+    </aside>
+  </div>
+
+  <script id="workflow-data" type="application/json">
+{
+  "meta": {
+    "title": "Symphony Go 全仓业务动作工作流地图",
+    "authority": "基于当前仓库代码和 CONTEXT.md 边界契约生成。",
+    "updated": "2026-05-14",
+    "coordinateSystem": {
+      "width": 1300,
+      "height": 900
+    }
+  },
+  "componentKinds": {
+    "external": {
+      "label": "外部系统",
+      "color": "#fb923c"
+    },
+    "entry": {
+      "label": "入口/文档",
+      "color": "#cbd5e1"
+    },
+    "runtime": {
+      "label": "运行支撑",
+      "color": "#38bdf8"
+    },
+    "service": {
+      "label": "业务服务",
+      "color": "#34d399"
+    },
+    "transport": {
+      "label": "传输/IDL",
+      "color": "#a78bfa"
+    },
+    "ops": {
+      "label": "运维/观测",
+      "color": "#fb7185"
+    }
+  },
+  "components": [
+    {
+      "id": "operator",
+      "name": "人类 / agent 操作者",
+      "kind": "external",
+      "package": "shell, browser, curl, Linear UI",
+      "description": "启动二进制、调用本地控制面，并在 Linear UI 里审查状态。",
+      "x": 30,
+      "y": 50,
+      "w": 160,
+      "h": 82
+    },
+    {
+      "id": "linear-api",
+      "name": "Linear GraphQL API",
+      "kind": "external",
+      "package": "https://api.linear.app/graphql",
+      "description": "外部 issue tracker，负责轮询、issue 刷新、状态更新和 workpad 评论。",
+      "x": 30,
+      "y": 335,
+      "w": 160,
+      "h": 92
+    },
+    {
+      "id": "codex-app-server",
+      "name": "Codex app-server",
+      "kind": "external",
+      "package": "codex app-server process",
+      "description": "子进程，接收 initialize/thread/turn JSON-RPC，并输出事件流。",
+      "x": 30,
+      "y": 620,
+      "w": 160,
+      "h": 92
+    },
+    {
+      "id": "cli",
+      "name": "CLI 命令入口",
+      "kind": "entry",
+      "package": "cmd/symphony-go",
+      "description": "解析 run 参数，并转换成 app.Options。",
+      "evidence": [
+        "cmd/symphony-go/main.go:111"
+      ],
+      "x": 230,
+      "y": 50,
+      "w": 170,
+      "h": 82
+    },
+    {
+      "id": "workflow-doc",
+      "name": "Workflow 文档",
+      "kind": "entry",
+      "package": "workflows/WORKFLOW-symphony-go.md",
+      "description": "CLI 默认选中的仓库 workflow 文件。",
+      "evidence": [
+        "cmd/symphony-go/main.go:25",
+        "workflows/WORKFLOW-symphony-go.md"
+      ],
+      "x": 230,
+      "y": 160,
+      "w": 170,
+      "h": 82
+    },
+    {
+      "id": "build-test",
+      "name": "构建 / 测试入口",
+      "kind": "entry",
+      "package": "build.sh, test.sh, Makefile",
+      "description": "稳定的仓库原生验证入口。",
+      "evidence": [
+        "build.sh:1",
+        "test.sh:1"
+      ],
+      "x": 230,
+      "y": 270,
+      "w": 170,
+      "h": 82
+    },
+    {
+      "id": "idl",
+      "name": "IDL 契约",
+      "kind": "transport",
+      "package": "idl/main.proto + idl/*.proto",
+      "description": "IDL-first 的产品控制面 service 与请求/响应契约。",
+      "evidence": [
+        "idl/main.proto:17"
+      ],
+      "x": 230,
+      "y": 735,
+      "w": 170,
+      "h": 82
+    },
+    {
+      "id": "gen-hertz",
+      "name": "Hertz 生成外壳",
+      "kind": "transport",
+      "package": "gen/hertz/handler, gen/hertz/model, gen/hertz/router",
+      "description": "生成的路由、模型和 handler 外壳；业务逻辑不写进生成代码。",
+      "x": 230,
+      "y": 560,
+      "w": 170,
+      "h": 92
+    },
+    {
+      "id": "app-runtime",
+      "name": "运行时装配",
+      "kind": "runtime",
+      "package": "internal/app",
+      "description": "加载 workflow，装配 tracker/workspace/runner/logging/telemetry，并启动服务循环。",
+      "evidence": [
+        "internal/app/run.go:95",
+        "internal/app/run.go:192"
+      ],
+      "x": 470,
+      "y": 60,
+      "w": 185,
+      "h": 92
+    },
+    {
+      "id": "runtime-config",
+      "name": "运行配置解析",
+      "kind": "runtime",
+      "package": "internal/runtime/config",
+      "description": "解析 workflow front matter、应用配置、环境变量间接引用、默认值和校验规则。",
+      "evidence": [
+        "internal/runtime/config/config.go:54"
+      ],
+      "x": 470,
+      "y": 180,
+      "w": 185,
+      "h": 92
+    },
+    {
+      "id": "workflow-service",
+      "name": "Workflow 加载 / 渲染",
+      "kind": "service",
+      "package": "internal/service/workflow",
+      "description": "加载 workflow 文件、拆分 front matter、渲染 Liquid prompt，并安全重载变更后的 workflow。",
+      "evidence": [
+        "internal/service/workflow/workflow.go:62",
+        "internal/service/workflow/workflow.go:88",
+        "internal/service/workflow/reloader.go:73"
+      ],
+      "x": 470,
+      "y": 300,
+      "w": 185,
+      "h": 92
+    },
+    {
+      "id": "logging",
+      "name": "JSONL 与人类日志",
+      "kind": "ops",
+      "package": "internal/runtime/logging",
+      "description": "写入运行级、issue 级、人类可读和控制台事件。",
+      "evidence": [
+        "internal/runtime/logging/jsonl.go:81"
+      ],
+      "x": 470,
+      "y": 715,
+      "w": 185,
+      "h": 92
+    },
+    {
+      "id": "hertz-server",
+      "name": "Hertz HTTP 服务",
+      "kind": "transport",
+      "package": "internal/transport/hertzserver",
+      "description": "启动本地 HTTP server，注册生成路由和兼容别名。",
+      "evidence": [
+        "internal/transport/hertzserver/server.go:36"
+      ],
+      "x": 470,
+      "y": 560,
+      "w": 185,
+      "h": 92
+    },
+    {
+      "id": "orchestrator",
+      "name": "调度器",
+      "kind": "service",
+      "package": "internal/service/orchestrator",
+      "description": "轮询、派发、跟踪 running/retry 状态，重载 workflow 依赖，并暴露运行态投影。",
+      "evidence": [
+        "internal/service/orchestrator/orchestrator.go:139",
+        "internal/service/orchestrator/orchestrator.go:172"
+      ],
+      "x": 705,
+      "y": 60,
+      "w": 190,
+      "h": 96
+    },
+    {
+      "id": "issueflow",
+      "name": "Issue 流程状态机",
+      "kind": "service",
+      "package": "internal/service/issueflow",
+      "description": "执行 trunk issue 生命周期：阻塞判断、状态流转、workspace、prompt、Codex turn、review、merge、push。",
+      "evidence": [
+        "internal/service/issueflow/flow.go:12",
+        "internal/service/issueflow/agent_session.go:17"
+      ],
+      "x": 705,
+      "y": 190,
+      "w": 190,
+      "h": 104
+    },
+    {
+      "id": "issue-model",
+      "name": "Issue 内部模型",
+      "kind": "service",
+      "package": "internal/service/issue",
+      "description": "tracker、orchestrator、workflow、workspace 和 Codex 之间共享的 issue/blocker 模型。",
+      "x": 705,
+      "y": 330,
+      "w": 190,
+      "h": 88
+    },
+    {
+      "id": "control-service",
+      "name": "控制面服务",
+      "kind": "service",
+      "package": "internal/service/control",
+      "description": "手写控制面语义，覆盖状态、tracker、workspace、workflow、Codex turn 和 refresh 操作。",
+      "evidence": [
+        "internal/service/control/service.go:185",
+        "internal/service/control/service.go:378",
+        "internal/service/control/service.go:497"
+      ],
+      "x": 705,
+      "y": 715,
+      "w": 190,
+      "h": 104
+    },
+    {
+      "id": "hertz-binding",
+      "name": "Hertz 绑定层",
+      "kind": "transport",
+      "package": "internal/transport/hertzbinding",
+      "description": "把生成的 Hertz 模型转换成手写控制服务调用，并统一 HTTP 错误 envelope。",
+      "evidence": [
+        "internal/transport/hertzbinding/control.go:35"
+      ],
+      "x": 705,
+      "y": 560,
+      "w": 190,
+      "h": 92
+    },
+    {
+      "id": "linear-integration",
+      "name": "Linear 集成",
+      "kind": "service",
+      "package": "internal/integration/linear",
+      "description": "读取 active issues、刷新 issue 状态、更新 Linear 状态，并 upsert workpad 评论。",
+      "evidence": [
+        "internal/integration/linear/client.go:178",
+        "internal/integration/linear/client.go:257"
+      ],
+      "x": 955,
+      "y": 60,
+      "w": 190,
+      "h": 104
+    },
+    {
+      "id": "workspace",
+      "name": "Workspace 管理器",
+      "kind": "service",
+      "package": "internal/service/workspace",
+      "description": "解析安全 issue 路径、确保 workspace 目录存在、校验路径不逃逸、运行 hook，并清理 terminal workspace。",
+      "evidence": [
+        "internal/service/workspace/workspace.go:231",
+        "internal/service/workspace/workspace.go:300"
+      ],
+      "x": 955,
+      "y": 190,
+      "w": 190,
+      "h": 104
+    },
+    {
+      "id": "codex-runner",
+      "name": "Codex 运行器",
+      "kind": "service",
+      "package": "internal/service/codex",
+      "description": "启动 app-server session，发送 turn prompt，统计 turn 指标，并转发 session/turn 事件。",
+      "evidence": [
+        "internal/service/codex/runner.go:150"
+      ],
+      "x": 955,
+      "y": 330,
+      "w": 190,
+      "h": 104
+    },
+    {
+      "id": "ssh-service",
+      "name": "SSH 服务",
+      "kind": "service",
+      "package": "internal/service/ssh",
+      "description": "支持 worker host 路由和远端命令执行，用于 Codex session 落点。",
+      "x": 955,
+      "y": 470,
+      "w": 190,
+      "h": 82
+    },
+    {
+      "id": "observability",
+      "name": "运行态快照",
+      "kind": "ops",
+      "package": "internal/runtime/observability",
+      "description": "内存中的 running agents、retry 队列、tokens、polling 和 rate-limit 状态投影。",
+      "evidence": [
+        "internal/service/orchestrator/orchestrator.go:122"
+      ],
+      "x": 955,
+      "y": 600,
+      "w": 190,
+      "h": 92
+    },
+    {
+      "id": "tui",
+      "name": "终端 TUI",
+      "kind": "ops",
+      "package": "internal/tui",
+      "description": "把实时运行态快照渲染到终端。",
+      "evidence": [
+        "internal/tui/dashboard.go:19"
+      ],
+      "x": 955,
+      "y": 735,
+      "w": 190,
+      "h": 82
+    },
+    {
+      "id": "scripts-hooks",
+      "name": "Workspace hooks",
+      "kind": "ops",
+      "package": "scripts/symphony_before_remove.sh, scripts/symphony_after_create.sh",
+      "description": "由 workspace 生命周期配置调用的仓库脚本。",
+      "x": 1160,
+      "y": 190,
+      "w": 120,
+      "h": 104
+    },
+    {
+      "id": "dynamic-tools",
+      "name": "动态工具",
+      "kind": "service",
+      "package": "internal/service/codex/dynamic_tool.go",
+      "description": "通过 Symphony 的 Linear auth 向 Codex session 暴露 Linear GraphQL 动态工具。",
+      "evidence": [
+        "internal/service/codex/dynamic_tool.go:56"
+      ],
+      "x": 1160,
+      "y": 330,
+      "w": 120,
+      "h": 104
+    },
+    {
+      "id": "telemetry",
+      "name": "OTel 遥测",
+      "kind": "ops",
+      "package": "internal/runtime/telemetry",
+      "description": "记录 issue-run span、步骤 span、指标和 shutdown 语义。",
+      "evidence": [
+        "internal/runtime/telemetry/provider.go:38",
+        "internal/runtime/telemetry/issue_run.go:11"
+      ],
+      "x": 1160,
+      "y": 600,
+      "w": 120,
+      "h": 92
+    }
+  ],
+  "flows": [
+    {
+      "id": "run-listener",
+      "title": "启动监听运行时",
+      "category": "运行时",
+      "entrypoint": "symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md",
+      "summary": "启动本地 daemon，解析 workflow/config，串起 Linear、workspace、Codex、日志、telemetry 和控制面依赖，然后轮询 eligible issues。",
+      "steps": [
+        {
+          "from": "operator",
+          "to": "cli",
+          "label": "run 参数",
+          "payload": "参数：workflow、once、issue、port、tui、merge-target",
+          "annotation": "CLI 只接受 run 子命令，并把解析后的参数转换成 app.Options。",
+          "evidence": [
+            "cmd/symphony-go/main.go:111"
+          ]
+        },
+        {
+          "from": "cli",
+          "to": "app-runtime",
+          "label": "app.Options",
+          "payload": "WorkflowPath、Once、Issue、MergeTarget、Server、TUI、stdio",
+          "annotation": "运行时装配归 internal/app 所有，不归 Hertz 生成代码所有。",
+          "evidence": [
+            "internal/app/run.go:95"
+          ]
+        },
+        {
+          "from": "app-runtime",
+          "to": "workflow-doc",
+          "label": "加载路径",
+          "payload": "workflow 文件路径",
+          "annotation": "默认 workflow 路径是 ./workflows/WORKFLOW-symphony-go.md。",
+          "evidence": [
+            "cmd/symphony-go/main.go:25"
+          ]
+        },
+        {
+          "from": "workflow-doc",
+          "to": "runtime-config",
+          "label": "front matter",
+          "payload": "tracker、workspace、hooks、agent、codex、server、merge 设置",
+          "annotation": "服务构造前会先解析 workflow 配置、默认值和 app config。",
+          "evidence": [
+            "internal/runtime/config/config.go:54"
+          ]
+        },
+        {
+          "from": "app-runtime",
+          "to": "linear-integration",
+          "label": "tracker client",
+          "payload": "endpoint、api key、project slug、assignee",
+          "annotation": "Linear 是轮询和 mutation 的具体 tracker 集成。",
+          "evidence": [
+            "internal/app/run.go:108",
+            "internal/integration/linear/client.go:178"
+          ]
+        },
+        {
+          "from": "app-runtime",
+          "to": "workspace",
+          "label": "workspace manager",
+          "payload": "workspace.root、mode、cwd、hooks",
+          "annotation": "workspace 生命周期只装配一次，issue run 和控制面调用共用它。",
+          "evidence": [
+            "internal/app/run.go:137"
+          ]
+        },
+        {
+          "from": "app-runtime",
+          "to": "codex-runner",
+          "label": "runner",
+          "payload": "codex command、timeout、approval、sandbox、dynamic tools",
+          "annotation": "当 tracker 支持时，Codex runner 会携带 Linear-backed dynamic tools。",
+          "evidence": [
+            "internal/app/run.go:138"
+          ]
+        },
+        {
+          "from": "app-runtime",
+          "to": "orchestrator",
+          "label": "service graph",
+          "payload": "workflow、tracker、workspace、runner、logger、telemetry、reloader",
+          "annotation": "orchestrator 拥有 daemon 轮询循环和运行态快照。",
+          "evidence": [
+            "internal/app/run.go:139",
+            "internal/service/orchestrator/orchestrator.go:139"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "linear-integration",
+          "label": "轮询",
+          "payload": "active state names",
+          "annotation": "每轮拉取 active issues，做 eligibility 判断，再派发候选 issue。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:172"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "tui",
+          "label": "快照",
+          "payload": "Running、Retrying、Polling、Tokens、RateLimits",
+          "annotation": "如果启用 TUI，它渲染的就是控制面也会暴露的同一份运行态投影。",
+          "evidence": [
+            "internal/app/run.go:222",
+            "internal/tui/dashboard.go:19"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "issue-run-trunk",
+      "title": "执行单个 issue trunk 流程",
+      "category": "issue run",
+      "entrypoint": "orchestrator.dispatchIssueDone -> issueflow.RunIssueTrunk",
+      "summary": "把 eligible Linear issue 派发进 trunk 生命周期：状态 guard、workspace、hooks、prompt 渲染、Codex session、状态刷新、continuation、retry 和 cleanup。",
+      "steps": [
+        {
+          "from": "orchestrator",
+          "to": "issueflow",
+          "label": "RunIssueTrunk",
+          "payload": "Runtime{Workflow, Tracker, Workspace, Runner, Observer, Telemetry} + Issue + attempt",
+          "annotation": "orchestrator 快照当前依赖，并为每次派发启动一个 issueflow goroutine。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:703",
+            "internal/service/issueflow/flow.go:12"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "telemetry",
+          "label": "issue span",
+          "payload": "issue_id、issue_identifier、state、attempt",
+          "annotation": "每个 issue run 都由 telemetry.StartIssueRun 包住。",
+          "evidence": [
+            "internal/service/issueflow/flow.go:13",
+            "internal/runtime/telemetry/issue_run.go:11"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "linear-integration",
+          "label": "状态写入",
+          "payload": "eligible 时执行 Todo -> In Progress",
+          "annotation": "Todo issue 会先被推进到 In Progress，再开始 worker 执行。",
+          "evidence": [
+            "internal/service/issueflow/flow.go:47"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "workspace",
+          "label": "确保 workspace",
+          "payload": "Issue identifier -> safe workspace path",
+          "annotation": "Workspace.Ensure 创建或复用一个受路径边界约束的 issue workspace。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:26",
+            "internal/service/workspace/workspace.go:231"
+          ]
+        },
+        {
+          "from": "workspace",
+          "to": "scripts-hooks",
+          "label": "before hook",
+          "payload": "issue context、cwd、hook script、timeout",
+          "annotation": "BeforeRun 先校验路径不逃逸，再执行配置的 before_run hook。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:42",
+            "internal/service/workspace/workspace.go:211"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "workflow-service",
+          "label": "模板渲染",
+          "payload": "PromptTemplate + issue binding + attempt",
+          "annotation": "issue 字段会绑定进 workflow prompt，然后再交给 Codex turn。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:52",
+            "internal/service/workflow/workflow.go:88"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "codex-runner",
+          "label": "session request",
+          "payload": "WorkspacePath、Issue、TurnPrompt、AfterTurn callback",
+          "annotation": "runner 拥有 app-server session/turn 生命周期；issueflow 拥有 after-turn 策略。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:63",
+            "internal/service/codex/runner.go:150"
+          ]
+        },
+        {
+          "from": "codex-runner",
+          "to": "codex-app-server",
+          "label": "JSON-RPC",
+          "payload": "initialize、thread、turn、sandbox、dynamic tool specs",
+          "annotation": "runner 把 command/file/message 事件流回传给 issueflow。",
+          "evidence": [
+            "internal/service/codex/runner.go:150"
+          ]
+        },
+        {
+          "from": "codex-runner",
+          "to": "issueflow",
+          "label": "事件回传",
+          "payload": "session_started、turn_started、item/completed、turn_completed",
+          "annotation": "issueflow 更新 running state、记录事件、每个 turn 后刷新 issue 状态，并决定是否 continuation。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:77"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "workspace",
+          "label": "after hook",
+          "payload": "workspace path",
+          "annotation": "AfterRun 用 defer 执行，确保 agent 执行后仍会跑 hook cleanup。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:34",
+            "internal/service/workspace/workspace.go:221"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "orchestrator",
+          "label": "结果",
+          "payload": "OutcomeDone、OutcomeWaitHuman、OutcomeRetryContinuation、OutcomeRetryFailure",
+          "annotation": "orchestrator 根据结果释放 claim、排入 retry、触发刷新，或清理 terminal workspace。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:749"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review-merge-push",
+      "title": "AI review / merge / push 交接",
+      "category": "issue run",
+      "entrypoint": "issueflow.AfterTurn",
+      "summary": "在 reviewer 类状态中继续 Codex turns，检查最终 agent message，并且只在配置策略允许时写 Linear 状态流转。",
+      "steps": [
+        {
+          "from": "linear-integration",
+          "to": "issue-model",
+          "label": "当前状态",
+          "payload": "AI Review、Merging、Pushing、Done",
+          "annotation": "每个 turn 后都会刷新 issue，再决定下一个 prompt 或状态流转。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:112"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "codex-runner",
+          "label": "continuation prompt",
+          "payload": "AIReviewContinuationPromptText、MergingContinuationPromptText、PushingContinuationPromptText",
+          "annotation": "reviewer 阶段复用同一个 runner，但根据 issue state 切换 prompt 和 stage label。",
+          "evidence": [
+            "internal/service/issueflow/flow.go:146"
+          ]
+        },
+        {
+          "from": "codex-runner",
+          "to": "issueflow",
+          "label": "最终消息",
+          "payload": "last agent message text",
+          "annotation": "review/merge/push pass 判断基于刷新后的状态和最终消息信号。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:190"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "linear-integration",
+          "label": "状态流转",
+          "payload": "AI Review -> Merging、Merging -> Done、Pushing -> Done",
+          "annotation": "自动状态写入受 review policy mode=auto 约束。",
+          "evidence": [
+            "internal/service/issueflow/flow.go:187",
+            "internal/service/issueflow/flow.go:213"
+          ]
+        },
+        {
+          "from": "linear-integration",
+          "to": "linear-api",
+          "label": "GraphQL mutation",
+          "payload": "resolveStateID + issueUpdate(stateId)",
+          "annotation": "Linear 状态名会先转换成 state ID，再调用 issueUpdate。",
+          "evidence": [
+            "internal/integration/linear/client.go:257"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "logging",
+          "label": "state_changed 日志",
+          "payload": "review_pass、merge_pass、push_pass events",
+          "annotation": "状态流转证据会写入 issue 日志和 run 日志。",
+          "evidence": [
+            "internal/service/issueflow/flow.go:197"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "control-plane",
+      "title": "HTTP 控制面请求",
+      "category": "控制面",
+      "entrypoint": "POST /api/v1/* or spec aliases",
+      "summary": "本地 operator/API 请求先进入 IDL 生成的 Hertz 外壳，再经过手写 binding 层，最后落到手写 control service。",
+      "steps": [
+        {
+          "from": "operator",
+          "to": "hertz-server",
+          "label": "HTTP",
+          "payload": "GET /api/v1/state、POST /api/v1/control/get-state、refresh、tracker、workspace、workflow、codex-session",
+          "annotation": "server 注册生成路由和兼容别名。",
+          "evidence": [
+            "internal/transport/hertzserver/server.go:36"
+          ]
+        },
+        {
+          "from": "idl",
+          "to": "gen-hertz",
+          "label": "hz 生成",
+          "payload": "SymphonyAPI RPCs 和 api.post annotations",
+          "annotation": "稳定控制面方法定义在 idl/main.proto。",
+          "evidence": [
+            "idl/main.proto:17"
+          ]
+        },
+        {
+          "from": "gen-hertz",
+          "to": "hertz-binding",
+          "label": "handler 调用",
+          "payload": "生成的 request/response models",
+          "annotation": "生成 handler 只做委托，不拥有业务逻辑。",
+          "evidence": [
+            "internal/transport/hertzbinding/service.go:1"
+          ]
+        },
+        {
+          "from": "hertz-binding",
+          "to": "control-service",
+          "label": "类型化调用",
+          "payload": "ControlService methods + HTTP error mapping",
+          "annotation": "binding 层转换生成模型，并归一化 control errors。",
+          "evidence": [
+            "internal/transport/hertzbinding/control.go:35"
+          ]
+        },
+        {
+          "from": "control-service",
+          "to": "orchestrator",
+          "label": "runtime provider",
+          "payload": "Snapshot、RuntimeConfig、RuntimeWorkspace、RuntimeRunner、RuntimeTracker、RequestRefresh",
+          "annotation": "orchestrator 向 control service 提供状态投影和实时运行依赖。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:558",
+            "internal/service/orchestrator/orchestrator.go:911"
+          ]
+        },
+        {
+          "from": "control-service",
+          "to": "observability",
+          "label": "状态投影",
+          "payload": "Running、Retrying、Counts、CodexTotals、Polling、LastError",
+          "annotation": "RuntimeState 是内存 observability snapshot 的投影。",
+          "evidence": [
+            "internal/service/control/service.go:185",
+            "internal/service/control/service.go:519"
+          ]
+        },
+        {
+          "from": "control-service",
+          "to": "workspace",
+          "label": "workspace 操作",
+          "payload": "resolve、validate、prepare、cleanup",
+          "annotation": "workspace 控制面 API 使用的 manager 与 issue run 相同。",
+          "evidence": [
+            "internal/service/control/service.go:378"
+          ]
+        },
+        {
+          "from": "control-service",
+          "to": "workflow-service",
+          "label": "workflow 操作",
+          "payload": "load workflow、render prompt",
+          "annotation": "控制面 API 可以加载 workflow 并渲染 prompt，便于检查。",
+          "evidence": [
+            "internal/service/control/service.go:420",
+            "internal/service/control/service.go:439"
+          ]
+        },
+        {
+          "from": "control-service",
+          "to": "codex-runner",
+          "label": "执行单 turn",
+          "payload": "IssueIdentifier、WorkspacePath、PromptText",
+          "annotation": "控制面可以通过配置好的 runner 执行单个 Codex turn。",
+          "evidence": [
+            "internal/service/control/service.go:469"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "workflow-reload",
+      "title": "轮询期间重载 workflow",
+      "category": "运行时",
+      "entrypoint": "orchestrator.refreshWorkflow",
+      "summary": "轮询循环中检测 workflow 文件变化；校验成功后，原子替换 workflow、tracker、workspace 和 runner 依赖。",
+      "steps": [
+        {
+          "from": "orchestrator",
+          "to": "workflow-doc",
+          "label": "stat 检查",
+          "payload": "workflow file modTime + size",
+          "annotation": "每次 poll 拉取 active issues 前，都会尝试安全重载。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:592"
+          ]
+        },
+        {
+          "from": "workflow-doc",
+          "to": "workflow-service",
+          "label": "加载",
+          "payload": "YAML front matter + prompt body",
+          "annotation": "只有文件发生变化时，reloader 才返回 candidate workflow。",
+          "evidence": [
+            "internal/service/workflow/reloader.go:73",
+            "internal/service/workflow/workflow.go:62"
+          ]
+        },
+        {
+          "from": "workflow-service",
+          "to": "runtime-config",
+          "label": "解析配置",
+          "payload": "Config defaults、env indirection、path normalization、validation",
+          "annotation": "坏 workflow 不会替换当前运行中的依赖。",
+          "evidence": [
+            "internal/runtime/config/config.go:54"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "linear-integration",
+          "label": "替换 tracker",
+          "payload": "new tracker config",
+          "annotation": "所有 reload dependency 都成功后，factory 创建的新依赖才会在 orchestrator lock 下切换。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:628"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "workspace",
+          "label": "替换 manager",
+          "payload": "new workspace + hooks config",
+          "annotation": "新的 workspace manager 会重新挂接 workspace observer。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:637"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "codex-runner",
+          "label": "替换 runner",
+          "payload": "new Codex config + tracker-backed dynamic tools",
+          "annotation": "runner factory 可以拿到刷新后的 tracker，确保 tool 继续使用当前 auth。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:641"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "logging",
+          "label": "workflow_reloaded 日志",
+          "payload": "success or failure event",
+          "annotation": "reload 失败会写入 LastError 和日志；成功 reload 会清空 LastError。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:603"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dynamic-linear-tool",
+      "title": "Codex 调用 Linear GraphQL 工具",
+      "category": "agent tool",
+      "entrypoint": "Codex dynamic tool call: linear_graphql",
+      "summary": "向 Codex 暴露唯一一个带 Symphony 认证的 Linear GraphQL 动态工具，校验输入后通过配置好的 Linear client 执行，并把 JSON 输出返回 app-server session。",
+      "steps": [
+        {
+          "from": "app-runtime",
+          "to": "dynamic-tools",
+          "label": "工具注册",
+          "payload": "codex.NewDynamicToolExecutor(tracker)",
+          "annotation": "运行时把 Linear-backed dynamic tools 接入 Codex runner。",
+          "evidence": [
+            "internal/app/run.go:138"
+          ]
+        },
+        {
+          "from": "codex-runner",
+          "to": "codex-app-server",
+          "label": "tool specs",
+          "payload": "linear_graphql input schema",
+          "annotation": "runner 在 session startup 阶段可以暴露 dynamic tool specs。",
+          "evidence": [
+            "internal/service/codex/dynamic_tool.go:26"
+          ]
+        },
+        {
+          "from": "codex-app-server",
+          "to": "dynamic-tools",
+          "label": "tool call",
+          "payload": "query string + optional variables",
+          "annotation": "executor 会拒绝不支持的 tool、空 query、非法 variables 和多 GraphQL operation。",
+          "evidence": [
+            "internal/service/codex/dynamic_tool.go:56"
+          ]
+        },
+        {
+          "from": "dynamic-tools",
+          "to": "linear-integration",
+          "label": "GraphQLRaw",
+          "payload": "validated query and variables",
+          "annotation": "dynamic tool 复用 Symphony 配置好的 Linear auth。",
+          "evidence": [
+            "internal/service/codex/dynamic_tool.go:83",
+            "internal/integration/linear/client.go:301"
+          ]
+        },
+        {
+          "from": "linear-integration",
+          "to": "linear-api",
+          "label": "POST",
+          "payload": "Authorization header + JSON body",
+          "annotation": "Linear client 发送 GraphQL payload，并返回解码后的 JSON。",
+          "evidence": [
+            "internal/integration/linear/client.go:319"
+          ]
+        },
+        {
+          "from": "dynamic-tools",
+          "to": "codex-app-server",
+          "label": "tool result",
+          "payload": "success flag、output JSON、contentItems",
+          "annotation": "GraphQL errors 会作为失败 dynamic tool response 返回。",
+          "evidence": [
+            "internal/service/codex/dynamic_tool.go:89"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "workspace-lifecycle",
+      "title": "Workspace 生命周期与清理",
+      "category": "workspace",
+      "entrypoint": "workspace.Manager.Ensure / BeforeRun / AfterRun / Remove",
+      "summary": "把 issue identifier 映射到安全 workspace 路径，执行配置的生命周期 hook，并在不逃逸配置根目录的前提下清理 terminal workspace。",
+      "steps": [
+        {
+          "from": "issue-model",
+          "to": "workspace",
+          "label": "identifier",
+          "payload": "Issue.Identifier -> SafeIdentifier -> path",
+          "annotation": "动态 workspace 模式会从 issue identifier 派生目录。",
+          "evidence": [
+            "internal/service/workspace/workspace.go:63"
+          ]
+        },
+        {
+          "from": "workspace",
+          "to": "scripts-hooks",
+          "label": "create/remove hooks",
+          "payload": "hook issue context and cwd",
+          "annotation": "hook observer 会把生命周期事件回传给 orchestrator 日志流。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:655"
+          ]
+        },
+        {
+          "from": "workspace",
+          "to": "logging",
+          "label": "hook events",
+          "payload": "hook name、stage、command preview、duration、output、error",
+          "annotation": "workspace hook 事件会被归一化后写成 issue 或 run log event。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:659"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "workspace",
+          "label": "启动清理",
+          "payload": "terminal issue states",
+          "annotation": "daemon 启动时会拉取 terminal issues，并清理对应 workspace。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:322"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "workspace",
+          "label": "terminal 清理",
+          "payload": "worker exit 或 terminal-state reconciliation",
+          "annotation": "除非配置 static_cwd，否则 terminal workspace 会在 worker exit 或 reconciliation 后删除。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:403",
+            "internal/service/orchestrator/orchestrator.go:785"
+          ]
+        },
+        {
+          "from": "control-service",
+          "to": "workspace",
+          "label": "手动操作",
+          "payload": "resolve、validate、prepare、cleanup control requests",
+          "annotation": "同一个 manager 也支持控制面的 workspace 请求。",
+          "evidence": [
+            "internal/service/control/service.go:350",
+            "internal/service/control/service.go:392"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "observability-telemetry",
+      "title": "日志、快照与遥测",
+      "category": "可观测性",
+      "entrypoint": "logging.Event + observability.Snapshot + telemetry.Facade",
+      "summary": "把运行活动转换成 JSONL/human 日志、实时 snapshot 投影、TUI 画面、HTTP state 响应和 OTel traces/metrics。",
+      "steps": [
+        {
+          "from": "app-runtime",
+          "to": "logging",
+          "label": "log sinks",
+          "payload": "run log、human log、issue log files、optional console",
+          "annotation": "日志 sink 在运行时装配阶段配置，并传给 orchestrator。",
+          "evidence": [
+            "internal/app/run.go:117",
+            "internal/runtime/logging/jsonl.go:81"
+          ]
+        },
+        {
+          "from": "app-runtime",
+          "to": "telemetry",
+          "label": "provider",
+          "payload": "OTEL environment",
+          "annotation": "telemetry 从环境变量构造，并随 runtime shutdown。",
+          "evidence": [
+            "internal/runtime/telemetry/provider.go:38",
+            "internal/app/run.go:259"
+          ]
+        },
+        {
+          "from": "issueflow",
+          "to": "telemetry",
+          "label": "steps",
+          "payload": "workspace_prepared、before_run_hook、prompt_rendered、codex_turn_completed",
+          "annotation": "issueflow 会围绕主要 worker 动作记录 step spans/metrics。",
+          "evidence": [
+            "internal/service/issueflow/agent_session.go:24",
+            "internal/runtime/telemetry/issue_run.go:65"
+          ]
+        },
+        {
+          "from": "codex-runner",
+          "to": "orchestrator",
+          "label": "turn stats",
+          "payload": "command counts、file changes、token/rate-limit events",
+          "annotation": "Codex 事件会更新 running entries，并记录 issue activity。",
+          "evidence": [
+            "internal/service/codex/runner.go:194",
+            "internal/service/issueflow/agent_session.go:190"
+          ]
+        },
+        {
+          "from": "orchestrator",
+          "to": "observability",
+          "label": "snapshot",
+          "payload": "RunningEntry、RetryEntry、Counts、Polling、Tokens",
+          "annotation": "Snapshot 返回克隆后的实时投影，并附带派生 counts 和 next poll timing。",
+          "evidence": [
+            "internal/service/orchestrator/orchestrator.go:122"
+          ]
+        },
+        {
+          "from": "observability",
+          "to": "tui",
+          "label": "渲染",
+          "payload": "terminal frame",
+          "annotation": "TUI 只消费 snapshot 投影。",
+          "evidence": [
+            "internal/app/run.go:222",
+            "internal/tui/dashboard.go:19"
+          ]
+        },
+        {
+          "from": "observability",
+          "to": "control-service",
+          "label": "投影",
+          "payload": "RuntimeState / ObservabilitySnapshot",
+          "annotation": "HTTP state endpoints 和 observability APIs 暴露同一份运行态投影。",
+          "evidence": [
+            "internal/service/control/service.go:185",
+            "internal/service/control/service.go:202"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "build-and-idl",
+      "title": "构建、测试与 IDL 边界检查",
+      "category": "运维",
+      "entrypoint": "./build.sh, ./test.sh, make idl-lint, scripts/hertz_generate.sh",
+      "summary": "验证入口保持在稳定 shell 脚本上，并确保 Hertz 生成代码留在 IDL 边界一侧。",
+      "steps": [
+        {
+          "from": "operator",
+          "to": "build-test",
+          "label": "验证",
+          "payload": "./test.sh [packages]、./build.sh",
+          "annotation": "仓库规则要求优先使用稳定脚本，而不是裸 go test/go build。",
+          "evidence": [
+            "AGENTS.md",
+            "build.sh:1",
+            "test.sh:1"
+          ]
+        },
+        {
+          "from": "build-test",
+          "to": "cli",
+          "label": "编译目标",
+          "payload": "./cmd/symphony-go -> bin/symphony-go",
+          "annotation": "build 脚本只编译 CLI package 到配置的输出二进制。",
+          "evidence": [
+            "build.sh:10"
+          ]
+        },
+        {
+          "from": "idl",
+          "to": "gen-hertz",
+          "label": "生成",
+          "payload": "request/response models、handler skeleton、router registration",
+          "annotation": "IDL 变更是稳定控制面路由的权威来源。",
+          "evidence": [
+            "idl/main.proto:17",
+            "gen/hertz/router/register.go"
+          ]
+        },
+        {
+          "from": "gen-hertz",
+          "to": "hertz-binding",
+          "label": "边界",
+          "payload": "generated models only",
+          "annotation": "业务逻辑通过 hertzbinding 进入手写 control service。",
+          "evidence": [
+            "internal/transport/hertzbinding/control.go:35"
+          ]
+        },
+        {
+          "from": "build-test",
+          "to": "runtime-config",
+          "label": "测试",
+          "payload": "package-level tests through ./test.sh",
+          "annotation": "runtime/config/workflow/control/orchestrator 测试通过仓库原生 test.sh 执行。",
+          "evidence": [
+            "test.sh:11"
+          ]
+        },
+        {
+          "from": "build-test",
+          "to": "logging",
+          "label": "diff hygiene",
+          "payload": "git diff --check",
+          "annotation": "文档类改动也应该通过空白检查。",
+          "evidence": [
+            "AGENTS.md"
+          ]
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <script>
+    const data = JSON.parse(document.getElementById("workflow-data").textContent);
+    const components = new Map(data.components.map((component) => [component.id, component]));
+    const mapSize = data.meta.coordinateSystem;
+    const lanes = [
+      { label: "外部动作", x: 0, width: 205 },
+      { label: "入口 / 文档", x: 205, width: 240 },
+      { label: "运行支撑", x: 445, width: 245 },
+      { label: "核心业务服务", x: 690, width: 255 },
+      { label: "集成 / 工具", x: 945, width: 205 },
+      { label: "观测 / 外部", x: 1150, width: 150 }
+    ];
+    const state = { selected: data.flows[0].id };
+
+    function escapeHTML(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
+
+    function center(component) {
+      return {
+        x: component.x + component.w / 2,
+        y: component.y + component.h / 2
+      };
+    }
+
+    function pathBetween(from, to) {
+      const a = center(from);
+      const b = center(to);
+      const dx = Math.max(80, Math.abs(b.x - a.x) * 0.45);
+      const c1x = a.x + (b.x >= a.x ? dx : -dx);
+      const c2x = b.x - (b.x >= a.x ? dx : -dx);
+      return `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`;
+    }
+
+    function renderLegend() {
+      const legend = document.getElementById("legend");
+      legend.innerHTML = Object.entries(data.componentKinds).map(([kind, meta]) =>
+        `<span style="--dot:${meta.color}" data-kind="${kind}">${escapeHTML(meta.label)}</span>`
+      ).join("");
+    }
+
+    function renderNodes() {
+      const nodes = document.getElementById("nodes");
+      nodes.innerHTML = data.components.map((component) => `
+        <div class="node ${escapeHTML(component.kind)}" id="node-${escapeHTML(component.id)}"
+          style="left:${component.x}px; top:${component.y}px; --w:${component.w}px; --h:${component.h}px">
+          <span class="node-kind">${escapeHTML(data.componentKinds[component.kind]?.label || component.kind)}</span>
+          <span class="node-name">${escapeHTML(component.name)}</span>
+          <span class="node-package">${escapeHTML(component.package)}</span>
+        </div>
+      `).join("");
+    }
+
+    function renderSwimlanes() {
+      const root = document.getElementById("swimlanes");
+      root.innerHTML = lanes.map((lane) => `
+        <div class="swimlane" style="left:${lane.x}px; width:${lane.width}px">
+          <div class="lane-label">${escapeHTML(lane.label)}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderFlowButtons() {
+      const buttons = document.getElementById("flowButtons");
+      buttons.innerHTML = data.flows.map((flow) => `
+        <button class="flow-button" data-flow="${escapeHTML(flow.id)}">
+          <span class="flow-title">${escapeHTML(flow.title)}</span>
+          <span class="flow-summary">${escapeHTML(flow.summary)}</span>
+        </button>
+      `).join("");
+      buttons.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-flow]");
+        if (!button) return;
+        state.selected = button.dataset.flow;
+        renderSelection();
+      });
+    }
+
+    function stepNodes(flow) {
+      const ids = new Set();
+      flow.steps.forEach((step) => {
+        ids.add(step.from);
+        ids.add(step.to);
+      });
+      return ids;
+    }
+
+    function renderEdges(flow) {
+      const layer = document.getElementById("edgeLayer");
+      layer.innerHTML = flow.steps.map((step, index) => {
+        const from = components.get(step.from);
+        const to = components.get(step.to);
+        if (!from || !to) return "";
+        const a = center(from);
+        const b = center(to);
+        const labelX = (a.x + b.x) / 2;
+        const labelY = (a.y + b.y) / 2 - 8 + (index % 2 === 0 ? -10 : 12);
+        const label = `${index + 1}. ${step.label}`;
+        const labelWidth = Math.min(220, Math.max(80, label.length * 7));
+        return `
+          <path class="edge-path active" d="${pathBetween(from, to)}" marker-end="url(#arrowhead)"></path>
+          <g class="edge-label">
+            <rect x="${labelX - labelWidth / 2}" y="${labelY - 13}" width="${labelWidth}" height="20"></rect>
+            <text x="${labelX}" y="${labelY + 1}" text-anchor="middle">${escapeHTML(label)}</text>
+          </g>
+        `;
+      }).join("");
+    }
+
+    function renderDetail(flow) {
+      const detail = document.getElementById("flowDetail");
+      const touched = stepNodes(flow);
+      const activePackages = data.components
+        .filter((component) => touched.has(component.id))
+        .map((component) => component.package);
+      detail.innerHTML = `
+        <div class="pill-row">
+          <span class="pill">${escapeHTML(flow.category)}</span>
+          <span class="pill">${flow.steps.length} 步</span>
+          <span class="pill">${activePackages.length} 个组件</span>
+        </div>
+        <p class="detail-summary">${escapeHTML(flow.summary)}</p>
+        <div class="step-meta"><strong>入口：</strong>${escapeHTML(flow.entrypoint)}</div>
+        <div class="steps-grid">
+          ${flow.steps.map((step, index) => `
+            <div class="step">
+              <div class="step-title">${index + 1}. ${escapeHTML(components.get(step.from)?.name || step.from)} -> ${escapeHTML(components.get(step.to)?.name || step.to)}</div>
+              <div class="step-meta">${escapeHTML(step.annotation)}</div>
+              <div class="step-payload">传递内容：${escapeHTML(step.payload)}</div>
+              <div class="step-evidence">证据：${(step.evidence || []).map(escapeHTML).join(", ") || "无"}</div>
+            </div>
+          `).join("")}
+        </div>
+        <details class="json-details">
+          <summary>查看当前流程 JSON</summary>
+          <pre class="json-preview">${escapeHTML(JSON.stringify(flow, null, 2))}</pre>
+        </details>
+      `;
+    }
+
+    function fitMapToViewport() {
+      const viewport = document.getElementById("mapViewport");
+      const canvas = document.getElementById("mapCanvas");
+      if (!viewport || !canvas) return;
+      const availableWidth = viewport.clientWidth;
+      const availableHeight = viewport.clientHeight;
+      if (!availableWidth || !availableHeight) return;
+      const scale = Math.min(1, availableWidth / mapSize.width, availableHeight / mapSize.height);
+      canvas.style.setProperty("--map-scale", scale.toFixed(4));
+      if (window.matchMedia("(max-width: 980px)").matches || availableWidth < 980) {
+        viewport.style.height = `${Math.ceil(mapSize.height * scale)}px`;
+      } else {
+        viewport.style.height = "";
+      }
+    }
+
+    function renderSelection() {
+      const flow = data.flows.find((item) => item.id === state.selected) || data.flows[0];
+      const touched = stepNodes(flow);
+
+      document.querySelectorAll(".flow-button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.flow === flow.id);
+      });
+      document.querySelectorAll(".node").forEach((node) => {
+        const id = node.id.replace(/^node-/, "");
+        node.classList.toggle("active", touched.has(id));
+        node.classList.toggle("touched", touched.has(id));
+      });
+      renderEdges(flow);
+      renderDetail(flow);
+      fitMapToViewport();
+    }
+
+    renderLegend();
+    renderSwimlanes();
+    renderNodes();
+    renderFlowButtons();
+    renderSelection();
+    window.addEventListener("resize", fitMapToViewport);
+  </script>
+</body>
+</html>

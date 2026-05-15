@@ -1420,6 +1420,48 @@ func TestStartupCleanupRemovesTerminalWorkspaces(t *testing.T) {
 	}
 }
 
+func TestStartupCleanupSkipsStaticCWD(t *testing.T) {
+	ctx := context.Background()
+	cwd := t.TempDir()
+	tracker := &reconciliationTracker{
+		terminalIssues: []issuemodel.Issue{{ID: "issue-1", Identifier: "ZEE-DONE", Title: "done", State: "Done"}},
+	}
+	logPath := filepath.Join(t.TempDir(), "logs", "run.jsonl")
+	logger, err := logging.New(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{TerminalStates: []string{"Done", "Canceled"}},
+			},
+		},
+		Tracker: tracker,
+		Workspace: workspace.NewFromConfig(runtimeconfig.WorkspaceConfig{
+			Mode: "static_cwd",
+			CWD:  cwd,
+		}, runtimeconfig.HooksConfig{}),
+		Logger: logger,
+	})
+
+	o.StartupCleanup(ctx)
+	if err := logger.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := tracker.calls(); len(got) != 0 {
+		t.Fatalf("startup cleanup should not fetch terminal issues for static cwd, got calls %v", got)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(raw)) != "" {
+		t.Fatalf("startup cleanup log = %s, want empty for static cwd", raw)
+	}
+}
+
 func TestWorkflowReloadWhileWorkerRunningIsRaceFree(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

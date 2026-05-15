@@ -1025,8 +1025,11 @@ func FormatConsole(event Event, color bool) string {
 	parts := []string{
 		formatEventTime(event.Time),
 		fmt.Sprintf("%-5s", levelText),
-		"event=" + safeValue(event.Event),
 	}
+	if location := sourceLocation(event.Fields); location != "" {
+		parts = append(parts, location)
+	}
+	parts = append(parts, "event="+safeValue(event.Event))
 	if issue := firstNonEmpty(event.IssueIdentifier, event.Issue); issue != "" {
 		parts = append(parts, "issue="+safeValue(issue))
 	}
@@ -1085,11 +1088,23 @@ func compactFields(fields map[string]any) []string {
 
 func compactFieldAllowed(key string) bool {
 	switch key {
-	case "issue_id", "issue_identifier", "params", "session_id", "thread_id", "turn_id":
+	case "issue_id", "issue_identifier", "params", "session_id", "source_file", "source_function", "source_line", "thread_id", "turn_id":
 		return false
 	default:
 		return true
 	}
+}
+
+func sourceLocation(fields map[string]any) string {
+	if len(fields) == 0 {
+		return ""
+	}
+	file := strings.TrimSpace(compactFieldValue(fields["source_file"]))
+	line := strings.TrimSpace(compactFieldValue(fields["source_line"]))
+	if file == "" || line == "" || line == "0" {
+		return ""
+	}
+	return file + ":" + line
 }
 
 func compactFieldValue(value any) string {
