@@ -100,21 +100,25 @@ No description provided.
    - 通用 issue 执行：`.codex/skills/explore-issue/SKILL.md`
    - 外部工具安装或试用：`.codex/skills/tool-probe/SKILL.md`
    - Twitter、ByteTech 或内网资料分析：`.codex/skills/source-analysis/SKILL.md`
-3. 进入强隔离 sandbox：
+3. 对不同来源先读取对应 Agent Skill，再调用工具；不要凭记忆猜命令：
+   - Twitter/X 内容：先读 repo-local `.codex/skills/source-analysis/SKILL.md`，再读本机 OpenCLI 相关 Agent Skill，例如 `/Users/bytedance/.skills-manager/skills/smart-search/SKILL.md` 或 `/Users/bytedance/.skills-manager/skills/opencli-usage/SKILL.md`。通过 `opencli list -f yaml` 和 `opencli <site> -h` 确认当前 registry、站点名、子命令与参数后，再用 OpenCLI 拉取或检索原始内容。
+   - ByteTech/ByTech、公司内网文章或内部知识：先读 repo-local `.codex/skills/source-analysis/SKILL.md`，再读 `/Users/bytedance/.skills-manager/skills/bytedcli/SKILL.md`。优先用 BytedCLI 的 `insearch` 域拉取或检索，例如 `bytedcli insearch get --target "<ByteTech URL>"`；不确定命令时先看 `bytedcli insearch --help`。
+   - 如果对应目录下存在更专门的 Agent Skill 或 reference，优先按该 Skill 的最新说明执行，并把实际读取的 Skill 路径写入 evidence 或 workpad。
+4. 进入强隔离 sandbox：
    ```bash
    source scripts/explore-issue.sh {{ issue.identifier }}
    ```
-4. 外部工具安装前必须先核对官方身份：
+5. 外部工具安装前必须先核对官方身份：
    - 官方 repo 或官网
    - registry 包名和发布者
    - README 推荐入口
    - CLI bin 名称
    - 会写入的路径
    - 许可、网络、登录态或内网权限要求
-5. Twitter 或公开内容分析要区分原始事实、作者观点、二手转述和未验证推断。
-6. ByteTech 或公司内网内容只保存链接、标题、要点和必要短摘录；不要复制长篇原文到本地 tracked 文件或 workpad。
-7. 证据统一放在 `.explore/issues/{{ issue.identifier }}/evidence/`，workpad 只写相对路径、命令摘要和关键输出。
-8. 用户叫停安装或试用时，立即停止新的尝试，清理当前 issue sandbox 中的安装产物/cache/tmp，并把清理状态写回 workpad。
+6. Twitter 或公开内容分析要区分原始事实、作者观点、二手转述和未验证推断。
+7. ByteTech 或公司内网内容只保存链接、标题、要点和必要短摘录；不要复制长篇原文到本地 tracked 文件或 workpad。
+8. 证据统一放在 `.explore/issues/{{ issue.identifier }}/evidence/`，workpad 只写相对路径、命令摘要和关键输出。
+9. 用户叫停安装或试用时，立即停止新的尝试，清理当前 issue sandbox 中的安装产物/cache/tmp，并把清理状态写回 workpad。
 
 ## 验证与收口
 

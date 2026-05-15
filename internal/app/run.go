@@ -309,7 +309,7 @@ func MergeTargetOverride(target string, explicit bool) string {
 
 func (o *Options) applyDefaults() {
 	if o.WorkflowPath == "" {
-		o.WorkflowPath = "./workflows/WORKFLOW-symphony-go.md"
+		o.WorkflowPath = "workflow.md"
 	}
 	if o.MergeTarget == "" {
 		o.MergeTarget = "main"

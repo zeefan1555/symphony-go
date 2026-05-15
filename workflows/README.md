@@ -1,6 +1,8 @@
 # Workflow Registry
 
-这个目录用于集中管理本机/多仓的 Symphony workflow prompt。`symphony-go` 的运行脚本和 CLI 默认读取 `workflows/WORKFLOW-symphony-go.md`；本目录是长期维护入口，后续新增或调整 workflow 时优先更新这里。
+这个目录用于集中管理本机/多仓的 Symphony workflow prompt。`symphony-go` 的本仓运行脚本显式读取 `workflows/WORKFLOW-symphony-go.md`；本目录是长期维护入口，后续新增或调整本仓长期 workflow 时优先更新这里。
+
+跨仓快速接入时使用仓库本地入口：在目标仓执行 `symphony-go init` 会生成根目录 `workflow.md`，随后在该仓执行 `symphony-go run` 会默认读取这个本地 workflow。
 
 ## 文件索引
 
@@ -38,4 +40,11 @@ make explore-once ISSUE=<issue>
 ./bin/symphony-go run --workflow ./workflows/WORKFLOW-symphony-go.md --once --no-tui --issue <issue>
 ./bin/symphony-go run --workflow ./workflows/WORKFLOW-bytedcode.md --once --no-tui --issue <issue>
 ./bin/symphony-go run --workflow ./workflows/WORKFLOW-zeefan-explore.md --once --no-tui --issue <issue>
+```
+
+跨仓初始化入口：
+
+```bash
+symphony-go init --project-slug <linear-project-slug>
+symphony-go run
 ```

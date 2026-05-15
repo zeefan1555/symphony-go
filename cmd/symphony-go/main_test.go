@@ -2,9 +2,13 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"symphony-go/internal/app"
+	"symphony-go/internal/service/workflow"
 )
 
 func TestDefaultRunOptionsEnableTUI(t *testing.T) {
@@ -17,8 +21,8 @@ func TestDefaultRunOptionsEnableTUI(t *testing.T) {
 	if opts.MergeTarget != "main" {
 		t.Fatalf("merge target = %q, want main", opts.MergeTarget)
 	}
-	if opts.WorkflowPath != "./workflows/WORKFLOW-symphony-go.md" {
-		t.Fatalf("workflow path = %q, want ./workflows/WORKFLOW-symphony-go.md", opts.WorkflowPath)
+	if opts.WorkflowPath != "workflow.md" {
+		t.Fatalf("workflow path = %q, want workflow.md", opts.WorkflowPath)
 	}
 	if opts.mergeExplicit {
 		t.Fatal("default merge target should not be marked explicit")
@@ -217,5 +221,93 @@ func TestRunMainLifecycleExitCodes(t *testing.T) {
 				t.Fatalf("app runner calls = %d, want %d", calls, tt.wantCalls)
 			}
 		})
+	}
+}
+
+func TestParseInitOptionsDefaultsToRepoLocalWorkflow(t *testing.T) {
+	opts, err := parseInitOptions(nil)
+	if err != nil {
+		t.Fatalf("parseInitOptions() error = %v", err)
+	}
+	if opts.Output != "workflow.md" {
+		t.Fatalf("output = %q, want workflow.md", opts.Output)
+	}
+	if opts.Dir != "." {
+		t.Fatalf("dir = %q, want .", opts.Dir)
+	}
+}
+
+func TestRunMainInitWritesRepoLocalWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# rules\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code := runMain([]string{"symphony-go", "init", "--dir", dir, "--project-slug", "demo-project", "--merge-target", "release"}, nil)
+	if code != 0 {
+		t.Fatalf("init exit code = %d, want 0", code)
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "workflow.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, want := range []string{
+		`project_slug: "demo-project"`,
+		`mode: static_cwd`,
+		`cwd: .`,
+		`target: "release"`,
+		"本仓存在 `AGENTS.md`",
+		"go test ./...",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("generated workflow missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestGeneratedInitialWorkflowLoads(t *testing.T) {
+	t.Setenv("LINEAR_API_KEY", "lin_test")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.md")
+	content := generateInitialWorkflow(initOptions{
+		ProjectSlug: "demo-project",
+		MergeTarget: "main",
+	}, localRepoInfo{
+		ProjectName:   "demo",
+		DefaultBranch: "main",
+	})
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := workflow.Load(path)
+	if err != nil {
+		t.Fatalf("workflow.Load() error = %v", err)
+	}
+	if loaded.Config.Workspace.Mode != "static_cwd" {
+		t.Fatalf("workspace mode = %q, want static_cwd", loaded.Config.Workspace.Mode)
+	}
+	if loaded.Config.Workspace.CWD != dir {
+		t.Fatalf("workspace cwd = %q, want %q", loaded.Config.Workspace.CWD, dir)
+	}
+	if loaded.Config.Tracker.ProjectSlug != "demo-project" {
+		t.Fatalf("project slug = %q, want demo-project", loaded.Config.Tracker.ProjectSlug)
+	}
+}
+
+func TestRunMainInitRefusesExistingWorkflowWithoutForce(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "workflow.md"), []byte("existing\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code := runMain([]string{"symphony-go", "init", "--dir", dir}, nil)
+	if code != 1 {
+		t.Fatalf("init exit code = %d, want 1", code)
 	}
 }
