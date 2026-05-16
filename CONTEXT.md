@@ -88,6 +88,10 @@ _Avoid_: 控制面契约
 Symphony 针对一个 issue 创建或复用 workspace、执行 agent、记录进度并推动 workflow 状态的完整尝试。
 _Avoid_: task, job
 
+**Issue Timeline Viewer**:
+面向操作者的人类观察页面，默认把单个 issue 的 JSONL 事件流解释成 agent 执行时间线，同时保留通用 JSONL 解析和 raw detail 兜底。
+_Avoid_: 替代日志真相源、替代 SigNoz、只服务任意文件上传而忽略 Symphony issue 语义
+
 **Issue Tracker 集成**:
 外部集成层中的 issue 管理系统接入能力，供业务服务读取和推进 issue 状态。
 _Avoid_: 业务服务层、workflow 状态机、Hertz handler
@@ -135,6 +139,7 @@ _Avoid_: workflow merge.target 长期来源、硬编码 main
 - 所有 IDL service method 必须通过专属 **接口顶层契约** 接收请求和返回响应；**公共模型 IDL** 只能作为字段嵌套，不能直接充当 service method 的顶层 Req 或 Resp。
 - **运行时状态** 可以被投影成控制面响应，但不是 IDL 的来源真相。
 - **监听服务** 是默认运行形态；单 issue 过滤或单轮 poll 只属于诊断/测试辅助，不进入第一版 **控制面 IDL**。
+- **Issue Timeline Viewer** 使用通用 JSONL parser 作为底层能力，但默认通过 Symphony adapter 展示 **Issue Run** 的人类可读事件。
 
 ## Internal Directory Contract
 
