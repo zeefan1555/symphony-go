@@ -29,11 +29,11 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 	workspacePath, _, err := rt.Workspace.Ensure(hookCtx, issue)
 	if err != nil {
 		endStep("error", err)
-		removeRunning(rt, issue.ID)
 		return Result{Outcome: OutcomeRetryFailure}, err
 	}
 	endStep("success", nil)
 	defer func() {
+		setRunningStage(rt, issue, attempt, phase, StageRunningWorkspaceHooks, "running after_run hook", workspacePath, 1)
 		_, endStep := telemetry.StartStep(stepCtx, rt.Telemetry, string(phase), "after_run_hook", issueFields(issue))
 		if err := rt.Workspace.AfterRun(workspace.WithHookIssue(context.Background(), issue), workspacePath); err != nil {
 			endStep("error", err)
@@ -46,7 +46,6 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 	_, endStep = telemetry.StartStep(ctx, rt.Telemetry, string(phase), "before_run_hook", issueFields(issue))
 	if err := rt.Workspace.BeforeRun(hookCtx, workspacePath); err != nil {
 		endStep("error", err)
-		removeRunning(rt, issue.ID)
 		return Result{Outcome: OutcomeRetryFailure}, err
 	}
 	endStep("success", nil)
@@ -60,7 +59,6 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 	promptText, err := workflow.Render(rt.Workflow.PromptTemplate, issue, renderAttempt)
 	if err != nil {
 		endStep("error", err)
-		removeRunning(rt, issue.ID)
 		return Result{Outcome: OutcomeRetryFailure}, err
 	}
 	endStep("success", nil)
@@ -76,7 +74,6 @@ func runWorkerAttempt(ctx context.Context, rt Runtime, issue issuemodel.Issue, a
 		deleteSessionRecord(ctx, rt, issue.ID)
 		attemptResult, sessionResult, err = runCodexSessionAttempt(ctx, rt, issue, attempt, workspacePath, promptText, renderAttempt, "")
 	}
-	removeRunning(rt, issue.ID)
 	if err != nil {
 		return returnRetryOrStop(err)
 	}

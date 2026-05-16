@@ -952,6 +952,7 @@ func (o *Orchestrator) handleIssue(ctx context.Context, issue issuemodel.Issue) 
 
 func (o *Orchestrator) runAgent(ctx context.Context, issue issuemodel.Issue, attempt int) error {
 	_, err := issueflow.RunIssueTrunk(ctx, o.currentRuntime().issueFlowRuntime(o), issue, attempt)
+	o.removeRunning(issue.ID)
 	return err
 }
 

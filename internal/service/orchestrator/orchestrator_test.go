@@ -632,6 +632,68 @@ func TestWorkerNormalExitSchedulesContinuationRetry(t *testing.T) {
 	}
 }
 
+func TestWorkerStaysVisibleDuringAfterRunHook(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	issue := issuemodel.Issue{ID: "issue-1", Identifier: "ZEE-1", Title: "one", State: "In Progress"}
+	tracker := &snapshotTracker{issue: issue}
+	workspaceManager := workspace.New(filepath.Join(t.TempDir(), "worktrees"), runtimeconfig.HooksConfig{
+		AfterCreate: gitSeedHook().AfterCreate,
+		AfterRun:    `touch after-started; while [ ! -f after-release ]; do sleep 0.01; done`,
+		TimeoutMS:   5000,
+	})
+	o := New(Options{
+		Workflow: &runtimeconfig.Workflow{
+			Config: runtimeconfig.Config{
+				Tracker: runtimeconfig.TrackerConfig{
+					ActiveStates:   []string{"In Progress"},
+					TerminalStates: []string{"Done"},
+				},
+				Agent: runtimeconfig.AgentConfig{MaxTurns: 1},
+			},
+			PromptTemplate: "work on {{ issue.identifier }}",
+		},
+		Tracker:   tracker,
+		Workspace: workspaceManager,
+		Runner:    &recordingRunner{},
+	})
+
+	done, ok := o.dispatchIssueDone(ctx, issue, 0)
+	if !ok {
+		t.Fatal("dispatchIssueDone returned false, want dispatch")
+	}
+	workspacePath, err := workspaceManager.PathForIssue(issue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForCondition(t, 2*time.Second, func() bool {
+		_, err := os.Stat(filepath.Join(workspacePath, "after-started"))
+		return err == nil
+	})
+
+	snapshot := o.Snapshot()
+	if len(snapshot.Running) != 1 {
+		t.Fatalf("running entries while after_run hook is blocked = %#v, want one", snapshot.Running)
+	}
+	entry := snapshot.Running[0]
+	if entry.Stage != string(issueflow.StageRunningWorkspaceHooks) || entry.LastMessage != "running after_run hook" {
+		t.Fatalf("running entry while after_run hook is blocked = %#v", entry)
+	}
+
+	if err := os.WriteFile(filepath.Join(workspacePath, "after-release"), []byte("release\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for worker exit: %v", ctx.Err())
+	}
+	waitForCondition(t, 2*time.Second, func() bool {
+		return len(o.Snapshot().Running) == 0
+	})
+}
+
 func TestWorkerTurnRefreshDoesNotAutoHandoffOrEnterRetryQueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
